@@ -17,11 +17,12 @@ if [ ! -f "$BUILDROOT/usr/bin/seismic-enclave-server" ]; then
     exit 1
 fi
 
-# Create group and users for Seismic services
+# Create groups and users for Seismic services
 mkosi-chroot groupadd -r seismic
+mkosi-chroot groupadd -r tss || true  # TPM group, may already exist
 mkosi-chroot useradd -r -s /bin/false -G seismic summit
 mkosi-chroot useradd -r -s /bin/false -G seismic seismic-reth
-mkosi-chroot useradd -r -s /bin/false -G seismic enclave
+mkosi-chroot useradd -r -s /bin/false -G seismic,tss enclave
 
 # Create persistent directories for each service
 # Note: These directories will be on the persistent disk mount
@@ -35,8 +36,20 @@ chmod 755 "$BUILDROOT/usr/bin/summit"
 chmod 755 "$BUILDROOT/usr/bin/seismic-reth"
 chmod 755 "$BUILDROOT/usr/bin/seismic-enclave-server"
 
+# Set script permissions
+chmod 755 "$BUILDROOT/usr/bin/setup-ssl"
+
+# Create directories for certbot and nginx
+mkdir -p "$BUILDROOT/var/www/certbot"
+mkdir -p "$BUILDROOT/var/lib/seismic"
+mkdir -p "$BUILDROOT/etc/seismic"
+mkdir -p "$BUILDROOT/var/log/nginx"
+
 # Enable services
 mkdir -p "$BUILDROOT/etc/systemd/system/minimal.target.wants"
+mkdir -p "$BUILDROOT/etc/systemd/system/multi-user.target.wants"
+mkdir -p "$BUILDROOT/etc/systemd/system/timers.target.wants"
+
 for service in \
     seismic-reth.service \
     summit.service \
@@ -46,5 +59,18 @@ do
     mkosi-chroot systemctl enable "$service"
     ln -sf "/etc/systemd/system/$service" "$BUILDROOT/etc/systemd/system/minimal.target.wants/"
 done
+
+# Enable nginx and SSL setup
+for service in \
+    setup-ssl.service \
+    nginx.service
+do
+    mkosi-chroot systemctl enable "$service"
+    ln -sf "/etc/systemd/system/$service" "$BUILDROOT/etc/systemd/system/multi-user.target.wants/"
+done
+
+# Enable certbot renewal timer
+mkosi-chroot systemctl enable certbot-renew.timer
+ln -sf "/etc/systemd/system/certbot-renew.timer" "$BUILDROOT/etc/systemd/system/timers.target.wants/"
 
 echo "Seismic module post-installation completed successfully"

@@ -3,6 +3,21 @@ set -euxo pipefail
 
 source scripts/make_git_package.sh
 
+# Install rustup and Rust 1.86.0
+if ! command -v rustup &> /dev/null; then
+    echo "Installing rustup..."
+    curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain 1.86.0
+    source "$HOME/.cargo/env"
+else
+    echo "Rustup already installed, updating to 1.86.0..."
+    rustup install 1.86.0
+    rustup default 1.86.0
+fi
+
+# Verify rust version
+rustc --version
+cargo --version
+
 # Build summit (consensus client)
 # Repo: github.com/SeismicSystems/summit
 # Commit: 2022223a75f7e9e6d008638501ad95d1662d5ebc
