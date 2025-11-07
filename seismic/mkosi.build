@@ -1,0 +1,72 @@
+#!/bin/bash
+set -euxo pipefail
+
+source scripts/make_git_package.sh
+
+# Build summit (consensus client)
+# Repo: github.com/SeismicSystems/summit
+# Commit: 6309f56afa10b4d03e7c5fa381354d2324d607c9
+BUILD_CMD_SUMMIT="
+    export RUSTFLAGS='-C target-cpu=generic -C link-arg=-Wl,--build-id=none -C symbol-mangling-version=v0 -L /usr/lib/x86_64-linux-gnu'
+    export CARGO_PROFILE_RELEASE_LTO='thin'
+    export CARGO_PROFILE_RELEASE_CODEGEN_UNITS='1'
+    export CARGO_PROFILE_RELEASE_PANIC='abort'
+    export CARGO_PROFILE_RELEASE_STRIP='none'
+    export CARGO_PROFILE_RELEASE_OPT_LEVEL='3'
+    export CARGO_TERM_COLOR='never'
+
+    cargo fetch
+    cargo build --release --frozen
+"
+make_git_package \
+    "summit" \
+    "6309f56afa10b4d03e7c5fa381354d2324d607c9" \
+    "https://github.com/SeismicSystems/summit.git" \
+    "$BUILD_CMD_SUMMIT" \
+    "target/release/summit:/usr/bin/summit"
+
+# Build seismic-reth (Ethereum execution client)
+# Repo: github.com/SeismicSystems/seismic-reth
+# Commit: d7456d5d13d74e67d076e89466dfbeac7dd5b6e1
+# Note: Must specify --bin seismic-reth as there are multiple binaries
+BUILD_CMD_RETH="
+    export RUSTFLAGS='-C target-cpu=generic -C link-arg=-Wl,--build-id=none -C symbol-mangling-version=v0 -L /usr/lib/x86_64-linux-gnu -l z -l zstd -l snappy'
+    export CARGO_PROFILE_RELEASE_LTO='thin'
+    export CARGO_PROFILE_RELEASE_CODEGEN_UNITS='1'
+    export CARGO_PROFILE_RELEASE_PANIC='abort'
+    export CARGO_PROFILE_RELEASE_STRIP='none'
+    export CARGO_PROFILE_RELEASE_OPT_LEVEL='3'
+    export CARGO_TERM_COLOR='never'
+
+    cargo fetch
+    cargo build --release --frozen --bin seismic-reth
+"
+make_git_package \
+    "seismic-reth" \
+    "d7456d5d13d74e67d076e89466dfbeac7dd5b6e1" \
+    "https://github.com/SeismicSystems/seismic-reth.git" \
+    "$BUILD_CMD_RETH" \
+    "target/release/seismic-reth:/usr/bin/seismic-reth"
+
+# Build enclave (TDX attestation server)
+# Repo: github.com/SeismicSystems/enclave
+# Commit: 43e805a8a438d2e7a659fcf9e388ca6e445cbc9f
+# Note: Must specify --bin seismic-enclave-server with --features modern
+BUILD_CMD_ENCLAVE="
+    export RUSTFLAGS='-C target-cpu=generic -C link-arg=-Wl,--build-id=none -C symbol-mangling-version=v0 -L /usr/lib/x86_64-linux-gnu'
+    export CARGO_PROFILE_RELEASE_LTO='thin'
+    export CARGO_PROFILE_RELEASE_CODEGEN_UNITS='1'
+    export CARGO_PROFILE_RELEASE_PANIC='abort'
+    export CARGO_PROFILE_RELEASE_STRIP='none'
+    export CARGO_PROFILE_RELEASE_OPT_LEVEL='z'
+    export CARGO_TERM_COLOR='never'
+
+    cargo fetch
+    cargo build --release --frozen --bin seismic-enclave-server --features modern
+"
+make_git_package \
+    "seismic-enclave-server" \
+    "43e805a8a438d2e7a659fcf9e388ca6e445cbc9f" \
+    "https://github.com/SeismicSystems/enclave.git" \
+    "$BUILD_CMD_ENCLAVE" \
+    "target/release/seismic-enclave-server:/usr/bin/seismic-enclave-server"

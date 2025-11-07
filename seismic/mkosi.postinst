@@ -1,0 +1,30 @@
+#!/bin/bash
+set -euxo pipefail
+
+# Verify binaries were installed
+if [ ! -f "$BUILDROOT/usr/bin/summit" ]; then
+    echo "Error: summit binary not found"
+    exit 1
+fi
+
+if [ ! -f "$BUILDROOT/usr/bin/seismic-reth" ]; then
+    echo "Error: seismic-reth binary not found"
+    exit 1
+fi
+
+if [ ! -f "$BUILDROOT/usr/bin/seismic-enclave-server" ]; then
+    echo "Error: seismic-enclave-server binary not found"
+    exit 1
+fi
+
+# Create persistent directories for each service
+mkdir -p "$BUILDROOT/persistent/summit"
+mkdir -p "$BUILDROOT/persistent/seismic-reth"
+mkdir -p "$BUILDROOT/persistent/enclave"
+
+# Set permissions
+chmod 755 "$BUILDROOT/usr/bin/summit"
+chmod 755 "$BUILDROOT/usr/bin/seismic-reth"
+chmod 755 "$BUILDROOT/usr/bin/seismic-enclave-server"
+
+echo "Seismic module post-installation completed successfully"
