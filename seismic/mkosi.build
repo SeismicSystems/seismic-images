@@ -3,25 +3,22 @@ set -euxo pipefail
 
 source scripts/make_git_package.sh
 
-# Install rustup and Rust 1.86.0
-if ! command -v rustup &> /dev/null; then
-    echo "Installing rustup..."
-    curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain 1.86.0
-    source "$HOME/.cargo/env"
-else
-    echo "Rustup already installed, updating to 1.86.0..."
-    rustup install 1.86.0
-    rustup default 1.86.0
-fi
+# Upgrade Rust to nightly using rustup (required for commonware-utils unbounded_shifts feature)
+mkosi-chroot bash -c '
+    # Install rustup with nightly
+    curl --proto =https --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain nightly --profile minimal --no-modify-path
 
-# Verify rust version
-rustc --version
-cargo --version
+    # Verify
+    export PATH="$HOME/.cargo/bin:$PATH"
+    rustc --version
+    cargo --version
+'
 
 # Build summit (consensus client)
 # Repo: github.com/SeismicSystems/summit
 # Commit: 2022223a75f7e9e6d008638501ad95d1662d5ebc
 BUILD_CMD_SUMMIT="
+    export PATH=\"\$HOME/.cargo/bin:\$PATH\"
     export RUSTFLAGS='-C target-cpu=generic -C link-arg=-Wl,--build-id=none -C symbol-mangling-version=v0 -L /usr/lib/x86_64-linux-gnu'
     export CARGO_PROFILE_RELEASE_LTO='thin'
     export CARGO_PROFILE_RELEASE_CODEGEN_UNITS='1'
@@ -45,6 +42,7 @@ make_git_package \
 # Commit: 0981f14418d40ddff6711754e05259334e8ee144
 # Note: Must specify --bin seismic-reth as there are multiple binaries
 BUILD_CMD_RETH="
+    export PATH=\"\$HOME/.cargo/bin:\$PATH\"
     export RUSTFLAGS='-C target-cpu=generic -C link-arg=-Wl,--build-id=none -C symbol-mangling-version=v0 -L /usr/lib/x86_64-linux-gnu -l z -l zstd -l snappy'
     export CARGO_PROFILE_RELEASE_LTO='thin'
     export CARGO_PROFILE_RELEASE_CODEGEN_UNITS='1'
@@ -68,6 +66,7 @@ make_git_package \
 # Commit: 43e805a8a438d2e7a659fcf9e388ca6e445cbc9f
 # Note: Must specify --bin seismic-enclave-server with --features modern
 BUILD_CMD_ENCLAVE="
+    export PATH=\"\$HOME/.cargo/bin:\$PATH\"
     export RUSTFLAGS='-C target-cpu=generic -C link-arg=-Wl,--build-id=none -C symbol-mangling-version=v0 -L /usr/lib/x86_64-linux-gnu'
     export CARGO_PROFILE_RELEASE_LTO='thin'
     export CARGO_PROFILE_RELEASE_CODEGEN_UNITS='1'

@@ -1,0 +1,81 @@
+#!/bin/bash
+set -euo pipefail
+
+CONFIG_FILE="/etc/seismic/domain.conf"
+NGINX_CONF="/etc/nginx/nginx.conf"
+CERT_OBTAINED="/var/lib/seismic/cert-obtained"
+
+# Fetch and decode user-data from instance metadata service
+# Works for both Azure and GCP
+get_user_data() {
+    # Try Azure first
+    USER_DATA=$(curl -s -H "Metadata:true" --noproxy "*" \
+        "http://169.254.169.254/metadata/instance/compute/userData?api-version=2021-01-01&format=text" \
+        2>/dev/null | base64 --decode 2>/dev/null || echo "")
+
+    if [ -z "$USER_DATA" ]; then
+        # Try GCP
+        USER_DATA=$(curl -s -H "Metadata-Flavor: Google" \
+            "http://metadata.google.internal/computeMetadata/v1/instance/attributes/user-data" \
+            2>/dev/null || echo "")
+    fi
+
+    echo "$USER_DATA"
+}
+
+# Get user data
+USER_DATA=$(get_user_data)
+
+if [ -z "$USER_DATA" ]; then
+    echo "No user-data found. Skipping SSL setup."
+    exit 0
+fi
+
+# Save to config file
+echo "$USER_DATA" > "$CONFIG_FILE"
+
+# Source the config
+if [ ! -f "$CONFIG_FILE" ]; then
+    echo "Config file not found at $CONFIG_FILE"
+    exit 1
+fi
+
+. "$CONFIG_FILE"
+
+# Check if required variables are set
+if [ -z "${CERTBOT_EMAIL:-}" ] || [ -z "${RECORD_NAME:-}" ] || [ -z "${DOMAIN:-}" ]; then
+    echo "Error: CERTBOT_EMAIL, RECORD_NAME, and DOMAIN must be set in user-data"
+    exit 1
+fi
+
+FULL_DOMAIN="${RECORD_NAME}.${DOMAIN}"
+
+echo "Setting up SSL for domain: $FULL_DOMAIN"
+
+# Update nginx config with actual domain
+sed -i "s|DOMAIN_PLACEHOLDER|${FULL_DOMAIN}|g" "$NGINX_CONF"
+
+# Check if cert already obtained
+if [ -f "$CERT_OBTAINED" ]; then
+    echo "Certificate already obtained. Skipping certbot."
+    exit 0
+fi
+
+# Create webroot directory for certbot
+mkdir -p /var/www/certbot
+
+# Obtain certificate
+echo "Obtaining SSL certificate..."
+certbot certonly --webroot \
+    -w /var/www/certbot \
+    --non-interactive \
+    --agree-tos \
+    --email "${CERTBOT_EMAIL}" \
+    --domain "${FULL_DOMAIN}" \
+    --expand
+
+# Mark cert as obtained
+mkdir -p /var/lib/seismic
+touch "$CERT_OBTAINED"
+
+echo "SSL certificate obtained successfully for ${FULL_DOMAIN}"

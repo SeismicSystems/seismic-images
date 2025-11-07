@@ -1,0 +1,15 @@
+[Unit]
+Description=Setup SSL certificates via certbot
+Before=nginx.service
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/setup-ssl
+RemainAfterExit=yes
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
