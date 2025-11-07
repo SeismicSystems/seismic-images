@@ -32,7 +32,17 @@ make_git_package() {
     
     # Build from source
     local build_dir="$BUILDROOT/build/$package"
-    git clone --depth 1 --branch "$version" "$git_url" "$build_dir"
+
+    # Check if version looks like a commit hash (40 hex characters)
+    if [[ "$version" =~ ^[0-9a-f]{40}$ ]]; then
+        # For commit hashes, we need to clone without --depth and checkout the specific commit
+        git clone "$git_url" "$build_dir"
+        git -C "$build_dir" checkout "$version"
+    else
+        # For branches and tags, use shallow clone
+        git clone --depth 1 --branch "$version" "$git_url" "$build_dir"
+    fi
+
     mkosi-chroot bash -c "cd '/build/$package' && $build_cmd"
 
     # Copy artifacts to image and cache

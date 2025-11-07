@@ -7,13 +7,13 @@ Builds TDX images with the Seismic Systems stack for Ethereum consensus and exec
 ### Summit (Consensus Client)
 - Repository: https://github.com/SeismicSystems/summit
 - Branch: main
-- Commit: 6309f56afa10b4d03e7c5fa381354d2324d607c9
+- Commit: 2022223a75f7e9e6d008638501ad95d1662d5ebc
 - Binary: `/usr/bin/summit`
 
 ### Seismic-Reth (Execution Client)
 - Repository: https://github.com/SeismicSystems/seismic-reth
 - Branch: seismic
-- Commit: d7456d5d13d74e67d076e89466dfbeac7dd5b6e1
+- Commit: 0981f14418d40ddff6711754e05259334e8ee144
 - Binary: `/usr/bin/seismic-reth`
 
 ### Seismic Enclave Server

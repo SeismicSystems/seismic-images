@@ -5,7 +5,7 @@ source scripts/make_git_package.sh
 
 # Build summit (consensus client)
 # Repo: github.com/SeismicSystems/summit
-# Commit: 6309f56afa10b4d03e7c5fa381354d2324d607c9
+# Commit: 2022223a75f7e9e6d008638501ad95d1662d5ebc
 BUILD_CMD_SUMMIT="
     export RUSTFLAGS='-C target-cpu=generic -C link-arg=-Wl,--build-id=none -C symbol-mangling-version=v0 -L /usr/lib/x86_64-linux-gnu'
     export CARGO_PROFILE_RELEASE_LTO='thin'
@@ -20,14 +20,14 @@ BUILD_CMD_SUMMIT="
 "
 make_git_package \
     "summit" \
-    "6309f56afa10b4d03e7c5fa381354d2324d607c9" \
+    "2022223a75f7e9e6d008638501ad95d1662d5ebc" \
     "https://github.com/SeismicSystems/summit.git" \
     "$BUILD_CMD_SUMMIT" \
     "target/release/summit:/usr/bin/summit"
 
 # Build seismic-reth (Ethereum execution client)
 # Repo: github.com/SeismicSystems/seismic-reth
-# Commit: d7456d5d13d74e67d076e89466dfbeac7dd5b6e1
+# Commit: 0981f14418d40ddff6711754e05259334e8ee144
 # Note: Must specify --bin seismic-reth as there are multiple binaries
 BUILD_CMD_RETH="
     export RUSTFLAGS='-C target-cpu=generic -C link-arg=-Wl,--build-id=none -C symbol-mangling-version=v0 -L /usr/lib/x86_64-linux-gnu -l z -l zstd -l snappy'
@@ -43,7 +43,7 @@ BUILD_CMD_RETH="
 "
 make_git_package \
     "seismic-reth" \
-    "d7456d5d13d74e67d076e89466dfbeac7dd5b6e1" \
+    "0981f14418d40ddff6711754e05259334e8ee144" \
     "https://github.com/SeismicSystems/seismic-reth.git" \
     "$BUILD_CMD_RETH" \
     "target/release/seismic-reth:/usr/bin/seismic-reth"
