@@ -17,14 +17,34 @@ if [ ! -f "$BUILDROOT/usr/bin/seismic-enclave-server" ]; then
     exit 1
 fi
 
+# Create group and users for Seismic services
+mkosi-chroot groupadd -r seismic
+mkosi-chroot useradd -r -s /bin/false -G seismic summit
+mkosi-chroot useradd -r -s /bin/false -G seismic seismic-reth
+mkosi-chroot useradd -r -s /bin/false -G seismic enclave
+
 # Create persistent directories for each service
+# Note: These directories will be on the persistent disk mount
+# Ownership will be set at runtime by the service ExecStartPre commands
 mkdir -p "$BUILDROOT/persistent/summit"
 mkdir -p "$BUILDROOT/persistent/seismic-reth"
 mkdir -p "$BUILDROOT/persistent/enclave"
 
-# Set permissions
+# Set binary permissions
 chmod 755 "$BUILDROOT/usr/bin/summit"
 chmod 755 "$BUILDROOT/usr/bin/seismic-reth"
 chmod 755 "$BUILDROOT/usr/bin/seismic-enclave-server"
+
+# Enable services
+mkdir -p "$BUILDROOT/etc/systemd/system/minimal.target.wants"
+for service in \
+    seismic-reth.service \
+    summit.service \
+    seismic-enclave-server.service \
+    openntpd.service
+do
+    mkosi-chroot systemctl enable "$service"
+    ln -sf "/etc/systemd/system/$service" "$BUILDROOT/etc/systemd/system/minimal.target.wants/"
+done
 
 echo "Seismic module post-installation completed successfully"

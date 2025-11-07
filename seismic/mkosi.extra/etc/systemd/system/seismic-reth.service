@@ -1,0 +1,46 @@
+[Unit]
+Description=Seismic Reth Execution Client
+After=network.target persistent-mount.service
+Requires=persistent-mount.service
+
+[Service]
+User=seismic-reth
+Group=seismic
+LimitNOFILE=65536
+
+# Setup directories
+ExecStartPre=+/bin/mkdir -p /persistent/seismic-reth
+ExecStartPre=+/bin/chown -R seismic-reth:seismic /persistent/seismic-reth
+ExecStartPre=+/bin/chmod -R g+rwX /persistent/seismic-reth
+ExecStartPre=+/bin/chmod g+s /persistent/seismic-reth
+
+# Setup IPC directory
+ExecStartPre=+/bin/mkdir -p /var/volatile
+ExecStartPre=+/bin/chmod 755 /var/volatile
+
+ExecStart=/usr/bin/seismic-reth node \
+    -vvv \
+    --chain /persistent/seismic-reth/genesis.json \
+    --full \
+    --datadir "/persistent/seismic-reth" \
+    --http \
+    --http.addr 0.0.0.0 \
+    --http.port 8545 \
+    --http.api "eth,net,web3,trace,rpc,debug,txpool" \
+    --ws \
+    --ws.addr 0.0.0.0 \
+    --ws.port 8546 \
+    --ws.api "eth,net,trace,web3,rpc,debug,txpool" \
+    --auth-ipc \
+    --auth-ipc.path /var/volatile/reth_engine_api.ipc \
+    --log.stdout.format json \
+    --log.file.max-files 0 \
+    --metrics "127.0.0.1:9001"
+
+Restart=on-failure
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=minimal.target
