@@ -17,15 +17,9 @@ if [ ! -f "$BUILDROOT/usr/bin/seismic-enclave-server" ]; then
     exit 1
 fi
 
-# Undo bob-common's root lock (we want root accessible for debugging)
-mkosi-chroot passwd -u root
-
-# Undo bob-common's SSH disabling (devtools profile adds openssh-server)
-# The services might not exist if bob-common wasn't fully applied, so || true
-mkosi-chroot systemctl unmask ssh.service ssh.socket || true
-mkosi-chroot systemctl enable ssh.service || true
-
 # Fix PATH for sudo commands so tdx-init can find cryptsetup at /usr/sbin
+# NOTE: Root unlock and SSH enabling are handled by devtools profile for dev builds
+# Production builds keep bob-common's security settings (root locked, SSH disabled)
 # Note: bob-common's sudoers file allows 'searcher' to run tdx-init, but needs /usr/sbin in PATH
 cat > "$BUILDROOT/etc/sudoers.d/10-seismic-path" << 'EOF'
 Defaults secure_path="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
@@ -65,6 +59,13 @@ mkdir -p "$BUILDROOT/usr/share/seismic"
 mkdir -p "$BUILDROOT/etc/systemd/system/minimal.target.wants"
 mkdir -p "$BUILDROOT/etc/systemd/system/multi-user.target.wants"
 mkdir -p "$BUILDROOT/etc/systemd/system/timers.target.wants"
+
+# Enable disk initialization service (from bob-common)
+# This runs tdx-init wait-for-key on boot to:
+# - Listen on port 8080 for SSH key registration
+# - Extract key from LUKS header if it already exists
+mkosi-chroot systemctl enable wait-for-key.service
+ln -sf "/etc/systemd/system/wait-for-key.service" "$BUILDROOT/etc/systemd/system/minimal.target.wants/"
 
 for service in \
     seismic-reth.service \
