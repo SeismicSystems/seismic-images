@@ -2,6 +2,7 @@
 set -euo pipefail
 
 CONFIG_FILE="/etc/seismic/domain.conf"
+NGINX_TEMPLATE="/usr/share/seismic/nginx.conf.template"
 NGINX_CONF="/etc/nginx/nginx.conf"
 CERT_OBTAINED="/var/lib/seismic/cert-obtained"
 
@@ -52,8 +53,17 @@ FULL_DOMAIN="${RECORD_NAME}.${DOMAIN}"
 
 echo "Setting up SSL for domain: $FULL_DOMAIN"
 
-# Update nginx config with actual domain
+# Generate nginx config from template (done at boot, not baked into image)
+# This ensures different domains have the same measurements
+if [ ! -f "$NGINX_TEMPLATE" ]; then
+    echo "Error: nginx template not found at $NGINX_TEMPLATE"
+    exit 1
+fi
+
+echo "Generating nginx config from template..."
+cp "$NGINX_TEMPLATE" "$NGINX_CONF"
 sed -i "s|DOMAIN_PLACEHOLDER|${FULL_DOMAIN}|g" "$NGINX_CONF"
+echo "nginx config generated at $NGINX_CONF"
 
 # Check if cert already obtained
 if [ -f "$CERT_OBTAINED" ]; then
@@ -61,21 +71,18 @@ if [ -f "$CERT_OBTAINED" ]; then
     exit 0
 fi
 
-# Create webroot directory for certbot
-mkdir -p /var/www/certbot
-
-# Obtain certificate
-echo "Obtaining SSL certificate..."
-certbot certonly --webroot \
-    -w /var/www/certbot \
+# Obtain certificate using certbot nginx plugin
+# This will automatically configure SSL in nginx
+echo "Obtaining SSL certificate with certbot nginx plugin..."
+certbot --nginx \
     --non-interactive \
     --agree-tos \
     --email "${CERTBOT_EMAIL}" \
     --domain "${FULL_DOMAIN}" \
-    --expand
+    --redirect
 
 # Mark cert as obtained
 mkdir -p /var/lib/seismic
 touch "$CERT_OBTAINED"
 
-echo "SSL certificate obtained successfully for ${FULL_DOMAIN}"
+echo "SSL certificate obtained and nginx configured successfully for ${FULL_DOMAIN}"

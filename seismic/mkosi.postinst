@@ -39,11 +39,12 @@ chmod 755 "$BUILDROOT/usr/bin/seismic-enclave-server"
 # Set script permissions
 chmod 755 "$BUILDROOT/usr/bin/setup-ssl"
 
-# Create directories for certbot and nginx
-mkdir -p "$BUILDROOT/var/www/certbot"
+# Create directories for nginx and seismic
 mkdir -p "$BUILDROOT/var/lib/seismic"
 mkdir -p "$BUILDROOT/etc/seismic"
 mkdir -p "$BUILDROOT/var/log/nginx"
+mkdir -p "$BUILDROOT/etc/nginx"
+mkdir -p "$BUILDROOT/usr/share/seismic"
 
 # Enable services
 mkdir -p "$BUILDROOT/etc/systemd/system/minimal.target.wants"
