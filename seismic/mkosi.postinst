@@ -18,13 +18,16 @@ if [ ! -f "$BUILDROOT/usr/bin/seismic-enclave-server" ]; then
 fi
 
 # Fix PATH for sudo commands so tdx-init can find cryptsetup at /usr/sbin
-# NOTE: Root unlock and SSH enabling are handled by devtools profile for dev builds
-# Production builds keep bob-common's security settings (root locked, SSH disabled)
 # Note: bob-common's sudoers file allows 'searcher' to run tdx-init, but needs /usr/sbin in PATH
 cat > "$BUILDROOT/etc/sudoers.d/10-seismic-path" << 'EOF'
 Defaults secure_path="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 EOF
 chmod 440 "$BUILDROOT/etc/sudoers.d/10-seismic-path"
+
+# NOTE: Seismic uses bob-common's SSH configuration as-is:
+# - Production builds: dropbear with security flags (key-only, no root)
+# - Dev builds: devtools profile removes dropbear security flags
+# - All builds: port 22 via dropbear (from bob-common)
 
 # Create groups and users for Seismic services
 mkosi-chroot groupadd -r seismic || true
