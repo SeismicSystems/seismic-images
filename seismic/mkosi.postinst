@@ -63,13 +63,31 @@ mkdir -p "$BUILDROOT/etc/systemd/system/minimal.target.wants"
 mkdir -p "$BUILDROOT/etc/systemd/system/multi-user.target.wants"
 mkdir -p "$BUILDROOT/etc/systemd/system/timers.target.wants"
 
-# Enable disk initialization service (from bob-common)
-# This runs tdx-init wait-for-key on boot to:
-# - Listen on port 8080 for SSH key registration
-# - Extract key from LUKS header if it already exists
-mkosi-chroot systemctl enable wait-for-key.service
-ln -sf "/etc/systemd/system/wait-for-key.service" "$BUILDROOT/etc/systemd/system/minimal.target.wants/"
+# Enable bob-common services needed by Seismic
+# Note: bob-common's postinst runs first and enables all BOB services.
+# We explicitly enable only what Seismic needs and disable BOB-specific services.
+for service in \
+    network-setup.service \
+    wait-for-key.service \
+    searcher-firewall.service \
+    dropbear.service
+do
+    mkosi-chroot systemctl enable "$service"
+    ln -sf "/etc/systemd/system/$service" "$BUILDROOT/etc/systemd/system/minimal.target.wants/"
+done
 
+# Disable BOB-specific services that Seismic doesn't need
+for service in \
+    searcher-container.service \
+    fluent-bit.service \
+    ssh-pubkey-server.service \
+    cvm-reverse-proxy.service
+do
+    mkosi-chroot systemctl disable "$service" || true
+    mkosi-chroot systemctl mask "$service" || true
+done
+
+# Enable Seismic services
 for service in \
     seismic-reth.service \
     summit.service \
