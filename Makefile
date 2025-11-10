@@ -74,15 +74,15 @@ ifdef PROFILE
 	@for f in build/$(IMAGE).*; do \
 		[ -f "$$f" ] || continue; \
 		ext="$${f##*.}"; \
-		mv "$$f" "build/$(IMAGE)-$(PROFILE)-$(TIMESTAMP).$$ext"; \
-		echo "  $$f → build/$(IMAGE)-$(PROFILE)-$(TIMESTAMP).$$ext"; \
+		mv "$$f" "build/$(IMAGE)-dev-$(PROFILE)-$(TIMESTAMP).$$ext"; \
+		echo "  $$f → build/$(IMAGE)-dev-$(PROFILE)-$(TIMESTAMP).$$ext"; \
 	done
 else
 	@for f in build/$(IMAGE).*; do \
 		[ -f "$$f" ] || continue; \
 		ext="$${f##*.}"; \
-		mv "$$f" "build/$(IMAGE)-baremetal-$(TIMESTAMP).$$ext"; \
-		echo "  $$f → build/$(IMAGE)-baremetal-$(TIMESTAMP).$$ext"; \
+		mv "$$f" "build/$(IMAGE)-dev-baremetal-$(TIMESTAMP).$$ext"; \
+		echo "  $$f → build/$(IMAGE)-dev-baremetal-$(TIMESTAMP).$$ext"; \
 	done
 endif
 
