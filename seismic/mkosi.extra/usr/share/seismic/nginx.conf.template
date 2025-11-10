@@ -1,0 +1,85 @@
+user www-data;
+worker_processes auto;
+pid /run/nginx.pid;
+error_log /var/log/nginx/error.log;
+
+events {
+    worker_connections 1024;
+}
+
+http {
+    include /etc/nginx/mime.types;
+    default_type application/octet-stream;
+
+    log_format main '$remote_addr - $remote_user [$time_local] "$request" '
+                    '$status $body_bytes_sent "$http_referer" '
+                    '"$http_user_agent" "$http_x_forwarded_for"';
+
+    access_log /var/log/nginx/access.log main;
+
+    sendfile on;
+    tcp_nopush on;
+    keepalive_timeout 65;
+    types_hash_max_size 2048;
+
+    # Reth RPC endpoint
+    upstream reth_rpc {
+        server 127.0.0.1:8545;
+    }
+
+    # Reth WebSocket endpoint
+    upstream reth_ws {
+        server 127.0.0.1:8546;
+    }
+
+    # Summit RPC endpoint
+    upstream summit_rpc {
+        server 127.0.0.1:3030;
+    }
+
+    # HTTP server - certbot will add SSL configuration automatically
+    server {
+        listen 80;
+        listen [::]:80;
+        server_name DOMAIN_PLACEHOLDER;
+
+        # Reth RPC
+        location /rpc {
+            rewrite ^/rpc(/.*)$ $1 break;
+            rewrite ^/rpc$ / break;
+            proxy_pass http://reth_rpc;
+            proxy_http_version 1.1;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+        }
+
+        # Reth WebSocket
+        location /ws {
+            rewrite ^/ws(/.*)$ $1 break;
+            rewrite ^/ws$ / break;
+            proxy_pass http://reth_ws;
+            proxy_http_version 1.1;
+            proxy_set_header Upgrade $http_upgrade;
+            proxy_set_header Connection "upgrade";
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+            proxy_read_timeout 86400;
+        }
+
+        # Summit RPC
+        location /summit {
+            rewrite ^/summit(/.*)$ $1 break;
+            rewrite ^/summit$ / break;
+            proxy_pass http://summit_rpc;
+            proxy_http_version 1.1;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+        }
+    }
+}
