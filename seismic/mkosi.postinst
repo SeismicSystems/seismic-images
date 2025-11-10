@@ -17,12 +17,27 @@ if [ ! -f "$BUILDROOT/usr/bin/seismic-enclave-server" ]; then
     exit 1
 fi
 
+# Undo bob-common's root lock (we want root accessible for debugging)
+mkosi-chroot passwd -u root
+
+# Undo bob-common's SSH disabling (devtools profile adds openssh-server)
+# The services might not exist if bob-common wasn't fully applied, so || true
+mkosi-chroot systemctl unmask ssh.service ssh.socket || true
+mkosi-chroot systemctl enable ssh.service || true
+
+# Fix PATH for sudo commands so tdx-init can find cryptsetup at /usr/sbin
+# Note: bob-common's sudoers file allows 'searcher' to run tdx-init, but needs /usr/sbin in PATH
+cat > "$BUILDROOT/etc/sudoers.d/10-seismic-path" << 'EOF'
+Defaults secure_path="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+EOF
+chmod 440 "$BUILDROOT/etc/sudoers.d/10-seismic-path"
+
 # Create groups and users for Seismic services
-mkosi-chroot groupadd -r seismic
+mkosi-chroot groupadd -r seismic || true
 mkosi-chroot groupadd -r tss || true  # TPM group, may already exist
-mkosi-chroot useradd -r -s /bin/false -G seismic summit
-mkosi-chroot useradd -r -s /bin/false -G seismic seismic-reth
-mkosi-chroot useradd -r -s /bin/false -G seismic,tss enclave
+mkosi-chroot useradd -r -s /bin/false -G seismic summit || true
+mkosi-chroot useradd -r -s /bin/false -G seismic seismic-reth || true
+mkosi-chroot useradd -r -s /bin/false -G seismic,tss enclave || true
 
 # Create persistent directories for each service
 # Note: These directories will be on the persistent disk mount

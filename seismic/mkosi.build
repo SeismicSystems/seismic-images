@@ -84,3 +84,6 @@ make_git_package \
     "https://github.com/SeismicSystems/enclave.git" \
     "$BUILD_CMD_ENCLAVE" \
     "target/release/seismic-enclave-server:/usr/bin/seismic-enclave-server"
+
+# Note: tdx-init, cryptsetup, searchersh, and wait-for-key.service
+# are provided by bob-common (included in seismic.conf)
