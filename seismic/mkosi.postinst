@@ -29,10 +29,6 @@ chmod 440 "$BUILDROOT/etc/sudoers.d/10-seismic-path"
 # - Dev builds: devtools profile removes dropbear security flags
 # - All builds: port 22 via dropbear (from bob-common)
 
-# Configure iptables to use legacy backend (kernel doesn't support nftables)
-mkosi-chroot update-alternatives --set iptables /usr/sbin/iptables-legacy
-mkosi-chroot update-alternatives --set ip6tables /usr/sbin/ip6tables-legacy
-
 # Remove bob-common's dropbear prereq file that requires wait-for-key
 # Our seismic-override.conf in the drop-in directory replaces it
 rm -f "$BUILDROOT/etc/systemd/system/dropbear.service.d/dropbear-prereq.conf"
