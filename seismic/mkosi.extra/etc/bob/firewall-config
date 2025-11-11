@@ -24,6 +24,7 @@ NTP_PORT=123
 ###########################################################################
 
 accept_dst_port $CHAIN_ALWAYS_IN tcp $SSH_PORT "SSH (dropbear)"
+accept_dst_port $CHAIN_ALWAYS_IN tcp $SSH_REGISTER_PORT "SSH key registration"
 accept_dst_port $CHAIN_ALWAYS_IN tcp $HTTPS_PORT "HTTPS (nginx)"
 
 # Seismic RPC endpoints (always open)
@@ -57,8 +58,8 @@ accept_dst_port $CHAIN_ALWAYS_OUT udp $EL_P2P_PORT "EL P2P (UDP)"
 # (3) MAINTENANCE_IN: Inbound rules for Maintenance Mode
 ###########################################################################
 
-# Allow SSH key registration in maintenance mode
-accept_dst_port $CHAIN_MAINTENANCE_IN tcp $SSH_REGISTER_PORT "SSH key registration"
+# SSH key registration (moved to ALWAYS_IN above, but kept here for clarity)
+# accept_dst_port $CHAIN_MAINTENANCE_IN tcp $SSH_REGISTER_PORT "SSH key registration"
 
 ###########################################################################
 # (4) MAINTENANCE_OUT: Outbound rules for Maintenance Mode

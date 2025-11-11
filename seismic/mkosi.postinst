@@ -33,6 +33,10 @@ chmod 440 "$BUILDROOT/etc/sudoers.d/10-seismic-path"
 mkosi-chroot update-alternatives --set iptables /usr/sbin/iptables-legacy
 mkosi-chroot update-alternatives --set ip6tables /usr/sbin/ip6tables-legacy
 
+# Remove bob-common's dropbear prereq file that requires wait-for-key
+# Our seismic-override.conf in the drop-in directory replaces it
+rm -f "$BUILDROOT/etc/systemd/system/dropbear.service.d/dropbear-prereq.conf"
+
 # Create groups and users for Seismic services
 mkosi-chroot groupadd -r seismic || true
 mkosi-chroot groupadd -r tss || true  # TPM group, may already exist
@@ -71,6 +75,7 @@ mkdir -p "$BUILDROOT/etc/systemd/system/timers.target.wants"
 # Enable bob-common services needed by Seismic
 # Note: bob-common's postinst runs first and enables all BOB services.
 # We explicitly enable only what Seismic needs and disable BOB-specific services.
+# IMPORTANT: wait-for-key IS enabled (serves port 8080), but dropbear doesn't wait for it
 for service in \
     network-setup.service \
     wait-for-key.service \
@@ -82,6 +87,7 @@ do
 done
 
 # Disable BOB-specific services that Seismic doesn't need
+# Note: We only disable (not mask) because these are real files from bob-common
 for service in \
     searcher-container.service \
     fluent-bit.service \
@@ -89,7 +95,6 @@ for service in \
     cvm-reverse-proxy.service
 do
     mkosi-chroot systemctl disable "$service" || true
-    mkosi-chroot systemctl mask "$service" || true
 done
 
 # Enable Seismic services
