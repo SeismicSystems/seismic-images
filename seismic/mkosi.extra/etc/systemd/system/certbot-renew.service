@@ -1,10 +1,14 @@
 [Unit]
 Description=Renew Let's Encrypt certificates
-After=network-online.target
+After=network-online.target persistent-mount.service
 Wants=network-online.target
+Requires=persistent-mount.service
 
 [Service]
 Type=oneshot
-ExecStart=/usr/bin/certbot renew --quiet --deploy-hook "/bin/systemctl reload nginx"
+# Certbot uses /etc/letsencrypt/cli.ini for default directories (/persistent)
+ExecStart=/usr/bin/certbot renew \
+    --quiet \
+    --deploy-hook "/bin/systemctl reload nginx"
 StandardOutput=journal
 StandardError=journal

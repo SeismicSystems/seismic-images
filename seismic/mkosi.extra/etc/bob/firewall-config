@@ -7,6 +7,13 @@ SSH_PORT=22
 SSH_REGISTER_PORT=8080
 HTTPS_PORT=443
 
+# Seismic service ports
+RETH_HTTP_RPC_PORT=8545
+RETH_WS_RPC_PORT=8546
+SUMMIT_RPC_PORT=3030
+SUMMIT_P2P_PORT=18551
+EL_P2P_PORT=30303
+
 # Well-known ports
 DNS_PORT=53
 HTTP_PORT=80
@@ -17,7 +24,18 @@ NTP_PORT=123
 ###########################################################################
 
 accept_dst_port $CHAIN_ALWAYS_IN tcp $SSH_PORT "SSH (dropbear)"
-accept_dst_port $CHAIN_ALWAYS_IN tcp $HTTPS_PORT "HTTPS"
+accept_dst_port $CHAIN_ALWAYS_IN tcp $HTTPS_PORT "HTTPS (nginx)"
+
+# Seismic RPC endpoints (always open)
+accept_dst_port $CHAIN_ALWAYS_IN tcp $RETH_HTTP_RPC_PORT "Reth HTTP RPC"
+accept_dst_port $CHAIN_ALWAYS_IN tcp $RETH_WS_RPC_PORT "Reth WebSocket RPC"
+accept_dst_port $CHAIN_ALWAYS_IN tcp $SUMMIT_RPC_PORT "Summit RPC"
+
+# P2P networking (always open)
+accept_dst_port $CHAIN_ALWAYS_IN tcp $SUMMIT_P2P_PORT "Summit P2P (TCP)"
+accept_dst_port $CHAIN_ALWAYS_IN udp $SUMMIT_P2P_PORT "Summit P2P (UDP)"
+accept_dst_port $CHAIN_ALWAYS_IN tcp $EL_P2P_PORT "EL P2P (TCP)"
+accept_dst_port $CHAIN_ALWAYS_IN udp $EL_P2P_PORT "EL P2P (UDP)"
 
 ###########################################################################
 # (2) ALWAYS_OUT: Outbound rules that are always applied
@@ -28,6 +46,12 @@ accept_dst_port $CHAIN_ALWAYS_OUT udp $DNS_PORT "DNS (UDP)"
 accept_dst_port $CHAIN_ALWAYS_OUT tcp $DNS_PORT "DNS (TCP)"
 accept_dst_port $CHAIN_ALWAYS_OUT tcp $HTTP_PORT "HTTP"
 accept_dst_port $CHAIN_ALWAYS_OUT tcp $HTTPS_PORT "HTTPS"
+
+# P2P networking (outbound)
+accept_dst_port $CHAIN_ALWAYS_OUT tcp $SUMMIT_P2P_PORT "Summit P2P (TCP)"
+accept_dst_port $CHAIN_ALWAYS_OUT udp $SUMMIT_P2P_PORT "Summit P2P (UDP)"
+accept_dst_port $CHAIN_ALWAYS_OUT tcp $EL_P2P_PORT "EL P2P (TCP)"
+accept_dst_port $CHAIN_ALWAYS_OUT udp $EL_P2P_PORT "EL P2P (UDP)"
 
 ###########################################################################
 # (3) MAINTENANCE_IN: Inbound rules for Maintenance Mode
@@ -47,7 +71,7 @@ accept_dst_port $CHAIN_MAINTENANCE_IN tcp $SSH_REGISTER_PORT "SSH key registrati
 ###########################################################################
 
 # Production mode closes SSH key registration port
-# SSH (port 22) remains open via ALWAYS_IN
+# All RPC and P2P ports remain open via ALWAYS_IN
 
 ###########################################################################
 # (6) PRODUCTION_OUT: Outbound rules for Production Mode

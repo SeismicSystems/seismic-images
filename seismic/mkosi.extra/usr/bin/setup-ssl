@@ -4,7 +4,8 @@ set -euo pipefail
 CONFIG_FILE="/etc/seismic/domain.conf"
 NGINX_TEMPLATE="/usr/share/seismic/nginx.conf.template"
 NGINX_CONF="/etc/nginx/nginx.conf"
-CERT_OBTAINED="/var/lib/seismic/cert-obtained"
+CERT_OBTAINED="/persistent/seismic-ssl/cert-obtained"
+CERTBOT_DIR="/persistent/seismic-ssl/letsencrypt"
 
 # Fetch and decode user-data from instance metadata service
 # Works for both Azure and GCP
@@ -71,8 +72,11 @@ if [ -f "$CERT_OBTAINED" ]; then
     exit 0
 fi
 
+# Setup persistent directory for certbot
+mkdir -p "$CERTBOT_DIR"
+
 # Obtain certificate using certbot nginx plugin
-# This will automatically configure SSL in nginx
+# Certbot uses /etc/letsencrypt/cli.ini for default directories (/persistent)
 echo "Obtaining SSL certificate with certbot nginx plugin..."
 certbot --nginx \
     --non-interactive \
@@ -82,7 +86,7 @@ certbot --nginx \
     --redirect
 
 # Mark cert as obtained
-mkdir -p /var/lib/seismic
+mkdir -p "$(dirname "$CERT_OBTAINED")"
 touch "$CERT_OBTAINED"
 
 echo "SSL certificate obtained and nginx configured successfully for ${FULL_DOMAIN}"

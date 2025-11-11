@@ -46,6 +46,7 @@ mkosi-chroot useradd -r -s /bin/false -G seismic,tss enclave || true
 mkdir -p "$BUILDROOT/persistent/summit"
 mkdir -p "$BUILDROOT/persistent/seismic-reth"
 mkdir -p "$BUILDROOT/persistent/enclave"
+mkdir -p "$BUILDROOT/persistent/seismic-ssl"
 
 # Set binary permissions
 chmod 755 "$BUILDROOT/usr/bin/summit"
@@ -111,7 +112,7 @@ do
     ln -sf "/etc/systemd/system/$service" "$BUILDROOT/etc/systemd/system/multi-user.target.wants/"
 done
 
-# Enable certbot renewal timer
+# Enable certbot auto-renewal timer (runs twice daily)
 mkosi-chroot systemctl enable certbot-renew.timer
 ln -sf "/etc/systemd/system/certbot-renew.timer" "$BUILDROOT/etc/systemd/system/timers.target.wants/"
 
