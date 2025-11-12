@@ -10,11 +10,15 @@ mkosi-chroot useradd -r -s /bin/false -G eth lighthouse
 # Install lighthouse
 install -m 755 services/bin/lighthouse-init "$BUILDROOT/usr/bin/"
 
+# Make nginx-ssl setup script executable
+chmod +x "$BUILDROOT/usr/bin/setup-nginx-ssl"
+
 # Enable services
 mkdir -p "$BUILDROOT/etc/systemd/system/minimal.target.wants"
 for service in \
     lighthouse.service \
-    openntpd.service
+    openntpd.service \
+    nginx-ssl-setup.service
 do
     mkosi-chroot systemctl enable "$service"
     ln -sf "/etc/systemd/system/$service" "$BUILDROOT/etc/systemd/system/minimal.target.wants/"
