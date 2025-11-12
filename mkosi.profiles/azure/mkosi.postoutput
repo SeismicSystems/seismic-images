@@ -1,8 +1,19 @@
 #!/bin/bash
 set -euxo pipefail
 
-# Get image ID from mkosi environment, fallback to tdx-debian
-BASE_NAME="${IMAGEID:-tdx-debian}"
+# Find the most recently modified .efi file in the output directory
+# This will be the one that was just built
+EFI_FILE=$(ls -t "${OUTPUTDIR}"/*.efi 2>/dev/null | head -n1)
+
+if [ -z "$EFI_FILE" ] || [ ! -f "$EFI_FILE" ]; then
+    echo "Error: No .efi file found in ${OUTPUTDIR}"
+    exit 1
+fi
+
+echo "Using EFI file: $EFI_FILE"
+
+# Get the base name from the actual EFI file
+BASE_NAME=$(basename "$EFI_FILE" .efi)
 
 # Check if this is a dev build by looking for devtools profile marker
 IS_DEV=""
@@ -10,8 +21,8 @@ if echo "${PROFILES:-}" | grep -q "devtools"; then
     IS_DEV="dev-"
 fi
 
-# Generate timestamp in YYYYMMDDHHMM format
-TIMESTAMP=$(date -u +%Y%m%d%H%M)
+# Generate timestamp in YYYYMMDDHHMMSS format
+TIMESTAMP=$(date -u +%Y%m%d%H%M%S)
 
 # Construct the output filename
 # For non-seismic/bob-l1 images (like tdx-debian), use old naming
@@ -21,14 +32,8 @@ else
     OUTPUT_BASE="${BASE_NAME}"
 fi
 
-EFI_FILE="${OUTPUTDIR}/${BASE_NAME}.efi"
 VHD_FILE="${OUTPUTDIR}/${OUTPUT_BASE}.vhd"
 WORK_DIR="${OUTPUTDIR}/azure-tmp"
-
-if [ ! -f "$EFI_FILE" ]; then
-    echo "Error: EFI file not found at $EFI_FILE"
-    exit 1
-fi
 
 echo "Converting $EFI_FILE to VHD format..."
 
@@ -72,5 +77,12 @@ qemu-img convert -O vpc -o subformat=fixed,force_size "$DISK_IMAGE" "$VHD_FILE"
 
 # Clean up
 rm -rf "$WORK_DIR"
+
+# Copy the EFI file with matching name (for measurements script)
+if [[ "$OUTPUT_BASE" != "$BASE_NAME" ]]; then
+    EFI_OUTPUT="${OUTPUTDIR}/${OUTPUT_BASE}.efi"
+    cp "$EFI_FILE" "$EFI_OUTPUT"
+    echo "Copied EFI file to: $EFI_OUTPUT"
+fi
 
 echo "Successfully created VHD: $VHD_FILE"
