@@ -30,6 +30,10 @@ fi
 
 echo "Setting up nginx for domain: $DOMAIN_NAME"
 
+# Create persistent directories
+mkdir -p /persistent/conf
+mkdir -p "$CERTBOT_CONFIG_DIR" "$CERTBOT_WORK_DIR" "$CERTBOT_LOGS_DIR"
+
 # Generate nginx config from template
 sed "s/DOMAIN_NAME_PLACEHOLDER/$DOMAIN_NAME/g" "$TEMPLATE" > "$NGINX_CONF"
 
@@ -51,9 +55,6 @@ systemctl restart nginx
 # Run certbot if not already done
 if [ ! -f "$CERTBOT_DONE" ]; then
     echo "Running certbot for $DOMAIN_NAME with email $DOMAIN_EMAIL"
-
-    # Create certbot directories in /persistent
-    mkdir -p "$CERTBOT_CONFIG_DIR" "$CERTBOT_WORK_DIR" "$CERTBOT_LOGS_DIR"
 
     # Wait for nginx to be fully up
     sleep 2
