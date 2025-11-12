@@ -5,10 +5,10 @@ set -euxo pipefail
 # NOTE: Due to a limitation in mkosi, all folders are owned by root by default
 # https://github.com/systemd/mkosi/issues/3065
 mkosi-chroot groupadd -r eth
-mkosi-chroot useradd -r -s /bin/false -G eth lighthouse
-
-# Install lighthouse
-install -m 755 services/bin/lighthouse-init "$BUILDROOT/usr/bin/"
+mkosi-chroot groupadd -r tss
+mkosi-chroot useradd -r -s /bin/false -G eth reth
+mkosi-chroot useradd -r -s /bin/false -G eth,tss enclave
+mkosi-chroot useradd -r -s /bin/false -G eth summit
 
 # Make nginx-ssl setup script executable
 chmod +x "$BUILDROOT/usr/bin/setup-nginx-ssl"
@@ -16,9 +16,11 @@ chmod +x "$BUILDROOT/usr/bin/setup-nginx-ssl"
 # Enable services
 mkdir -p "$BUILDROOT/etc/systemd/system/minimal.target.wants"
 for service in \
-    lighthouse.service \
     openntpd.service \
-    nginx-ssl-setup.service
+    nginx-ssl-setup.service \
+    seismic-reth.service \
+    seismic-enclave.service \
+    summit.service
 do
     mkosi-chroot systemctl enable "$service"
     ln -sf "/etc/systemd/system/$service" "$BUILDROOT/etc/systemd/system/minimal.target.wants/"

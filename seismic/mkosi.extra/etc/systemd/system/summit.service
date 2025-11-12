@@ -1,0 +1,38 @@
+[Unit]
+Description=Summit Consensus Server
+After=network.target persistent-mount.service nginx-ssl-setup.service seismic-reth.service
+Requires=persistent-mount.service nginx-ssl-setup.service seismic-reth.service
+
+[Service]
+Type=simple
+User=summit
+Group=eth
+LimitNOFILE=65536
+UMask=0002
+
+ExecStartPre=+/bin/mkdir -p /persistent/summit/db
+ExecStartPre=+/bin/mkdir -p /persistent/summit/keys
+ExecStartPre=+/bin/chown -R summit:eth /persistent/summit
+ExecStartPre=+/bin/chmod -R g+rwX /persistent/summit
+ExecStartPre=+/bin/chmod g+s /persistent/summit
+ExecStartPre=/usr/bin/summit keys generate -n --key-path /persistent/summit/keys/key.pem
+
+ExecStart=/usr/bin/summit run \
+    --engine-ipc-path /var/volatile/reth_engine_api.ipc \
+    --genesis-path /persistent/summit/genesis.toml \
+    --store-path /persistent/summit/db \
+    --key-path /persistent/summit/keys/key.pem \
+    --share-path /persistent/summit/keys/share.pem \
+    --port 18551 \
+    --rpc-port 3030 \
+    --prom-port 9090 \
+    --log-level info \
+    --db-prefix quarts
+
+Restart=on-failure
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=minimal.target

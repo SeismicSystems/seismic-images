@@ -3,28 +3,74 @@ set -euxo pipefail
 
 source scripts/make_git_package.sh
 
-# Compile lighthouse
-LIGHTHOUSE_BUILD_CMD="
-    # Switch from jemalloc to the system allocator to fix reproducibility issues
-    sed -i 's/malloc_utils = { workspace = true, features = \[\"jemalloc\"\] }/malloc_utils = { workspace = true }/' lighthouse/Cargo.toml
-    sed -i 's/#\[cfg(target_os = \"windows\")\]/#[cfg(not(feature = \"jemalloc\"))]/' lighthouse/src/main.rs
-    sed -i 's/#\[cfg(not(target_os = \"windows\"))\]/#[cfg(feature = \"jemalloc\")]/' lighthouse/src/main.rs
-
-    # Reproducibility flags
-    export RUSTFLAGS='-C target-cpu=generic -C link-arg=-Wl,--build-id=none -C symbol-mangling-version=v0 -L /usr/lib/x86_64-linux-gnu -l z -l zstd -l snappy'
+# Build seismic-reth
+RETH_BUILD_CMD="
+    export RUSTFLAGS='-C target-cpu=generic -C link-arg=-Wl,--build-id=none -C symbol-mangling-version=v0'
     export CARGO_PROFILE_RELEASE_LTO='thin'
     export CARGO_PROFILE_RELEASE_CODEGEN_UNITS='1'
-    export CARGO_PROFILE_RELEASE_PANIC='unwind'
+    export CARGO_PROFILE_RELEASE_PANIC='abort'
     export CARGO_PROFILE_RELEASE_STRIP='none'
     export CARGO_PROFILE_RELEASE_OPT_LEVEL='3'
     export CARGO_TERM_COLOR='never'
 
     cargo fetch
-    DESTDIR=$BUILDROOT cargo build --release --frozen --bin lighthouse --no-default-features --features portable
+    cargo build --release --frozen --bin seismic-reth
+
+    # Create persistent directory structure
+    mkdir -p \$BUILDROOT/persistent/reth
 "
 make_git_package \
-    "lighthouse" \
-    "v7.1.0" \
-    "https://github.com/sigp/lighthouse.git" \
-	"$LIGHTHOUSE_BUILD_CMD" \
-    "target/release/lighthouse:/usr/bin/lighthouse"
+    "seismic-reth" \
+    "e0ebd6a8d2c4d160867f213ad39482d1095195a4" \
+    "https://github.com/SeismicSystems/seismic-reth" \
+    "$RETH_BUILD_CMD" \
+    "target/release/seismic-reth:/usr/bin/seismic-reth"
+
+# Build enclave (seismic-enclave-server)
+ENCLAVE_BUILD_CMD="
+    export RUSTFLAGS='-C target-cpu=generic -C link-arg=-Wl,--build-id=none -C symbol-mangling-version=v0'
+    export CARGO_PROFILE_RELEASE_LTO='off'
+    export CARGO_PROFILE_RELEASE_CODEGEN_UNITS='1'
+    export CARGO_PROFILE_RELEASE_PANIC='abort'
+    export CARGO_PROFILE_RELEASE_STRIP='none'
+    export CARGO_PROFILE_RELEASE_OPT_LEVEL='z'
+    export CARGO_TERM_COLOR='never'
+
+    cargo fetch
+    cargo build --release --frozen --bin seismic-enclave-server --features modern
+
+    # Create persistent directory structure
+    mkdir -p \$BUILDROOT/persistent/enclave
+"
+make_git_package \
+    "enclave" \
+    "96cda938841336ed60fdc292ebad1b47af65cbca" \
+    "https://github.com/SeismicSystems/enclave" \
+    "$ENCLAVE_BUILD_CMD" \
+    "target/release/seismic-enclave-server:/usr/bin/seismic-enclave-server"
+
+# Build summit (node)
+SUMMIT_BUILD_CMD="
+    export RUSTFLAGS='-C target-cpu=generic -C link-arg=-Wl,--build-id=none -C symbol-mangling-version=v0'
+    export CARGO_PROFILE_RELEASE_LTO='thin'
+    export CARGO_PROFILE_RELEASE_CODEGEN_UNITS='1'
+    export CARGO_PROFILE_RELEASE_PANIC='abort'
+    export CARGO_PROFILE_RELEASE_STRIP='none'
+    export CARGO_PROFILE_RELEASE_OPT_LEVEL='3'
+    export CARGO_TERM_COLOR='never'
+
+    cargo fetch
+    cargo build --release --frozen --bin node
+
+    # Create persistent directory structure
+    mkdir -p \$BUILDROOT/persistent/summit
+    mkdir -p \$BUILDROOT/persistent/summit/db
+    mkdir -p \$BUILDROOT/persistent/summit/keys
+"
+make_git_package \
+    "summit" \
+    "2022223a75f7e9e6d008638501ad95d1662d5ebc" \
+    "https://github.com/SeismicSystems/summit" \
+    "$SUMMIT_BUILD_CMD" \
+    "target/release/node:/usr/bin/summit"
+
