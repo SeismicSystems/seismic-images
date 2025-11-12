@@ -42,9 +42,6 @@ mkdir -p /etc/nginx/sites-enabled
 rm -f "$NGINX_ENABLED"
 ln -s "$NGINX_CONF" "$NGINX_ENABLED"
 
-# Remove default site
-rm -f /etc/nginx/sites-enabled/default
-
 # Test nginx config
 nginx -t
 
