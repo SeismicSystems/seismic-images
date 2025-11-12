@@ -1,26 +1,19 @@
 [Unit]
 Description=Seismic Enclave Server
-After=network.target persistent-mount.service nginx-ssl-setup.service seismic-reth.service
-Requires=persistent-mount.service nginx-ssl-setup.service seismic-reth.service
+After=network.target persistent-mount.service nginx-ssl-setup.service tpm-permissions.service
+Requires=persistent-mount.service nginx-ssl-setup.service tpm-permissions.service
 
 [Service]
 Type=simple
-User=enclave
-Group=eth
+User=tss
+Group=tss
 Environment=RUST_BACKTRACE=full
-Environment=AS_WORK_DIR=/opt/confidential-containers/attestation-service
 
 ExecStartPre=+/bin/mkdir -p /persistent/enclave
-ExecStartPre=+/bin/chown -R enclave:eth /persistent/enclave
+ExecStartPre=+/bin/chown -R tss:eth /persistent/enclave
 ExecStartPre=+/bin/chmod 775 /persistent /persistent/enclave
-ExecStartPre=+/bin/chmod 660 /dev/tpm*
-ExecStartPre=+/bin/chown root:tss /dev/tpm*
-ExecStartPre=+/bin/mkdir -p /opt/confidential-containers/attestation-service
-ExecStartPre=+/bin/chown -R enclave:eth /opt/confidential-containers
-ExecStartPre=+/bin/chmod g+rwx /opt/confidential-containers
-ExecStartPre=+/bin/chmod ug+s /opt/confidential-containers
 
-ExecStart=/usr/bin/seismic-enclave-server
+ExecStart=/usr/bin/start-seismic-enclave
 
 Restart=always
 RestartSec=60

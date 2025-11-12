@@ -5,19 +5,22 @@ set -euxo pipefail
 # NOTE: Due to a limitation in mkosi, all folders are owned by root by default
 # https://github.com/systemd/mkosi/issues/3065
 mkosi-chroot groupadd -r eth
-mkosi-chroot groupadd -r tss
+mkosi-chroot groupadd -r tss || true  # tss group may already exist from libtss2 package
+mkosi-chroot useradd -r -s /bin/false -g tss -G eth tss 2>/dev/null || true  # tss user may already exist
 mkosi-chroot useradd -r -s /bin/false -G eth reth
 mkosi-chroot useradd -r -s /bin/false -G eth,tss enclave
 mkosi-chroot useradd -r -s /bin/false -G eth summit
 
-# Make nginx-ssl setup script executable
+# Make scripts executable
 chmod +x "$BUILDROOT/usr/bin/setup-nginx-ssl"
+chmod +x "$BUILDROOT/usr/bin/start-seismic-enclave"
 
 # Enable services
 mkdir -p "$BUILDROOT/etc/systemd/system/minimal.target.wants"
 for service in \
     openntpd.service \
     nginx-ssl-setup.service \
+    tpm-permissions.service \
     seismic-reth.service \
     seismic-enclave.service \
     summit.service

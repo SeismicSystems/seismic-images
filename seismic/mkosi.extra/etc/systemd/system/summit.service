@@ -1,7 +1,7 @@
 [Unit]
 Description=Summit Consensus Server
-After=network.target persistent-mount.service nginx-ssl-setup.service seismic-reth.service
-Requires=persistent-mount.service nginx-ssl-setup.service seismic-reth.service
+After=network.target persistent-mount.service nginx-ssl-setup.service seismic-enclave.service seismic-reth.service
+Requires=persistent-mount.service nginx-ssl-setup.service seismic-enclave.service seismic-reth.service
 
 [Service]
 Type=simple
@@ -22,7 +22,6 @@ ExecStart=/usr/bin/summit run \
     --genesis-path /persistent/summit/genesis.toml \
     --store-path /persistent/summit/db \
     --key-path /persistent/summit/keys/key.pem \
-    --share-path /persistent/summit/keys/share.pem \
     --port 18551 \
     --rpc-port 3030 \
     --prom-port 9090 \

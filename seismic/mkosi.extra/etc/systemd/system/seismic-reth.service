@@ -1,7 +1,7 @@
 [Unit]
 Description=Seismic Reth Node
-After=network.target persistent-mount.service nginx-ssl-setup.service
-Requires=persistent-mount.service nginx-ssl-setup.service
+After=network.target persistent-mount.service nginx-ssl-setup.service seismic-enclave.service
+Requires=persistent-mount.service nginx-ssl-setup.service seismic-enclave.service
 
 [Service]
 Type=simple
@@ -17,7 +17,8 @@ ExecStartPre=+/bin/chmod g+s /persistent/reth
 
 ExecStart=/usr/bin/seismic-reth node \
     -vvv \
-    --chain /persistent/reth/genesis.json \
+    --enclave.endpoint-addr "127.0.0.1" \
+    --chain /usr/share/seismic-reth/genesis.json \
     --full \
     --datadir /persistent/reth \
     --http \
