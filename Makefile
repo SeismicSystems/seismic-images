@@ -1,6 +1,7 @@
 .DEFAULT_GOAL := help
 
 VERSION := $(shell git describe --tags --always --dirty="-dev")
+TIMESTAMP := $(shell date +%Y%m%d%H%M%S)
 SHELL := /bin/bash
 WRAPPER := scripts/env_wrapper.sh
 
@@ -39,28 +40,72 @@ setup: ## Install dependencies (Linux only)
 
 # Build module
 build: check-perms setup ## Build the specified module
+ifdef PROFILE
+	$(WRAPPER) mkosi --force --profile=$(PROFILE) -I $(IMAGE).conf
+else
 	$(WRAPPER) mkosi --force -I $(IMAGE).conf
+endif
+	@echo "Renaming outputs with timestamp: $(TIMESTAMP)"
+ifdef PROFILE
+	@for f in build/$(IMAGE).*; do \
+		[ -f "$$f" ] || continue; \
+		ext="$${f##*.}"; \
+		mv "$$f" "build/$(IMAGE)-$(PROFILE)-$(TIMESTAMP).$$ext"; \
+		echo "  $$f → build/$(IMAGE)-$(PROFILE)-$(TIMESTAMP).$$ext"; \
+	done
+else
+	@for f in build/$(IMAGE).*; do \
+		[ -f "$$f" ] || continue; \
+		ext="$${f##*.}"; \
+		mv "$$f" "build/$(IMAGE)-baremetal-$(TIMESTAMP).$$ext"; \
+		echo "  $$f → build/$(IMAGE)-baremetal-$(TIMESTAMP).$$ext"; \
+	done
+endif
 
 # Build module with devtools profile
 build-dev: check-perms setup ## Build module with development tools
+ifdef PROFILE
+	$(WRAPPER) mkosi --force --profile=devtools,$(PROFILE) -I $(IMAGE).conf
+else
 	$(WRAPPER) mkosi --force --profile=devtools -I $(IMAGE).conf
+endif
+	@echo "Renaming outputs with timestamp: $(TIMESTAMP)"
+ifdef PROFILE
+	@for f in build/$(IMAGE).*; do \
+		[ -f "$$f" ] || continue; \
+		ext="$${f##*.}"; \
+		mv "$$f" "build/$(IMAGE)-$(PROFILE)-$(TIMESTAMP).$$ext"; \
+		echo "  $$f → build/$(IMAGE)-$(PROFILE)-$(TIMESTAMP).$$ext"; \
+	done
+else
+	@for f in build/$(IMAGE).*; do \
+		[ -f "$$f" ] || continue; \
+		ext="$${f##*.}"; \
+		mv "$$f" "build/$(IMAGE)-baremetal-$(TIMESTAMP).$$ext"; \
+		echo "  $$f → build/$(IMAGE)-baremetal-$(TIMESTAMP).$$ext"; \
+	done
+endif
 
 ##@ Utilities
 
-measure: ## Export TDX measurements for the built EFI file
-	@if [ ! -f build/tdx-debian.efi ]; then \
-		echo "Error: build/tdx-debian.efi not found. Run 'make build' first."; \
+measure: check-module ## Export TDX measurements for the built EFI file
+	@EFI_FILE=$$(find build -maxdepth 1 -name "*.efi" -type f | head -1); \
+	if [ -z "$$EFI_FILE" ]; then \
+		echo "Error: No .efi file found in build/. Run 'make build IMAGE=$(IMAGE)' first."; \
 		exit 1; \
-	fi
-	@$(WRAPPER) measured-boot build/tdx-debian.efi build/measurements.json --direct-uki
+	fi; \
+	echo "Using EFI file: $$EFI_FILE"; \
+	$(WRAPPER) measured-boot "$$EFI_FILE" build/measurements.json --direct-uki; \
 	echo "Measurements exported to build/measurements.json"
 
-measure-gcp: ## Export TDX measurements for GCP
-	@if [ ! -f build/tdx-debian.efi ]; then \
-		echo "Error: build/tdx-debian.efi not found. Run 'make build' first."; \
+measure-gcp: check-module ## Export TDX measurements for GCP
+	@EFI_FILE=$$(find build -maxdepth 1 -name "*.efi" -type f | head -1); \
+	if [ -z "$$EFI_FILE" ]; then \
+		echo "Error: No .efi file found in build/. Run 'make build IMAGE=$(IMAGE)' first."; \
 		exit 1; \
-	fi
-	@$(WRAPPER) dstack-mr -uki build/tdx-debian.efi -json > build/gcp_measurements.json
+	fi; \
+	echo "Using EFI file: $$EFI_FILE"; \
+	$(WRAPPER) dstack-mr -uki "$$EFI_FILE" -json > build/gcp_measurements.json; \
 	echo "GCP Measurements exported to build/gcp_measurements.json"
 
 # Clean build artifacts
