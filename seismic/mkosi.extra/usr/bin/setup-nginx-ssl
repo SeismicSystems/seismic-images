@@ -42,6 +42,13 @@ mkdir -p /etc/nginx/sites-enabled
 rm -f "$NGINX_ENABLED"
 ln -s "$NGINX_CONF" "$NGINX_ENABLED"
 
+# Verify symlink was created
+if [ ! -L "$NGINX_ENABLED" ]; then
+    echo "ERROR: Failed to create symlink at $NGINX_ENABLED"
+    exit 1
+fi
+echo "Symlink created: $NGINX_ENABLED -> $NGINX_CONF"
+
 # Test nginx config
 nginx -t
 

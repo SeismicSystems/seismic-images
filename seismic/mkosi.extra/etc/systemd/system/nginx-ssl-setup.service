@@ -7,7 +7,6 @@ Requires=persistent-mount.service
 [Service]
 Type=oneshot
 ExecStart=/usr/bin/setup-nginx-ssl
-RemainAfterExit=yes
 StandardOutput=journal
 StandardError=journal
 
