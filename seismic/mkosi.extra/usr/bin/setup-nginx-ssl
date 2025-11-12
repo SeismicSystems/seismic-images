@@ -3,9 +3,14 @@ set -euo pipefail
 
 CONFIG_FILE="/etc/tdx-init/config.json"
 TEMPLATE="/etc/nginx-rpc-template.conf"
-NGINX_CONF="/persistent/conf/nginx-rpc.conf"
+NGINX_CONF="/persistent/conf/nginx.conf"
 NGINX_ENABLED="/etc/nginx/sites-enabled/default"
 CERTBOT_DONE="/persistent/conf/.certbot-done"
+
+# Certbot directories in /persistent/conf/certbot/
+CERTBOT_CONFIG_DIR="/persistent/conf/certbot"
+CERTBOT_WORK_DIR="/persistent/conf/certbot/work"
+CERTBOT_LOGS_DIR="/persistent/conf/certbot/logs"
 
 # Check if config exists
 if [ ! -f "$CONFIG_FILE" ]; then
@@ -47,21 +52,32 @@ systemctl restart nginx
 if [ ! -f "$CERTBOT_DONE" ]; then
     echo "Running certbot for $DOMAIN_NAME with email $DOMAIN_EMAIL"
 
+    # Create certbot directories in /persistent
+    mkdir -p "$CERTBOT_CONFIG_DIR" "$CERTBOT_WORK_DIR" "$CERTBOT_LOGS_DIR"
+
     # Wait for nginx to be fully up
     sleep 2
 
-    # Run certbot
+    # Run certbot with persistent directories
     certbot --nginx \
         --non-interactive \
         --agree-tos \
         --email "$DOMAIN_EMAIL" \
         --domain "$DOMAIN_NAME" \
-        --redirect
+        --redirect \
+        --config-dir "$CERTBOT_CONFIG_DIR" \
+        --work-dir "$CERTBOT_WORK_DIR" \
+        --logs-dir "$CERTBOT_LOGS_DIR"
 
     # Mark as done
     touch "$CERTBOT_DONE"
 
+    # Enable automatic renewal timer
+    systemctl enable certbot-renew.timer
+    systemctl start certbot-renew.timer
+
     echo "SSL certificate obtained successfully"
+    echo "Automatic renewal enabled (runs twice daily)"
 else
     echo "Certbot already run, skipping (remove $CERTBOT_DONE to re-run)"
 fi

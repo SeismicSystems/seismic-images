@@ -23,3 +23,5 @@ do
     mkosi-chroot systemctl enable "$service"
     ln -sf "/etc/systemd/system/$service" "$BUILDROOT/etc/systemd/system/minimal.target.wants/"
 done
+
+# Note: certbot-renew.timer is enabled by setup-nginx-ssl after initial certbot run
