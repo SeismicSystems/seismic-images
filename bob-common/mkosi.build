@@ -35,7 +35,7 @@ make_git_package \
 # Build tdx-init (using fork with JSON config support)
 make_git_package \
     "tdx-init" \
-    "seismic-update" \
+    "0.0.2" \
     "https://github.com/SeismicSystems/tdx-init" \
     'go build -trimpath -ldflags "-s -w -buildid=" -o ./build/tdx-init' \
     "build/tdx-init:/usr/bin/tdx-init"

@@ -4,7 +4,7 @@ set -euo pipefail
 CONFIG_FILE="/persistent/conf/node.json"
 
 # Default args as a string
-DEFAULT_ARGS='node -vvv --enclave.endpoint-addr 127.0.0.1 --chain /usr/share/seismic-reth/genesis.json --full --datadir /persistent/reth --http --http.addr 0.0.0.0 --http.port 8545 --http.api eth,net,web3,trace,rpc,debug,txpool --ws --ws.addr 0.0.0.0 --ws.port 8546 --ws.api eth,net,trace,web3,rpc,debug,txpool --auth-ipc --auth-ipc.path /var/volatile/reth_engine_api.ipc --log.stdout.format json --log.file.max-files 0 --metrics 127.0.0.1:9001'
+DEFAULT_ARGS='node -vvv --enclave.endpoint-addr 0.0.0.0 --chain /usr/share/seismic-reth/genesis.json --full --datadir /persistent/reth --http --http.addr 0.0.0.0 --http.port 8545 --http.api eth,net,web3,trace,rpc,debug,txpool --ws --ws.addr 0.0.0.0 --ws.port 8546 --ws.api eth,net,trace,web3,rpc,debug,txpool --auth-ipc --auth-ipc.path /var/volatile/reth_engine_api.ipc --log.stdout.format json --log.file.max-files 0 --metrics 127.0.0.1:9001'
 
 # Extract custom args if config exists
 CUSTOM_ARGS=""
