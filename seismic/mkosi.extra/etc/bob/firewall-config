@@ -37,6 +37,7 @@ accept_dst_port $CHAIN_ALWAYS_IN udp $CL_P2P_PORT "CL P2P (UDP)"
 
 # Note: this is CL running on the host, searcher netns has DROP on those
 # See also init-container.sh
+
 accept_dst_port $CHAIN_ALWAYS_OUT tcp $ENCLAVE_PORT "Enclave"
 accept_dst_port $CHAIN_ALWAYS_OUT tcp $SUMMIT_API_PORT "Summit API"
 accept_dst_port $CHAIN_ALWAYS_OUT tcp $HTTP_PORT "HTTP"
@@ -47,6 +48,8 @@ accept_dst_port $CHAIN_ALWAYS_OUT udp $CL_P2P_PORT "CL P2P (UDP)"
 
 # Note: this is accessible only from host, searcher netns has DROP on those
 accept_dst_port $CHAIN_ALWAYS_OUT udp $NTP_PORT "NTP"
+accept_dst_port $CHAIN_ALWAYS_OUT udp $DNS_PORT "DNS (UDP)"
+accept_dst_port $CHAIN_ALWAYS_OUT tcp $DNS_PORT "DNS (TCP)"
 
 ###########################################################################
 # (3) MAINTENANCE_IN: Inbound rules for Maintenance Mode
@@ -61,9 +64,6 @@ accept_dst_port $CHAIN_MAINTENANCE_IN udp $EL_P2P_PORT "EL P2P (UDP)"
 ###########################################################################
 # (4) MAINTENANCE_OUT: Outbound rules for Maintenance Mode
 ###########################################################################
-
-accept_dst_port $CHAIN_MAINTENANCE_OUT udp $DNS_PORT "DNS (UDP)"
-accept_dst_port $CHAIN_MAINTENANCE_OUT tcp $DNS_PORT "DNS (TCP)"
 
 accept_dst_port $CHAIN_MAINTENANCE_OUT tcp $EL_P2P_PORT "EL P2P (TCP)"
 accept_dst_port $CHAIN_MAINTENANCE_OUT udp $EL_P2P_PORT "EL P2P (UDP)"
