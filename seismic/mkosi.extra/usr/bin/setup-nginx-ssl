@@ -2,7 +2,7 @@
 set -euo pipefail
 
 CONFIG_FILE="/persistent/conf/node.json"
-TEMPLATE="/etc/nginx-rpc-template.conf"
+TEMPLATE="/etc/nginx-template.conf"
 NGINX_CONF="/persistent/conf/nginx.conf"
 NGINX_ENABLED="/etc/nginx/sites-enabled/default"
 CERTBOT_DONE="/persistent/conf/.certbot-done"
