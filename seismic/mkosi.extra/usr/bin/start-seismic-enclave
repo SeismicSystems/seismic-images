@@ -1,33 +1,13 @@
 #!/bin/bash
 set -euo pipefail
 
-CONFIG_FILE="/etc/tdx-init/config.json"
+CONFIG_FILE="/persistent/conf/node.json"
 
-# Check if config exists
-if [ ! -f "$CONFIG_FILE" ]; then
-    echo "Config file not found: $CONFIG_FILE"
-    echo "Starting enclave without genesis or peers configuration"
-    exec /usr/bin/seismic-enclave-server
+# Extract custom args if config exists
+CUSTOM_ARGS=""
+if [ -f "$CONFIG_FILE" ]; then
+    CUSTOM_ARGS=$(jq -r '.args.enclave // ""' "$CONFIG_FILE")
 fi
 
-# Extract enclave config
-GENESIS=$(jq -r '.enclave.genesis // false' "$CONFIG_FILE")
-PEERS=$(jq -r '.enclave.peers // [] | join(" ")' "$CONFIG_FILE")
-
-# Build command line arguments
-ARGS=()
-
-if [ "$GENESIS" = "true" ]; then
-    echo "Starting as genesis node"
-    ARGS+=("--genesis-node")
-elif [ -n "$PEERS" ]; then
-    echo "Starting with peers: $PEERS"
-    # Split peers into individual --peers arguments
-    for peer in $PEERS; do
-        ARGS+=("--peers" "$peer")
-    done
-fi
-
-# Execute seismic-enclave-server with the appropriate arguments
-echo "Executing: /usr/bin/seismic-enclave-server ${ARGS[*]}"
-exec /usr/bin/seismic-enclave-server "${ARGS[@]}"
+# Execute seismic-enclave-server with custom args
+exec /usr/bin/seismic-enclave-server $CUSTOM_ARGS
