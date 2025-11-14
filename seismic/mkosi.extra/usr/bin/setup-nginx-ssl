@@ -34,8 +34,13 @@ echo "Setting up nginx for domain: $DOMAIN_NAME"
 mkdir -p /persistent/conf
 mkdir -p "$CERTBOT_CONFIG_DIR" "$CERTBOT_WORK_DIR" "$CERTBOT_LOGS_DIR"
 
-# Generate nginx config from template
-sed "s/DOMAIN_NAME_PLACEHOLDER/$DOMAIN_NAME/g" "$TEMPLATE" > "$NGINX_CONF"
+# Generate nginx config from template (only if certbot hasn't run yet)
+if [ ! -f "$CERTBOT_DONE" ]; then
+    echo "Generating nginx config from template"
+    sed "s/DOMAIN_NAME_PLACEHOLDER/$DOMAIN_NAME/g" "$TEMPLATE" > "$NGINX_CONF"
+else
+    echo "Certbot already configured, preserving existing nginx.conf"
+fi
 
 # Create symlink to nginx sites-enabled
 mkdir -p /etc/nginx/sites-enabled
