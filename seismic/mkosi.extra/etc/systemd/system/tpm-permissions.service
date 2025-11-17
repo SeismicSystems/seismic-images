@@ -1,0 +1,13 @@
+[Unit]
+Description=Setup TPM Device Permissions
+Before=seismic-enclave.service
+DefaultDependencies=no
+
+[Service]
+Type=oneshot
+ExecStart=/bin/sh -c "chmod 660 /dev/tpm* 2>/dev/null || true"
+ExecStart=/bin/sh -c "chown root:tss /dev/tpm* 2>/dev/null || true"
+RemainAfterExit=yes
+
+[Install]
+WantedBy=sysinit.target
