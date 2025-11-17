@@ -26,10 +26,8 @@ mkosi-chroot chown prometheus:prometheus /var/lib/prometheus
 # Create grafana directories
 mkdir -p "$BUILDROOT/var/lib/grafana"
 mkdir -p "$BUILDROOT/var/log/grafana"
-mkdir -p "$BUILDROOT/var/run/grafana"
 mkosi-chroot chown grafana:grafana /var/lib/grafana
 mkosi-chroot chown grafana:grafana /var/log/grafana
-mkosi-chroot chown grafana:grafana /var/run/grafana
 
 # Make scripts executable
 chmod +x "$BUILDROOT/usr/bin/setup-nginx-ssl"

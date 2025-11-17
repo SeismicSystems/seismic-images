@@ -88,3 +88,23 @@ make_git_package \
     "$SUMMIT_BUILD_CMD" \
     "target/release/summit:/usr/bin/summit"
 
+# Install Prometheus
+PROM_VERSION=$(curl -s https://api.github.com/repos/prometheus/prometheus/releases/latest | grep tag_name | cut -d '"' -f 4 | cut -c 2-)
+echo "Installing Prometheus version ${PROM_VERSION}"
+curl -L "https://github.com/prometheus/prometheus/releases/download/v${PROM_VERSION}/prometheus-${PROM_VERSION}.linux-amd64.tar.gz" -o /tmp/prometheus.tar.gz
+tar -xzf /tmp/prometheus.tar.gz -C /tmp
+install -m 755 "/tmp/prometheus-${PROM_VERSION}.linux-amd64/prometheus" "$BUILDROOT/usr/bin/prometheus"
+install -m 755 "/tmp/prometheus-${PROM_VERSION}.linux-amd64/promtool" "$BUILDROOT/usr/bin/promtool"
+rm -rf /tmp/prometheus*
+
+# Install Grafana
+echo "Installing Grafana"
+GRAFANA_VERSION="12.2.1"
+curl -L "https://dl.grafana.com/oss/release/grafana-${GRAFANA_VERSION}.linux-amd64.tar.gz" -o /tmp/grafana.tar.gz
+tar -xzf /tmp/grafana.tar.gz -C /tmp
+mkdir -p "$BUILDROOT/usr/share/grafana"
+cp -r /tmp/grafana-${GRAFANA_VERSION}/* "$BUILDROOT/usr/share/grafana/"
+ln -sf /usr/share/grafana/bin/grafana-server "$BUILDROOT/usr/sbin/grafana-server"
+ln -sf /usr/share/grafana/bin/grafana-cli "$BUILDROOT/usr/sbin/grafana-cli"
+rm -rf /tmp/grafana*
+
