@@ -1,0 +1,8 @@
+[Unit]
+Description=Certbot SSL Certificate Renewal
+After=network-online.target persistent-mount.service
+Requires=persistent-mount.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/certbot renew --quiet --nginx --config-dir /persistent/conf/certbot --work-dir /persistent/conf/certbot/work --logs-dir /persistent/conf/certbot/logs

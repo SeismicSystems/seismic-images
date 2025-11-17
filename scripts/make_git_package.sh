@@ -11,9 +11,18 @@ make_git_package() {
     
     mkdir -p "$DESTDIR/usr/bin"
     local cache_dir="$BUILDDIR/${package}-${version}"
-    
-    # Use cached artifacts if available
+
+    # Verify all artifacts are cached before using cache
+    local use_cache=false
     if [ -n "$cache_dir" ] && [ -d "$cache_dir" ] && [ "$(ls -A "$cache_dir" 2>/dev/null)" ]; then
+        use_cache=true
+        for artifact_map in "${@:5}"; do
+            [ -e "$cache_dir/$(echo "${artifact_map%%:*}" | tr '/' '_')" ] || use_cache=false
+        done
+    fi
+
+    # Use cached artifacts if all are available
+    if [ "$use_cache" = true ]; then
         echo "Using cached artifacts for $package version $version"
         for artifact_map in "${@:5}"; do
             local src="${artifact_map%%:*}"
