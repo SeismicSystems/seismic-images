@@ -12,8 +12,8 @@ mkosi-chroot bash -c '
 '
 
 # Branches & commit hashes for reproducible builds
-RETH_BRANCH="seismic"
-RETH_COMMIT="e0ebd6a8d2c4d160867f213ad39482d1095195a4"
+RETH_BRANCH="retries-arg"
+RETH_COMMIT="e30c3b1243fc29546c4b91c80516f489982bb518"
 
 ENCLAVE_BRANCH="seismic"
 ENCLAVE_COMMIT="ef9a53d84dc25596f66ccf438cfd3374a5b0eabc"
