@@ -1,0 +1,14 @@
+[Unit]
+Description=Setup Nginx with SSL via Certbot
+After=network-online.target persistent-mount.service
+Wants=network-online.target
+Requires=persistent-mount.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/setup-nginx-ssl
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,90 @@
+#!/bin/bash
+set -euxo pipefail
+
+source scripts/make_git_package.sh
+
+# Install Rust 1.91 via rustup in chroot (Debian cargo is too old)
+mkosi-chroot bash -c '
+    curl --proto =https --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain 1.91 --profile minimal --no-modify-path
+    export PATH="$HOME/.cargo/bin:$PATH"
+    rustc --version
+    cargo --version
+'
+
+# Branches & commit hashes for reproducible builds
+RETH_BRANCH="retries-arg"
+RETH_COMMIT="e30c3b1243fc29546c4b91c80516f489982bb518"
+
+ENCLAVE_BRANCH="seismic"
+ENCLAVE_COMMIT="ef9a53d84dc25596f66ccf438cfd3374a5b0eabc"
+
+SUMMIT_BRANCH="genesis-rpc-key"
+SUMMIT_COMMIT="2129a428da3bf51c7586b55b719c995e4db5b740"
+
+# Build seismic-reth
+RETH_BUILD_CMD="
+    git checkout $RETH_COMMIT
+
+    export PATH=\"\$HOME/.cargo/bin:\$PATH\"
+    export RUSTFLAGS='-C target-cpu=generic -C link-arg=-Wl,--build-id=none -C symbol-mangling-version=v0'
+    export CARGO_PROFILE_RELEASE_LTO='thin'
+    export CARGO_PROFILE_RELEASE_CODEGEN_UNITS='1'
+    export CARGO_PROFILE_RELEASE_PANIC='abort'
+    export CARGO_PROFILE_RELEASE_STRIP='none'
+    export CARGO_PROFILE_RELEASE_OPT_LEVEL='3'
+
+    cargo fetch
+    cargo build --release --frozen --bin seismic-reth
+"
+make_git_package \
+    "seismic-reth" \
+    "$RETH_BRANCH" \
+    "https://github.com/SeismicSystems/seismic-reth" \
+    "$RETH_BUILD_CMD" \
+    "target/release/seismic-reth:/usr/bin/seismic-reth" \
+    "crates/seismic/chainspec/res/genesis/dev.json:/usr/share/seismic-reth/genesis.json"
+
+# Build enclave (seismic-enclave-server)
+ENCLAVE_BUILD_CMD="
+    git checkout $ENCLAVE_COMMIT
+
+    export PATH=\"\$HOME/.cargo/bin:\$PATH\"
+    export RUSTFLAGS='-C target-cpu=generic -C link-arg=-Wl,--build-id=none -C symbol-mangling-version=v0'
+    export CARGO_PROFILE_RELEASE_LTO='off'
+    export CARGO_PROFILE_RELEASE_CODEGEN_UNITS='1'
+    export CARGO_PROFILE_RELEASE_PANIC='abort'
+    export CARGO_PROFILE_RELEASE_STRIP='none'
+    export CARGO_PROFILE_RELEASE_OPT_LEVEL='z'
+
+    cargo fetch
+    cargo build --release --frozen --bin seismic-enclave-server
+"
+make_git_package \
+    "enclave" \
+    "$ENCLAVE_BRANCH" \
+    "https://github.com/SeismicSystems/enclave" \
+    "$ENCLAVE_BUILD_CMD" \
+    "target/release/seismic-enclave-server:/usr/bin/seismic-enclave-server"
+
+# Build summit (summit)
+SUMMIT_BUILD_CMD="
+    git checkout $SUMMIT_COMMIT
+
+    export PATH=\"\$HOME/.cargo/bin:\$PATH\"
+    export RUSTFLAGS='-C target-cpu=generic -C link-arg=-Wl,--build-id=none -C symbol-mangling-version=v0'
+    export CARGO_PROFILE_RELEASE_LTO='thin'
+    export CARGO_PROFILE_RELEASE_CODEGEN_UNITS='1'
+    export CARGO_PROFILE_RELEASE_PANIC='abort'
+    export CARGO_PROFILE_RELEASE_STRIP='none'
+    export CARGO_PROFILE_RELEASE_OPT_LEVEL='3'
+
+    cargo fetch
+    cargo build --release --frozen --bin summit
+"
+make_git_package \
+    "summit" \
+    "$SUMMIT_BRANCH" \
+    "https://github.com/SeismicSystems/summit" \
+    "$SUMMIT_BUILD_CMD" \
+    "target/release/summit:/usr/bin/summit"
+

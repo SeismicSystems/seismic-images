@@ -1,0 +1,21 @@
+[Unit]
+Description=Seismic Enclave Server
+After=network.target persistent-mount.service nginx-ssl-setup.service tpm-permissions.service
+Requires=persistent-mount.service nginx-ssl-setup.service tpm-permissions.service
+
+[Service]
+Type=simple
+Environment=RUST_BACKTRACE=full
+
+ExecStartPre=+/bin/mkdir -p /persistent/enclave
+ExecStartPre=+/bin/chmod 775 /persistent /persistent/enclave
+
+ExecStart=/usr/bin/start-seismic-enclave
+
+Restart=always
+RestartSec=60
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=minimal.target
