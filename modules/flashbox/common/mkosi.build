@@ -27,10 +27,10 @@ build_rust_package \
 # Build tdx-init (using fork with JSON config support)
 make_git_package \
     "tdx-init" \
-    "c16fc6c98f34d28a2ea82a081a1c2976988fbfe9" \
+    "19267173bf3286218cdc08d4cc43d0f0ae95d47d" \
     "https://github.com/SeismicSystems/tdx-init" \
-    'go build -trimpath -ldflags "-s -w -buildid=" -o ./build/tdx-init' \
-    "build/tdx-init:/usr/bin/tdx-init"
+    'cd tdx-init-rs && cargo build --release --target-dir ./build' \
+    "tdx-init-rs/build/release/tdx-init:/usr/bin/tdx-init"
 
 # Build ssh-pubkey-server
 make_git_package \
