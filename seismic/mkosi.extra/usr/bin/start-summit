@@ -17,4 +17,4 @@ fi
 export RUST_LOG=$RUST_LOG
 
 # Execute summit with defaults + custom args
-exec /usr/bin/summit $DEFAULT_ARGS $CUSTOM_ARGS
+exec /usr/bin/summit $DEFAULT_ARGS $CUSTOM_ARGS --log-level $RUST_LOG
