@@ -15,7 +15,7 @@ ExecStartPre=+/bin/mkdir -p /persistent/summit/keys
 ExecStartPre=+/bin/chown -R summit:eth /persistent/summit
 ExecStartPre=+/bin/chmod -R g+rwX /persistent/summit
 ExecStartPre=+/bin/chmod g+s /persistent/summit
-ExecStartPre=/usr/bin/summit keys generate -n --key-path /persistent/summit/keys/key.pem
+ExecStartPre=/usr/bin/summit keys generate -n --key-store-path /persistent/summit/keys
 
 ExecStart=/usr/bin/start-summit
 

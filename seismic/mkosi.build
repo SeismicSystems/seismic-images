@@ -12,14 +12,14 @@ mkosi-chroot bash -c '
 '
 
 # Branches & commit hashes for reproducible builds
-RETH_BRANCH="retries-arg"
-RETH_COMMIT="2343d339ee77844ff390365a6b087149d2d6e968"
+RETH_BRANCH="seismic"
+RETH_COMMIT="d70fa119be549d60970681654c53d31b80edb7a1"
 
 ENCLAVE_BRANCH="seismic"
 ENCLAVE_COMMIT="ef9a53d84dc25596f66ccf438cfd3374a5b0eabc"
 
-SUMMIT_BRANCH="genesis-rpc-key"
-SUMMIT_COMMIT="b4835df7bd524012b8a71c033214c9efe81735bc"
+SUMMIT_BRANCH="c/genesis-rpc-key"
+SUMMIT_COMMIT="c5c8bf3a965717a23b7edd7ed9560caa6f4ba8e4"
 
 # Build seismic-reth
 RETH_BUILD_CMD="
