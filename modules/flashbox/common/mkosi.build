@@ -12,7 +12,7 @@ chmod 755 "$DESTDIR/usr/bin/searchersh"
 # Compile cryptsetup
 make_git_package \
     "cryptsetup" \
-    "v2.8.1" \
+    "9cfdd6ba068b375a2b6cda429b3f92388448dd67" \
     "https://gitlab.com/cryptsetup/cryptsetup" \
     './autogen.sh && ./configure --with-crypto_backend=kernel --disable-veritysetup --disable-integritysetup --disable-asciidoc && make -j$(nproc)' \
     ".libs/cryptsetup:/usr/sbin/cryptsetup" \
@@ -27,7 +27,7 @@ build_rust_package \
 # Build tdx-init (using fork with JSON config support)
 make_git_package \
     "tdx-init" \
-    "0.0.2" \
+    "c16fc6c98f34d28a2ea82a081a1c2976988fbfe9" \
     "https://github.com/SeismicSystems/tdx-init" \
     'go build -trimpath -ldflags "-s -w -buildid=" -o ./build/tdx-init' \
     "build/tdx-init:/usr/bin/tdx-init"
