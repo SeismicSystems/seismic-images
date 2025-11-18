@@ -8,9 +8,13 @@ DEFAULT_ARGS='run --engine-ipc-path /var/volatile/reth_engine_api.ipc --genesis-
 
 # Extract custom args if config exists
 CUSTOM_ARGS=""
+RUST_LOG="debug"
 if [ -f "$CONFIG_FILE" ]; then
     CUSTOM_ARGS=$(jq -r '.args.summit // ""' "$CONFIG_FILE")
+    RUST_LOG=$(jq -r '.log.summit // ""' "$CONFIG_FILE")
 fi
+
+export RUST_LOG=$RUST_LOG
 
 # Execute summit with defaults + custom args
 exec /usr/bin/summit $DEFAULT_ARGS $CUSTOM_ARGS
