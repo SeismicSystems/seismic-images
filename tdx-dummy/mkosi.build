@@ -3,4 +3,4 @@ set -euxo pipefail
 
 source scripts/make_git_package.sh
 
-make_git_package "dummy-tdx-dcap" "v0.0.1" "https://github.com/Ruteri/dummy-tdx-dcap" 'go build -trimpath -ldflags "-s -w -buildid= -X github.com/flashbots/go-template/common.Version=v0.0.1" -v -o ./build/httpserver cmd/httpserver/main.go' "build/httpserver:/usr/bin/dummy-tdx-dcap"
+make_git_package "dummy-tdx-dcap" "5bd567b384e0426de1ee375ccf72f25cf90a04ce" "https://github.com/Ruteri/dummy-tdx-dcap" 'go build -trimpath -ldflags "-s -w -buildid= -X github.com/flashbots/go-template/common.Version=v0.0.1" -v -o ./build/httpserver cmd/httpserver/main.go' "build/httpserver:/usr/bin/dummy-tdx-dcap"
