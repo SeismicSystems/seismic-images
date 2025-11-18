@@ -19,7 +19,7 @@ ENCLAVE_BRANCH="seismic"
 ENCLAVE_COMMIT="ef9a53d84dc25596f66ccf438cfd3374a5b0eabc"
 
 SUMMIT_BRANCH="c/genesis-rpc-key"
-SUMMIT_COMMIT="c5c8bf3a965717a23b7edd7ed9560caa6f4ba8e4"
+SUMMIT_COMMIT="fdd4ebe47ce5487c62703b5898ac772dfc1584d4"
 
 # Build seismic-reth
 RETH_BUILD_CMD="

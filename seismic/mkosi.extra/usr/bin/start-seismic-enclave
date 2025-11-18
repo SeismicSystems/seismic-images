@@ -8,7 +8,7 @@ CUSTOM_ARGS=""
 RUST_LOG="debug"
 if [ -f "$CONFIG_FILE" ]; then
     CUSTOM_ARGS=$(jq -r '.args.enclave // ""' "$CONFIG_FILE")
-    RUST_LOG=$(jq -r '.log.enclave // ""' "$CONFIG_FILE")
+    RUST_LOG=$(jq -r '.log.enclave // "debug"' "$CONFIG_FILE")
 fi
 
 export RUST_LOG=$RUST_LOG

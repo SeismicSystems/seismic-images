@@ -11,7 +11,7 @@ CUSTOM_ARGS=""
 RUST_LOG="debug"
 if [ -f "$CONFIG_FILE" ]; then
     CUSTOM_ARGS=$(jq -r '.args.reth // ""' "$CONFIG_FILE")
-    RUST_LOG=$(jq -r '.log.reth // ""' "$CONFIG_FILE")
+    RUST_LOG=$(jq -r '.log.reth // "debug"' "$CONFIG_FILE")
 fi
 
 export RUST_LOG=$RUST_LOG
