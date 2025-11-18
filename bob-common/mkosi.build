@@ -11,7 +11,7 @@ chmod 755 "$DESTDIR/usr/bin/searchersh"
 # Compile cryptsetup
 make_git_package \
     "cryptsetup" \
-    "v2.8.1" \
+    "9cfdd6ba068b375a2b6cda429b3f92388448dd67" \
     "https://gitlab.com/cryptsetup/cryptsetup" \
     './autogen.sh && ./configure --with-crypto_backend=kernel --disable-veritysetup --disable-integritysetup --disable-asciidoc && make -j$(nproc)' \
     ".libs/cryptsetup:/usr/sbin/cryptsetup" \
@@ -27,7 +27,7 @@ BUILD_CMD="
 "
 make_git_package \
     "fluent-bit" \
-    "v4.0.9" \
+    "5ab8f149eeb2b4df596250a926eb6a39e373a834" \
     "https://github.com/fluent/fluent-bit.git" \
     "$BUILD_CMD" \
     "build/bin/fluent-bit:/usr/bin/fluent-bit"
@@ -35,7 +35,7 @@ make_git_package \
 # Build tdx-init (using fork with JSON config support)
 make_git_package \
     "tdx-init" \
-    "0.0.2" \
+    "c16fc6c98f34d28a2ea82a081a1c2976988fbfe9" \
     "https://github.com/SeismicSystems/tdx-init" \
     'go build -trimpath -ldflags "-s -w -buildid=" -o ./build/tdx-init' \
     "build/tdx-init:/usr/bin/tdx-init"
@@ -43,14 +43,14 @@ make_git_package \
 # Build ssh-pubkey-server
 make_git_package \
     "ssh-pubkey-server" \
-    "multi-key" \
+    "7d1bb0f39f2a183c9804c84f7080ec5d58ae8ec9" \
     "https://github.com/flashbots/ssh-pubkey-server" \
     'go build -trimpath -ldflags "-s -w -buildid= -X github.com/flashbots/go-template/common.Version=v1.0.0" -o ./build/ssh-pubkey-server cmd/httpserver/main.go' \
     "build/ssh-pubkey-server:/usr/bin/ssh-pubkey-server"
 
 make_git_package \
     "cvm-reverse-proxy" \
-    "v0.1.8" \
+    "f3a8b3c3e0caa642e1ca62e525e49a8e00057d2b" \
     "https://github.com/flashbots/cvm-reverse-proxy" \
     "make build-proxy-server" \
     "build/proxy-server:/usr/bin/cvm-reverse-proxy"

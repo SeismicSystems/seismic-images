@@ -23,8 +23,6 @@ SUMMIT_COMMIT="2129a428da3bf51c7586b55b719c995e4db5b740"
 
 # Build seismic-reth
 RETH_BUILD_CMD="
-    git checkout $RETH_COMMIT
-
     export PATH=\"\$HOME/.cargo/bin:\$PATH\"
     export RUSTFLAGS='-C target-cpu=generic -C link-arg=-Wl,--build-id=none -C symbol-mangling-version=v0'
     export CARGO_PROFILE_RELEASE_LTO='thin'
@@ -38,7 +36,7 @@ RETH_BUILD_CMD="
 "
 make_git_package \
     "seismic-reth" \
-    "$RETH_BRANCH" \
+    "$RETH_COMMIT" \
     "https://github.com/SeismicSystems/seismic-reth" \
     "$RETH_BUILD_CMD" \
     "target/release/seismic-reth:/usr/bin/seismic-reth" \
@@ -46,8 +44,6 @@ make_git_package \
 
 # Build enclave (seismic-enclave-server)
 ENCLAVE_BUILD_CMD="
-    git checkout $ENCLAVE_COMMIT
-
     export PATH=\"\$HOME/.cargo/bin:\$PATH\"
     export RUSTFLAGS='-C target-cpu=generic -C link-arg=-Wl,--build-id=none -C symbol-mangling-version=v0'
     export CARGO_PROFILE_RELEASE_LTO='off'
@@ -61,15 +57,13 @@ ENCLAVE_BUILD_CMD="
 "
 make_git_package \
     "enclave" \
-    "$ENCLAVE_BRANCH" \
+    "$ENCLAVE_COMMIT" \
     "https://github.com/SeismicSystems/enclave" \
     "$ENCLAVE_BUILD_CMD" \
     "target/release/seismic-enclave-server:/usr/bin/seismic-enclave-server"
 
 # Build summit (summit)
 SUMMIT_BUILD_CMD="
-    git checkout $SUMMIT_COMMIT
-
     export PATH=\"\$HOME/.cargo/bin:\$PATH\"
     export RUSTFLAGS='-C target-cpu=generic -C link-arg=-Wl,--build-id=none -C symbol-mangling-version=v0'
     export CARGO_PROFILE_RELEASE_LTO='thin'
@@ -83,7 +77,7 @@ SUMMIT_BUILD_CMD="
 "
 make_git_package \
     "summit" \
-    "$SUMMIT_BRANCH" \
+    "$SUMMIT_COMMIT" \
     "https://github.com/SeismicSystems/summit" \
     "$SUMMIT_BUILD_CMD" \
     "target/release/summit:/usr/bin/summit"
