@@ -41,8 +41,8 @@ make_git_package() {
     
     # Build from source
     local build_dir="$BUILDROOT/build/$package"
-    git clone --depth 1 "$git_url" "$build_dir"
-    mkosi-chroot bash -c "cd '/build/$package' && git checkout '$rev' && $build_cmd"
+    git clone "$git_url" "$build_dir"
+    mkosi-chroot bash -c "cd '/build/$package' && $build_cmd"
 
     # Copy artifacts to image and cache
     for artifact_map in "${@:5}"; do
