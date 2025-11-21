@@ -103,7 +103,7 @@ tar -xzf /tmp/grafana.tar.gz -C /tmp
 mkdir -p "$DESTDIR/usr/share/grafana"
 mkdir -p "$DESTDIR/usr/sbin"
 cp -r /tmp/grafana-${GRAFANA_VERSION}/* "$DESTDIR/usr/share/grafana/"
-ln -sf /usr/share/grafana/bin/grafana-server "$DESTDIR/usr/sbin/grafana-server"
+ln -sf /usr/share/grafana/bin/grafana "$DESTDIR/usr/sbin/grafana"
 ln -sf /usr/share/grafana/bin/grafana-cli "$DESTDIR/usr/sbin/grafana-cli"
 rm -rf /tmp/grafana*
 
