@@ -11809,7 +11809,7 @@
   "templating": {
     "list": [
       {
-        "current": {"value": "prometheus", "text": "Prometheus"},
+        "current": {},
         "datasource": {
           "type": "prometheus",
           "uid": "${datasource}"
@@ -11830,7 +11830,7 @@
         "type": "query"
       },
       {
-        "current": {"value": "prometheus", "text": "Prometheus"},
+        "current": {},
         "includeAll": false,
         "label": "Datasource",
         "name": "datasource",
@@ -11857,25 +11857,6 @@
             "value": "${VAR_INSTANCE_LABEL}",
             "text": "${VAR_INSTANCE_LABEL}",
             "selected": false
-          }
-        ]
-      },
-      {
-        "hide": 2,
-        "name": "job",
-        "query": "reth",
-        "skipUrlSync": false,
-        "type": "constant",
-        "current": {
-          "value": "reth",
-          "text": "reth",
-          "selected": false
-        },
-        "options": [
-          {
-            "value": "reth",
-            "text": "reth",
-            "selected": true
           }
         ]
       }
