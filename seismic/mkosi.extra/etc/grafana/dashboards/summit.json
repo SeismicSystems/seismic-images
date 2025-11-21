@@ -1,4 +1,35 @@
 {
+  "__inputs": [
+    {
+      "name": "DS_PROMETHEUS",
+      "label": "prometheus",
+      "description": "",
+      "type": "datasource",
+      "pluginId": "prometheus",
+      "pluginName": "Prometheus"
+    }
+  ],
+  "__elements": {},
+  "__requires": [
+    {
+      "type": "grafana",
+      "id": "grafana",
+      "name": "Grafana",
+      "version": "12.2.0"
+    },
+    {
+      "type": "datasource",
+      "id": "prometheus",
+      "name": "Prometheus",
+      "version": "1.0.0"
+    },
+    {
+      "type": "panel",
+      "id": "timeseries",
+      "name": "Time series",
+      "version": ""
+    }
+  ],
   "annotations": {
     "list": [
       {
@@ -18,7 +49,7 @@
   "editable": true,
   "fiscalYearStartMonth": 0,
   "graphTooltip": 0,
-  "id": 1,
+  "id": null,
   "links": [],
   "panels": [
     {
@@ -37,7 +68,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "${datasource}"
+        "uid": "${DS_PROMETHEUS}"
       },
       "fieldConfig": {
         "defaults": {
@@ -122,7 +153,11 @@
           "expr": "rate(seismic_bft_handle_proposal_duration_millis_sum[5m]) / rate(seismic_bft_handle_proposal_duration_millis_count[5m])",
           "legendFormat": "__auto",
           "range": true,
-          "refId": "A"
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          }
         }
       ],
       "title": "Summit handle proposal duration [millis]",
@@ -131,7 +166,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "${datasource}"
+        "uid": "${DS_PROMETHEUS}"
       },
       "fieldConfig": {
         "defaults": {
@@ -216,7 +251,11 @@
           "expr": "rate(seismic_bft_handle_proposal_start_building_duration_millis_sum[5m]) / rate(seismic_bft_handle_proposal_start_building_duration_millis_count[5m])",
           "legendFormat": "__auto",
           "range": true,
-          "refId": "A"
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          }
         }
       ],
       "title": "Summit handle proposal start building block duration [millis]",
@@ -225,7 +264,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "${datasource}"
+        "uid": "${DS_PROMETHEUS}"
       },
       "fieldConfig": {
         "defaults": {
@@ -310,7 +349,11 @@
           "expr": "rate(seismic_bft_handle_proposal_compute_digest_duration_millis_sum[5m]) / rate(seismic_bft_handle_proposal_compute_digest_duration_millis_count[5m])",
           "legendFormat": "__auto",
           "range": true,
-          "refId": "A"
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          }
         }
       ],
       "title": "Summit handle proposal compute digest duration [millis]",
@@ -319,7 +362,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "${datasource}"
+        "uid": "${DS_PROMETHEUS}"
       },
       "fieldConfig": {
         "defaults": {
@@ -404,7 +447,11 @@
           "expr": "rate(seismic_bft_handle_proposal_get_payload_duration_millis_sum[5m]) / rate(seismic_bft_handle_proposal_get_payload_duration_millis_count[5m])",
           "legendFormat": "__auto",
           "range": true,
-          "refId": "A"
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          }
         }
       ],
       "title": "Summit handle proposal get payload duration [millis]",
@@ -413,7 +460,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "${datasource}"
+        "uid": "${DS_PROMETHEUS}"
       },
       "fieldConfig": {
         "defaults": {
@@ -498,7 +545,11 @@
           "expr": "rate(seismic_bft_handle_proposal_finalizer_wait_duration_millis_sum[5m]) / rate(seismic_bft_handle_proposal_finalizer_wait_duration_millis_count[5m])",
           "legendFormat": "__auto",
           "range": true,
-          "refId": "A"
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          }
         }
       ],
       "title": "Summit handle proposal finalizer notification duration [millis]",
@@ -507,7 +558,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "${datasource}"
+        "uid": "${DS_PROMETHEUS}"
       },
       "fieldConfig": {
         "defaults": {
@@ -592,7 +643,11 @@
           "expr": "rate(seismic_bft_handle_proposal_aux_data_duration_millis_sum[5m]) / rate(seismic_bft_handle_proposal_aux_data_duration_millis_count[5m])",
           "legendFormat": "__auto",
           "range": true,
-          "refId": "A"
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          }
         }
       ],
       "title": "Summit handle proposal aux data wait duration [millis]",
@@ -601,7 +656,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "${datasource}"
+        "uid": "${DS_PROMETHEUS}"
       },
       "fieldConfig": {
         "defaults": {
@@ -686,7 +741,11 @@
           "expr": "(rate(seismic_bft_handle_verify_duration_micros_sum[5m]) / rate(seismic_bft_handle_verify_duration_micros_count[5m])) / 1000",
           "legendFormat": "__auto",
           "range": true,
-          "refId": "A"
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          }
         }
       ],
       "title": "Summit handle verify duration [millis]",
@@ -695,7 +754,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "${datasource}"
+        "uid": "${DS_PROMETHEUS}"
       },
       "fieldConfig": {
         "defaults": {
@@ -780,7 +839,11 @@
           "expr": "rate(seismic_bft_handle_proposal_parent_fetch_duration_millis_sum[5m]) / rate(seismic_bft_handle_proposal_parent_fetch_duration_millis_count[5m])",
           "legendFormat": "__auto",
           "range": true,
-          "refId": "A"
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          }
         }
       ],
       "title": "Summit handle proposal parent fetch duration [millis]",
@@ -802,7 +865,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "${datasource}"
+        "uid": "${DS_PROMETHEUS}"
       },
       "fieldConfig": {
         "defaults": {
@@ -887,7 +950,11 @@
           "expr": "rate(seismic_bft_checkpoint_creation_duration_millis_sum[1h]) / rate(seismic_bft_checkpoint_creation_duration_millis_count[1h])",
           "legendFormat": "__auto",
           "range": true,
-          "refId": "A"
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          }
         }
       ],
       "title": "Summit checkpoint creation duration [millis]",
@@ -896,7 +963,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "${datasource}"
+        "uid": "${DS_PROMETHEUS}"
       },
       "fieldConfig": {
         "defaults": {
@@ -981,7 +1048,11 @@
           "expr": "rate(seismic_bft_total_block_processing_duration_millis_sum[5m]) / rate(seismic_bft_total_block_processing_duration_millis_count[5m])",
           "legendFormat": "__auto",
           "range": true,
-          "refId": "A"
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          }
         }
       ],
       "title": "Summit current block processing time [millis]",
@@ -990,7 +1061,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "${datasource}"
+        "uid": "${DS_PROMETHEUS}"
       },
       "fieldConfig": {
         "defaults": {
@@ -1075,7 +1146,11 @@
           "expr": "rate(seismic_bft_blocks_committed_total[1m])",
           "legendFormat": "__auto",
           "range": true,
-          "refId": "A"
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          }
         }
       ],
       "title": "Summit blocks per second",
@@ -1084,7 +1159,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "${datasource}"
+        "uid": "${DS_PROMETHEUS}"
       },
       "fieldConfig": {
         "defaults": {
@@ -1169,7 +1244,11 @@
           "expr": "1 / rate(seismic_bft_blocks_committed_total[5m])",
           "legendFormat": "__auto",
           "range": true,
-          "refId": "A"
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          }
         }
       ],
       "title": "Summit average time between blocks [millis]",
@@ -1178,7 +1257,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "${datasource}"
+        "uid": "${DS_PROMETHEUS}"
       },
       "fieldConfig": {
         "defaults": {
@@ -1263,7 +1342,11 @@
           "expr": "rate(seismic_bft_database_operations_duration_millis_sum[5m]) / rate(seismic_bft_database_operations_duration_millis_count[5m])",
           "legendFormat": "__auto",
           "range": true,
-          "refId": "A"
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          }
         }
       ],
       "title": "Summit finalizer database operations duration [millis]",
@@ -1272,7 +1355,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "${datasource}"
+        "uid": "${DS_PROMETHEUS}"
       },
       "fieldConfig": {
         "defaults": {
@@ -1357,7 +1440,11 @@
           "expr": "rate(seismic_bft_total_block_processing_duration_millis_sum[5m]) / rate(seismic_bft_total_block_processing_duration_millis_count[5m])",
           "legendFormat": "__auto",
           "range": true,
-          "refId": "A"
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          }
         }
       ],
       "title": "Summit total handle execution block duration [millis]",
@@ -1366,7 +1453,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "${datasource}"
+        "uid": "${DS_PROMETHEUS}"
       },
       "fieldConfig": {
         "defaults": {
@@ -1451,7 +1538,11 @@
           "expr": "rate(seismic_bft_payload_check_duration_millis_sum[5m]) / rate(seismic_bft_payload_check_duration_millis_count[5m])",
           "legendFormat": "__auto",
           "range": true,
-          "refId": "A"
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          }
         }
       ],
       "title": "Summit Payload Check [millis]",
@@ -1460,7 +1551,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "${datasource}"
+        "uid": "${DS_PROMETHEUS}"
       },
       "fieldConfig": {
         "defaults": {
@@ -1545,7 +1636,11 @@
           "expr": "rate(seismic_bft_parse_execution_requests_duration_millis_sum[5m]) / rate(seismic_bft_parse_execution_requests_duration_millis_count[5m])",
           "legendFormat": "__auto",
           "range": true,
-          "refId": "A"
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          }
         }
       ],
       "title": "Summit parse execution requests duration [millis]",
@@ -1554,7 +1649,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "${datasource}"
+        "uid": "${DS_PROMETHEUS}"
       },
       "fieldConfig": {
         "defaults": {
@@ -1639,7 +1734,11 @@
           "expr": "rate(seismic_bft_block_time_millis_sum[5m]) \n  / rate(seismic_bft_block_time_millis_count[5m])",
           "legendFormat": "__auto",
           "range": true,
-          "refId": "A"
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          }
         }
       ],
       "title": "Summit average block time [millis]",
@@ -1648,7 +1747,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "${datasource}"
+        "uid": "${DS_PROMETHEUS}"
       },
       "fieldConfig": {
         "defaults": {
@@ -1733,7 +1832,11 @@
           "expr": "(rate(seismic_bft_tx_committed_total[2m]) / rate(seismic_bft_blocks_committed_total[2m]))",
           "legendFormat": "__auto",
           "range": true,
-          "refId": "A"
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          }
         }
       ],
       "title": "Summit block size (transactions per block)",
@@ -1742,7 +1845,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "${datasource}"
+        "uid": "${DS_PROMETHEUS}"
       },
       "fieldConfig": {
         "defaults": {
@@ -1827,7 +1930,11 @@
           "expr": "(rate(seismic_bft_total_block_processing_duration_millis_sum[5m] offset 1h) / rate(seismic_bft_total_block_processing_duration_millis_count[5m] offset 1h))",
           "legendFormat": "__auto",
           "range": true,
-          "refId": "A"
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          }
         }
       ],
       "title": "Summit block processing time 1 hour ago [millis]",
@@ -1836,7 +1943,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "${datasource}"
+        "uid": "${DS_PROMETHEUS}"
       },
       "fieldConfig": {
         "defaults": {
@@ -1921,7 +2028,11 @@
           "expr": "rate(seismic_bft_process_execution_requests_duration_millis_sum[5m]) / rate(seismic_bft_process_execution_requests_duration_millis_count[5m])",
           "legendFormat": "__auto",
           "range": true,
-          "refId": "A"
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          }
         }
       ],
       "title": "Summit process execution requests duration [millis]",
@@ -1930,7 +2041,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "${datasource}"
+        "uid": "${DS_PROMETHEUS}"
       },
       "fieldConfig": {
         "defaults": {
@@ -2015,7 +2126,11 @@
           "expr": "rate(seismic_bft_checkpoint_size_bytes_sum[5m]) / rate(seismic_bft_checkpoint_size_bytes_count[5m])",
           "legendFormat": "__auto",
           "range": true,
-          "refId": "A"
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          }
         }
       ],
       "title": "Summit Finalitzer Checkpoint Size [bytes]",
@@ -2037,7 +2152,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "${datasource}"
+        "uid": "${DS_PROMETHEUS}"
       },
       "fieldConfig": {
         "defaults": {
@@ -2122,7 +2237,11 @@
           "expr": "  rate(seismic_bft_syncer_storage_operation_duration_millis_sum{archive=\"metadata\"}[5m]) / \n  rate(seismic_bft_syncer_storage_operation_duration_millis_count{archive=\"metadata\"}[5m])",
           "legendFormat": "__auto",
           "range": true,
-          "refId": "A"
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          }
         }
       ],
       "title": "Syncer DB operations (metadata) [millis]",
@@ -2131,7 +2250,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "${datasource}"
+        "uid": "${DS_PROMETHEUS}"
       },
       "fieldConfig": {
         "defaults": {
@@ -2216,7 +2335,11 @@
           "expr": "rate(seismic_bft_syncer_block_delivered_total{type=\"notarized\"}[5m])",
           "legendFormat": "__auto",
           "range": true,
-          "refId": "A"
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          }
         }
       ],
       "title": "Syncer block delivered success rate (notarized)",
@@ -2225,7 +2348,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "${datasource}"
+        "uid": "${DS_PROMETHEUS}"
       },
       "fieldConfig": {
         "defaults": {
@@ -2310,7 +2433,11 @@
           "expr": "100 * rate(seismic_bft_syncer_block_delivered_total{type=\"finalized\"}[5m]) / \n  (rate(seismic_bft_syncer_block_delivered_total{type=\"finalized\"}[5m]) +\n  rate(seismic_bft_syncer_block_delivery_failed_total{type=\"finalized\"}[5m]))",
           "legendFormat": "__auto",
           "range": true,
-          "refId": "A"
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          }
         }
       ],
       "title": "Syncer block delivered success rate (finalized)",
@@ -2319,7 +2446,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "${datasource}"
+        "uid": "${DS_PROMETHEUS}"
       },
       "fieldConfig": {
         "defaults": {
@@ -2404,7 +2531,11 @@
           "expr": "  100 * rate(seismic_bft_syncer_block_delivered_total{type=\"block\"}[5m]) / \n  (rate(seismic_bft_syncer_block_delivered_total{type=\"block\"}[5m]) + \n  rate(seismic_bft_syncer_block_delivery_failed_total{type=\"block\"}[5m]))",
           "legendFormat": "__auto",
           "range": true,
-          "refId": "A"
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          }
         }
       ],
       "title": "Syncer block delivered success rate (block)",
@@ -2413,7 +2544,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "${datasource}"
+        "uid": "${DS_PROMETHEUS}"
       },
       "fieldConfig": {
         "defaults": {
@@ -2498,7 +2629,11 @@
           "expr": "rate(seismic_bft_syncer_block_delivery_failed_total{type=\"notarized\", reason=\"validation_failed\"}[1m])",
           "legendFormat": "__auto",
           "range": true,
-          "refId": "A"
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          }
         }
       ],
       "title": "Syncer block delivery failed total (notarized, validation_failed)",
@@ -2507,7 +2642,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "${datasource}"
+        "uid": "${DS_PROMETHEUS}"
       },
       "fieldConfig": {
         "defaults": {
@@ -2592,7 +2727,11 @@
           "expr": "rate(seismic_bft_syncer_block_delivery_failed_total{type=\"notarized\", reason=\"decode_error\"}[1m])",
           "legendFormat": "__auto",
           "range": true,
-          "refId": "A"
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          }
         }
       ],
       "title": "Syncer block delivery failed total (notarized, decode_error)",
@@ -2601,7 +2740,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "${datasource}"
+        "uid": "${DS_PROMETHEUS}"
       },
       "fieldConfig": {
         "defaults": {
@@ -2686,7 +2825,11 @@
           "expr": "rate(seismic_bft_syncer_block_delivery_failed_total{type=\"finalized\", reason=\"validation_failed\"}[1m])",
           "legendFormat": "__auto",
           "range": true,
-          "refId": "A"
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          }
         }
       ],
       "title": "Syncer block delivery failed total (finalized, validation_failed)",
@@ -2695,7 +2838,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "${datasource}"
+        "uid": "${DS_PROMETHEUS}"
       },
       "fieldConfig": {
         "defaults": {
@@ -2780,7 +2923,11 @@
           "expr": "rate(seismic_bft_syncer_block_delivery_failed_total{type=\"finalized\", reason=\"decode_error\"}[1m])",
           "legendFormat": "__auto",
           "range": true,
-          "refId": "A"
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          }
         }
       ],
       "title": "Syncer block delivery failed total (finalized, decode_error)",
@@ -2789,7 +2936,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "${datasource}"
+        "uid": "${DS_PROMETHEUS}"
       },
       "fieldConfig": {
         "defaults": {
@@ -2874,7 +3021,11 @@
           "expr": "rate(seismic_bft_syncer_block_delivery_failed_total{type=\"block\", reason=\"commitment_mismatch\"}[1m])",
           "legendFormat": "__auto",
           "range": true,
-          "refId": "A"
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          }
         }
       ],
       "title": "Syncer block delivery failed total (block, commitment_mismatch)",
@@ -2883,7 +3034,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "${datasource}"
+        "uid": "${DS_PROMETHEUS}"
       },
       "fieldConfig": {
         "defaults": {
@@ -2968,7 +3119,11 @@
           "expr": "rate(seismic_bft_syncer_block_delivered_total{type=\"notarized\"}[1m])",
           "legendFormat": "__auto",
           "range": true,
-          "refId": "A"
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          }
         }
       ],
       "title": "Syncer block delivered total (notarized)",
@@ -2977,7 +3132,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "${datasource}"
+        "uid": "${DS_PROMETHEUS}"
       },
       "fieldConfig": {
         "defaults": {
@@ -3062,7 +3217,11 @@
           "expr": "rate(seismic_bft_syncer_block_delivered_total{type=\"finalized\"}[1m])",
           "legendFormat": "__auto",
           "range": true,
-          "refId": "A"
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          }
         }
       ],
       "title": "Syncer block delivered total (finalized)",
@@ -3071,7 +3230,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "${datasource}"
+        "uid": "${DS_PROMETHEUS}"
       },
       "fieldConfig": {
         "defaults": {
@@ -3156,7 +3315,11 @@
           "expr": "rate(seismic_bft_syncer_block_delivered_total{type=\"block\"}[1m])",
           "legendFormat": "__auto",
           "range": true,
-          "refId": "A"
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          }
         }
       ],
       "title": "Syncer block delivered total (block)",
@@ -3165,7 +3328,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "${datasource}"
+        "uid": "${DS_PROMETHEUS}"
       },
       "fieldConfig": {
         "defaults": {
@@ -3250,7 +3413,11 @@
           "expr": "rate(seismic_bft_syncer_block_fetch_duration_millis_sum{type=\"notarized\"}[5m]) / \n  rate(seismic_bft_syncer_block_fetch_duration_millis_count{type=\"notarized\"}[5m])",
           "legendFormat": "__auto",
           "range": true,
-          "refId": "A"
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          }
         }
       ],
       "title": "Syncer block fetch duration average (notorized) [millis]",
@@ -3259,7 +3426,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "${datasource}"
+        "uid": "${DS_PROMETHEUS}"
       },
       "fieldConfig": {
         "defaults": {
@@ -3344,7 +3511,11 @@
           "expr": "  rate(seismic_bft_syncer_block_fetch_duration_millis_sum{type=\"finalized\"}[5m]) / \n  rate(seismic_bft_syncer_block_fetch_duration_millis_count{type=\"finalized\"}[5m])",
           "legendFormat": "__auto",
           "range": true,
-          "refId": "A"
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          }
         }
       ],
       "title": "Syncer block fetch duration average (finalized) [millis]",
@@ -3353,7 +3524,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "${datasource}"
+        "uid": "${DS_PROMETHEUS}"
       },
       "fieldConfig": {
         "defaults": {
@@ -3438,7 +3609,11 @@
           "expr": "  rate(seismic_bft_syncer_block_fetch_duration_millis_sum{type=\"block\"}[5m]) / \n  rate(seismic_bft_syncer_block_fetch_duration_millis_count{type=\"block\"}[5m])",
           "legendFormat": "__auto",
           "range": true,
-          "refId": "A"
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          }
         }
       ],
       "title": "Syncer block fetch duration average (block) [millis]",
@@ -3447,7 +3622,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "${datasource}"
+        "uid": "${DS_PROMETHEUS}"
       },
       "fieldConfig": {
         "defaults": {
@@ -3532,7 +3707,11 @@
           "expr": "histogram_quantile(0.99, rate(seismic_bft_syncer_block_fetch_duration_millis_bucket{type=\"notarized\"}[5m]))",
           "legendFormat": "__auto",
           "range": true,
-          "refId": "A"
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          }
         }
       ],
       "title": "Syncer block fetch duration (notarized) [millis]",
@@ -3541,7 +3720,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "${datasource}"
+        "uid": "${DS_PROMETHEUS}"
       },
       "fieldConfig": {
         "defaults": {
@@ -3626,7 +3805,11 @@
           "expr": "histogram_quantile(0.99, rate(seismic_bft_syncer_block_fetch_duration_millis_bucket{type=\"finalized\"}[5m]))",
           "legendFormat": "__auto",
           "range": true,
-          "refId": "A"
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          }
         }
       ],
       "title": "Syncer block fetch duration (finalized) [millis]",
@@ -3635,7 +3818,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "${datasource}"
+        "uid": "${DS_PROMETHEUS}"
       },
       "fieldConfig": {
         "defaults": {
@@ -3745,7 +3928,11 @@
           "expr": "  rate(seismic_bft_syncer_block_fetch_duration_millis_sum{type=\"block\"}[5m]) / \n  rate(seismic_bft_syncer_block_fetch_duration_millis_count{type=\"block\"}[5m])",
           "legendFormat": "__auto",
           "range": true,
-          "refId": "A"
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          }
         }
       ],
       "title": "Syncer average block fetch duration (block) [millis]",
@@ -3754,7 +3941,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "${datasource}"
+        "uid": "${DS_PROMETHEUS}"
       },
       "fieldConfig": {
         "defaults": {
@@ -3839,7 +4026,11 @@
           "expr": "rate(seismic_bft_syncer_block_fetch_requests_total{type=\"subscribe\"}[1m])",
           "legendFormat": "__auto",
           "range": true,
-          "refId": "A"
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          }
         }
       ],
       "title": "Syncer block fetch request total (subscribe)",
@@ -3848,7 +4039,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "${datasource}"
+        "uid": "${DS_PROMETHEUS}"
       },
       "fieldConfig": {
         "defaults": {
@@ -3933,7 +4124,11 @@
           "expr": "rate(seismic_bft_syncer_block_fetch_requests_total{type=\"finalized\"}[1m])",
           "legendFormat": "__auto",
           "range": true,
-          "refId": "A"
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          }
         }
       ],
       "title": "Syncer block fetch request total (finalized)",
@@ -3942,7 +4137,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "${datasource}"
+        "uid": "${DS_PROMETHEUS}"
       },
       "fieldConfig": {
         "defaults": {
@@ -4027,7 +4222,11 @@
           "expr": "  rate(seismic_bft_syncer_storage_operation_duration_millis_sum{archive=\"cache_finalizations\"}[5m]) /   rate(seismic_bft_syncer_storage_operation_duration_millis_count{archive=\"cache_finalizations\"}[5m])",
           "legendFormat": "__auto",
           "range": true,
-          "refId": "A"
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          }
         }
       ],
       "title": "Syncer DB operations (cache_finalizations) [millis]",
@@ -4036,7 +4235,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "${datasource}"
+        "uid": "${DS_PROMETHEUS}"
       },
       "fieldConfig": {
         "defaults": {
@@ -4121,7 +4320,11 @@
           "expr": "  rate(seismic_bft_syncer_storage_operation_duration_millis_sum{archive=\"cache_notarizations\"}[5m]) /\n  rate(seismic_bft_syncer_storage_operation_duration_millis_count{archive=\"cache_notarizations\"}[5m])",
           "legendFormat": "__auto",
           "range": true,
-          "refId": "A"
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          }
         }
       ],
       "title": "Syncer DB operations (cache_notorizations) [millis]",
@@ -4130,7 +4333,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "${datasource}"
+        "uid": "${DS_PROMETHEUS}"
       },
       "fieldConfig": {
         "defaults": {
@@ -4215,7 +4418,11 @@
           "expr": "  rate(seismic_bft_syncer_storage_operation_duration_millis_sum{archive=\"cache_notarized\"}[5m]) /   rate(seismic_bft_syncer_storage_operation_duration_millis_count{archive=\"cache_notarized\"}[5m])",
           "legendFormat": "__auto",
           "range": true,
-          "refId": "A"
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          }
         }
       ],
       "title": "Syncer DB operations (cache_notorized) [millis]",
@@ -4224,7 +4431,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "${datasource}"
+        "uid": "${DS_PROMETHEUS}"
       },
       "fieldConfig": {
         "defaults": {
@@ -4309,7 +4516,11 @@
           "expr": "  rate(seismic_bft_syncer_storage_operation_duration_millis_sum{archive=\"cache_verified\"}[5m]) /\n  rate(seismic_bft_syncer_storage_operation_duration_millis_count{archive=\"cache_verified\"}[5m])",
           "legendFormat": "__auto",
           "range": true,
-          "refId": "A"
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          }
         }
       ],
       "title": "Syncer DB operations (cache_verified) [millis]",
@@ -4318,7 +4529,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "${datasource}"
+        "uid": "${DS_PROMETHEUS}"
       },
       "fieldConfig": {
         "defaults": {
@@ -4403,7 +4614,11 @@
           "expr": "  rate(seismic_bft_syncer_storage_operation_duration_millis_sum{archive=\"finalizations\"}[5m]) / \n  rate(seismic_bft_syncer_storage_operation_duration_millis_count{archive=\"finalizations\"}[5m])",
           "legendFormat": "__auto",
           "range": true,
-          "refId": "A"
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          }
         }
       ],
       "title": "Syncer DB operations (finalizations) [millis]",
@@ -4412,7 +4627,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "${datasource}"
+        "uid": "${DS_PROMETHEUS}"
       },
       "fieldConfig": {
         "defaults": {
@@ -4497,7 +4712,11 @@
           "expr": "  rate(seismic_bft_syncer_storage_operation_duration_millis_sum{archive=\"finalized_blocks\"}[5m]) /\n  rate(seismic_bft_syncer_storage_operation_duration_millis_count{archive=\"finalized_blocks\"}[5m])",
           "legendFormat": "__auto",
           "range": true,
-          "refId": "A"
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          }
         }
       ],
       "title": "Syncer DB operations (finalized_blocks) [millis]",
@@ -4506,7 +4725,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "${datasource}"
+        "uid": "${DS_PROMETHEUS}"
       },
       "fieldConfig": {
         "defaults": {
@@ -4591,7 +4810,11 @@
           "expr": "rate(seismic_bft_syncer_block_fetch_requests_total{type=\"notarized\"}[1m])",
           "legendFormat": "__auto",
           "range": true,
-          "refId": "A"
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          }
         }
       ],
       "title": "Syncer block fetch request total (notarized)",
@@ -4610,7 +4833,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "${datasource}"
+            "uid": "${DS_PROMETHEUS}"
           },
           "fieldConfig": {
             "defaults": {
@@ -4695,7 +4918,11 @@
               "expr": "rate(reth_sync_execution_execution_histogram_count[1m])",
               "legendFormat": "__auto",
               "range": true,
-              "refId": "A"
+              "refId": "A",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              }
             }
           ],
           "title": "Reth blocks per second",
@@ -4704,7 +4931,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "${datasource}"
+            "uid": "${DS_PROMETHEUS}"
           },
           "fieldConfig": {
             "defaults": {
@@ -4789,7 +5016,11 @@
               "expr": "rate(reth_sync_execution_transactions_executed_total[1m]) ",
               "legendFormat": "__auto",
               "range": true,
-              "refId": "A"
+              "refId": "A",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              }
             }
           ],
           "title": "Reth transactions per second (derived from total transactions executed)",
@@ -4798,7 +5029,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "${datasource}"
+            "uid": "${DS_PROMETHEUS}"
           },
           "fieldConfig": {
             "defaults": {
@@ -4883,7 +5114,11 @@
               "expr": "avg_over_time(reth_sync_execution_gas_per_second[1m])",
               "legendFormat": "__auto",
               "range": true,
-              "refId": "A"
+              "refId": "A",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              }
             }
           ],
           "title": "Reth gas per second (1m average)",
@@ -4892,7 +5127,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "${datasource}"
+            "uid": "${DS_PROMETHEUS}"
           },
           "fieldConfig": {
             "defaults": {
@@ -4977,7 +5212,11 @@
               "expr": "reth_sync_execution_transactions_executed_total{}",
               "legendFormat": "__auto",
               "range": true,
-              "refId": "A"
+              "refId": "A",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              }
             }
           ],
           "title": "Reth transactions executed total",
@@ -4986,7 +5225,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "${datasource}"
+            "uid": "${DS_PROMETHEUS}"
           },
           "fieldConfig": {
             "defaults": {
@@ -5071,7 +5310,11 @@
               "expr": "reth_sync_execution_transactions_per_second{}",
               "legendFormat": "__auto",
               "range": true,
-              "refId": "A"
+              "refId": "A",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              }
             }
           ],
           "title": "Reth transactions per second",
@@ -5080,7 +5323,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "${datasource}"
+            "uid": "${DS_PROMETHEUS}"
           },
           "fieldConfig": {
             "defaults": {
@@ -5165,7 +5408,11 @@
               "expr": "avg_over_time(reth_sync_execution_transactions_per_second[1m])",
               "legendFormat": "__auto",
               "range": true,
-              "refId": "A"
+              "refId": "A",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              }
             }
           ],
           "title": "Reth transactions per second (1m average)",
@@ -5174,7 +5421,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "${datasource}"
+            "uid": "${DS_PROMETHEUS}"
           },
           "fieldConfig": {
             "defaults": {
@@ -5263,7 +5510,11 @@
               "legendFormat": "__auto",
               "range": true,
               "refId": "A",
-              "useBackend": false
+              "useBackend": false,
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              }
             }
           ],
           "title": "Reth histogram tracking block execution duration (secs)",
@@ -5272,7 +5523,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "${datasource}"
+            "uid": "${DS_PROMETHEUS}"
           },
           "fieldConfig": {
             "defaults": {
@@ -5361,7 +5612,11 @@
               "legendFormat": "__auto",
               "range": true,
               "refId": "A",
-              "useBackend": false
+              "useBackend": false,
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              }
             }
           ],
           "title": "Reth gas per second",
@@ -5372,42 +5627,10 @@
       "type": "row"
     }
   ],
-  "preload": false,
   "schemaVersion": 42,
   "tags": [],
   "templating": {
-    "list": [
-      {
-        "current": {"value": "prometheus", "text": "Prometheus"},
-        "includeAll": false,
-        "label": "Datasource",
-        "name": "datasource",
-        "options": [],
-        "query": "prometheus",
-        "refresh": 1,
-        "regex": "",
-        "type": "datasource"
-      },
-      {
-        "hide": 2,
-        "name": "job",
-        "query": "summit",
-        "skipUrlSync": false,
-        "type": "constant",
-        "current": {
-          "value": "summit",
-          "text": "summit",
-          "selected": false
-        },
-        "options": [
-          {
-            "value": "summit",
-            "text": "summit",
-            "selected": true
-          }
-        ]
-      }
-    ]
+    "list": []
   },
   "time": {
     "from": "now-12h",
@@ -5417,5 +5640,6 @@
   "timezone": "browser",
   "title": "Summit",
   "uid": "cesp3x2v4eb5sa",
-  "version": 80
+  "version": 80,
+  "weekStart": ""
 }
