@@ -1,7 +1,7 @@
 [Unit]
 Description=Seismic Reth Node
-After=network.target persistent-mount.service nginx-ssl-setup.service seismic-enclave.service
-Requires=persistent-mount.service nginx-ssl-setup.service seismic-enclave.service
+After=network.target persistent-mount.service nginx-ssl-setup.service enclave.service
+Requires=persistent-mount.service nginx-ssl-setup.service enclave.service
 
 [Service]
 Type=simple
@@ -17,7 +17,7 @@ ExecStartPre=+/bin/chown -R reth:eth /persistent/reth
 ExecStartPre=+/bin/chmod -R g+rwX /persistent/reth
 ExecStartPre=+/bin/chmod g+s /persistent/reth
 
-ExecStart=/usr/bin/start-seismic-reth
+ExecStart=/usr/bin/start-reth
 
 Restart=on-failure
 RestartSec=10
