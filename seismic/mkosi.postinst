@@ -11,9 +11,27 @@ mkosi-chroot useradd -r -s /bin/false -G eth reth
 mkosi-chroot useradd -r -s /bin/false -G eth,tss enclave
 mkosi-chroot useradd -r -s /bin/false -G eth summit
 
+# Create prometheus user and group (if not already created by package)
+mkosi-chroot groupadd -r prometheus 2>/dev/null || true
+mkosi-chroot useradd -r -s /bin/false -g prometheus prometheus 2>/dev/null || true
+
+# Create grafana user and group (if not already created by package)
+mkosi-chroot groupadd -r grafana 2>/dev/null || true
+mkosi-chroot useradd -r -s /bin/false -g grafana grafana 2>/dev/null || true
+
+# Create prometheus directories
+mkdir -p "$BUILDROOT/var/lib/prometheus"
+mkosi-chroot chown prometheus:prometheus /var/lib/prometheus
+
+# Create grafana directories
+mkdir -p "$BUILDROOT/var/lib/grafana"
+mkdir -p "$BUILDROOT/var/log/grafana"
+mkosi-chroot chown grafana:grafana /var/lib/grafana
+mkosi-chroot chown grafana:grafana /var/log/grafana
+
 # Make scripts executable
 chmod +x "$BUILDROOT/usr/bin/setup-nginx-ssl"
-chmod +x "$BUILDROOT/usr/bin/start-seismic-enclave"
+chmod +x "$BUILDROOT/usr/bin/start-enclave"
 
 # Enable services
 mkdir -p "$BUILDROOT/etc/systemd/system/minimal.target.wants"
@@ -21,9 +39,11 @@ for service in \
     openntpd.service \
     nginx-ssl-setup.service \
     tpm-permissions.service \
-    seismic-reth.service \
-    seismic-enclave.service \
-    summit.service
+    reth.service \
+    enclave.service \
+    summit.service \
+    prometheus.service \
+    grafana-server.service
 do
     mkosi-chroot systemctl enable "$service"
     ln -sf "/etc/systemd/system/$service" "$BUILDROOT/etc/systemd/system/minimal.target.wants/"

@@ -10,7 +10,7 @@ Environment=RUST_BACKTRACE=full
 ExecStartPre=+/bin/mkdir -p /persistent/enclave
 ExecStartPre=+/bin/chmod 775 /persistent /persistent/enclave
 
-ExecStart=/usr/bin/start-seismic-enclave
+ExecStart=/usr/bin/start-enclave
 
 Restart=always
 RestartSec=60
