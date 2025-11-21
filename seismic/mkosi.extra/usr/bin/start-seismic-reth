@@ -8,9 +8,13 @@ DEFAULT_ARGS='node -vvv --enclave.endpoint-addr 0.0.0.0 --enclave.endpoint-port 
 
 # Extract custom args if config exists
 CUSTOM_ARGS=""
+RUST_LOG="debug"
 if [ -f "$CONFIG_FILE" ]; then
     CUSTOM_ARGS=$(jq -r '.args.reth // ""' "$CONFIG_FILE")
+    RUST_LOG=$(jq -r '.log.reth // "debug"' "$CONFIG_FILE")
 fi
+
+export RUST_LOG=$RUST_LOG
 
 # Execute seismic-reth with defaults + custom args
 exec /usr/bin/seismic-reth $DEFAULT_ARGS $CUSTOM_ARGS
