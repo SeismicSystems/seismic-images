@@ -31,7 +31,11 @@ else
     OUTPUT_BASE="${BASE_NAME}"
 fi
 
-TAR="${OUTPUTDIR}/${OUTPUT_BASE}.tar.gz"
+# Create gcp subdirectory
+GCP_DIR="${OUTPUTDIR}/gcp"
+mkdir -p "$GCP_DIR"
+
+TAR="${GCP_DIR}/${OUTPUT_BASE}.tar.gz"
 TMP="${OUTPUTDIR}/gcp-tmp"
 
 mkdir -p "$TMP"
@@ -81,7 +85,7 @@ rm -rf "$TMP"
 
 # Copy the EFI file with matching name (for measurements script)
 if [[ "$OUTPUT_BASE" != "$BASE_NAME" ]]; then
-    EFI_OUTPUT="${OUTPUTDIR}/${OUTPUT_BASE}.efi"
+    EFI_OUTPUT="${GCP_DIR}/${OUTPUT_BASE}.efi"
     cp "$EFI_FILE" "$EFI_OUTPUT"
     echo "Copied EFI file to: $EFI_OUTPUT"
 fi

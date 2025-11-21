@@ -32,8 +32,12 @@ TIMESTAMP=$(date -u +%Y%m%d%H%M%S)
 # Construct the output filename with baremetal designation
 OUTPUT_BASE="${BASE_NAME}-${IS_DEV}baremetal-${TIMESTAMP}"
 
+# Create baremetal subdirectory
+BAREMETAL_DIR="${OUTPUTDIR}/baremetal"
+mkdir -p "$BAREMETAL_DIR"
+
 # Copy the EFI file with the new name
-EFI_OUTPUT="${OUTPUTDIR}/${OUTPUT_BASE}.efi"
+EFI_OUTPUT="${BAREMETAL_DIR}/${OUTPUT_BASE}.efi"
 cp "$EFI_FILE" "$EFI_OUTPUT"
 echo "Created baremetal EFI file: $EFI_OUTPUT"
 
