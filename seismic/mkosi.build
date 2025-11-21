@@ -19,7 +19,7 @@ ENCLAVE_BRANCH="seismic"
 ENCLAVE_COMMIT="90d53fd7c49600d78d0ab815869d05e2f4187ca8"
 
 SUMMIT_BRANCH="main"
-SUMMIT_COMMIT="19635509dc1235606a6730a314cd68e576d0d0e3"
+SUMMIT_COMMIT="bd75e1ba18fa79532a1b5761ebe2e13ae4070ba7"
 
 # Build seismic-reth
 RETH_BUILD_CMD="
@@ -76,7 +76,7 @@ SUMMIT_BUILD_CMD="
     export CARGO_PROFILE_RELEASE_OPT_LEVEL='3'
 
     cargo fetch
-    cargo build --release --frozen --bin summit
+    cargo build --release --frozen --bin summit --features prom
 "
 make_git_package \
     "summit" \
