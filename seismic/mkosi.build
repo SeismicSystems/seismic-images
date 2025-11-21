@@ -12,14 +12,14 @@ mkosi-chroot bash -c '
 '
 
 # Branches & commit hashes for reproducible builds
-RETH_BRANCH="retries-arg"
-RETH_COMMIT="2343d339ee77844ff390365a6b087149d2d6e968"
+RETH_BRANCH="seismic"
+RETH_COMMIT="d04bbe4a29d6597f7d427dd9b21d871d7b725add"
 
 ENCLAVE_BRANCH="seismic"
-ENCLAVE_COMMIT="ef9a53d84dc25596f66ccf438cfd3374a5b0eabc"
+ENCLAVE_COMMIT="90d53fd7c49600d78d0ab815869d05e2f4187ca8"
 
-SUMMIT_BRANCH="genesis-rpc-key"
-SUMMIT_COMMIT="b4835df7bd524012b8a71c033214c9efe81735bc"
+SUMMIT_BRANCH="main"
+SUMMIT_COMMIT="bd75e1ba18fa79532a1b5761ebe2e13ae4070ba7"
 
 # Build seismic-reth
 RETH_BUILD_CMD="
@@ -76,7 +76,7 @@ SUMMIT_BUILD_CMD="
     export CARGO_PROFILE_RELEASE_OPT_LEVEL='3'
 
     cargo fetch
-    cargo build --release --frozen --bin summit
+    cargo build --release --frozen --bin summit --features prom
 "
 make_git_package \
     "summit" \
