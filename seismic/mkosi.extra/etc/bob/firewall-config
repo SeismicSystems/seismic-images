@@ -15,7 +15,11 @@ ENCLAVE_PORT=7878
 SUMMIT_API_PORT=3030
 NTP_PORT=123
 CL_P2P_PORT=9000
+SUMMIT_P2P_PORT=18551
 EL_P2P_PORT=30303
+
+RETH_PROM_PORT=9001
+SUMMIT_PROM_PORT=9090
 
 ###########################################################################
 # (1) ALWAYS_IN: Inbound rules that are always applied
@@ -30,6 +34,10 @@ accept_dst_port $CHAIN_ALWAYS_IN tcp $HTTP_PORT "HTTP"
 accept_dst_port $CHAIN_ALWAYS_IN tcp $HTTPS_PORT "HTTPS"
 accept_dst_port $CHAIN_ALWAYS_IN tcp $CL_P2P_PORT "CL P2P (TCP)"
 accept_dst_port $CHAIN_ALWAYS_IN udp $CL_P2P_PORT "CL P2P (UDP)"
+accept_dst_port $CHAIN_ALWAYS_IN tcp $SUMMIT_P2P_PORT "Summit P2P (TCP)"
+accept_dst_port $CHAIN_ALWAYS_IN udp $SUMMIT_P2P_PORT "Summit P2P (UDP)"
+accept_dst_port $CHAIN_ALWAYS_IN udp $SUMMIT_PROM_PORT "Summit Prometheus (TCP)"
+accept_dst_port $CHAIN_ALWAYS_IN udp $RETH_PROM_PORT "Reth Prometheus (TCP)"
 
 ###########################################################################
 # (2) ALWAYS_OUT: Outbound rules that are always applied
@@ -45,12 +53,16 @@ accept_dst_port $CHAIN_ALWAYS_OUT tcp $HTTPS_PORT "HTTPS"
 
 accept_dst_port $CHAIN_ALWAYS_OUT tcp $CL_P2P_PORT "CL P2P (TCP)"
 accept_dst_port $CHAIN_ALWAYS_OUT udp $CL_P2P_PORT "CL P2P (UDP)"
+accept_dst_port $CHAIN_ALWAYS_OUT tcp $SUMMIT_P2P_PORT "Summit P2P (TCP)"
+accept_dst_port $CHAIN_ALWAYS_OUT udp $SUMMIT_P2P_PORT "Summit P2P (UDP)"
 
 # Note: this is accessible only from host, searcher netns has DROP on those
 accept_dst_port $CHAIN_ALWAYS_OUT udp $NTP_PORT "NTP"
 accept_dst_port $CHAIN_ALWAYS_OUT udp $DNS_PORT "DNS (UDP)"
 accept_dst_port $CHAIN_ALWAYS_OUT tcp $DNS_PORT "DNS (TCP)"
 
+accept_dst_port $CHAIN_ALWAYS_OUT udp $SUMMIT_PROM_PORT "Summit Prometheus (TCP)"
+accept_dst_port $CHAIN_ALWAYS_OUT udp $RETH_PROM_PORT "Reth Prometheus (TCP)"
 ###########################################################################
 # (3) MAINTENANCE_IN: Inbound rules for Maintenance Mode
 ###########################################################################

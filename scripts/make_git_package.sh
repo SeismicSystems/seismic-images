@@ -4,13 +4,13 @@
 
 make_git_package() {
     local package="$1"
-    local version="$2"
+    local rev="$2"
     local git_url="$3"
     local build_cmd="$4"
     # All remaining arguments are artifact mappings in src:dest format
     
     mkdir -p "$DESTDIR/usr/bin"
-    local cache_dir="$BUILDDIR/${package}-${version}"
+    local cache_dir="$BUILDDIR/${package}-${rev}"
 
     # Verify all artifacts are cached before using cache
     local use_cache=false
@@ -23,7 +23,7 @@ make_git_package() {
 
     # Use cached artifacts if all are available
     if [ "$use_cache" = true ]; then
-        echo "Using cached artifacts for $package version $version"
+        echo "Using cached artifacts for $package rev $rev"
         for artifact_map in "${@:5}"; do
             local src="${artifact_map%%:*}"
             local dest="${artifact_map#*:}"
@@ -41,8 +41,8 @@ make_git_package() {
     
     # Build from source
     local build_dir="$BUILDROOT/build/$package"
-    git clone --depth 1 --branch "$version" "$git_url" "$build_dir"
-    mkosi-chroot bash -c "cd '/build/$package' && $build_cmd"
+    git clone "$git_url" "$build_dir"
+    mkosi-chroot bash -c "cd '/build/$package' && git checkout $rev && $build_cmd"
 
     # Copy artifacts to image and cache
     for artifact_map in "${@:5}"; do
