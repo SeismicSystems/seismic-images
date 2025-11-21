@@ -1,0 +1,40 @@
+#!/bin/bash
+set -euxo pipefail
+
+# Skip if a cloud profile (azure or gcp) is active - they have their own postoutput scripts
+if echo "${PROFILES:-}" | grep -qE "azure|gcp"; then
+    echo "Cloud profile detected, skipping baremetal postoutput"
+    exit 0
+fi
+
+# Find the most recently modified .efi file in the output directory
+EFI_FILE=$(ls -t "${OUTPUTDIR}"/*.efi 2>/dev/null | head -n1)
+
+if [ -z "$EFI_FILE" ] || [ ! -f "$EFI_FILE" ]; then
+    echo "Error: No .efi file found in ${OUTPUTDIR}"
+    exit 1
+fi
+
+echo "Using EFI file: $EFI_FILE"
+
+# Get the base name from the actual EFI file
+BASE_NAME=$(basename "$EFI_FILE" .efi)
+
+# Check if this is a dev build by looking for devtools profile marker
+IS_DEV=""
+if echo "${PROFILES:-}" | grep -q "devtools"; then
+    IS_DEV="dev-"
+fi
+
+# Generate timestamp in YYYYMMDDHHMMSS format
+TIMESTAMP=$(date -u +%Y%m%d%H%M%S)
+
+# Construct the output filename with baremetal designation
+OUTPUT_BASE="${BASE_NAME}-${IS_DEV}baremetal-${TIMESTAMP}"
+
+# Copy the EFI file with the new name
+EFI_OUTPUT="${OUTPUTDIR}/${OUTPUT_BASE}.efi"
+cp "$EFI_FILE" "$EFI_OUTPUT"
+echo "Created baremetal EFI file: $EFI_OUTPUT"
+
+echo "Successfully created baremetal image: ${OUTPUT_BASE}.efi"

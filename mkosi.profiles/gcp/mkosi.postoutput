@@ -1,11 +1,38 @@
 #!/bin/bash
 set -euxo pipefail
 
-EFI="${OUTPUTDIR}/tdx-debian.efi"
-TAR="${OUTPUTDIR}/tdx-debian.tar.gz"
-TMP="${OUTPUTDIR}/gcp-tmp"
+# Find the most recently modified .efi file in the output directory
+EFI_FILE=$(ls -t "${OUTPUTDIR}"/*.efi 2>/dev/null | head -n1)
 
-[ ! -f "$EFI" ] && echo "Error: $EFI not found" && exit 1
+if [ -z "$EFI_FILE" ] || [ ! -f "$EFI_FILE" ]; then
+    echo "Error: No .efi file found in ${OUTPUTDIR}"
+    exit 1
+fi
+
+echo "Using EFI file: $EFI_FILE"
+
+# Get the base name from the actual EFI file
+BASE_NAME=$(basename "$EFI_FILE" .efi)
+
+# Check if this is a dev build by looking for devtools profile marker
+IS_DEV=""
+if echo "${PROFILES:-}" | grep -q "devtools"; then
+    IS_DEV="dev-"
+fi
+
+# Generate timestamp in YYYYMMDDHHMMSS format
+TIMESTAMP=$(date -u +%Y%m%d%H%M%S)
+
+# Construct the output filename
+# For non-seismic/bob-l1 images (like tdx-debian), use old naming
+if [[ "$BASE_NAME" == "seismic" ]] || [[ "$BASE_NAME" == "bob-l1" ]]; then
+    OUTPUT_BASE="${BASE_NAME}-${IS_DEV}gcp-${TIMESTAMP}"
+else
+    OUTPUT_BASE="${BASE_NAME}"
+fi
+
+TAR="${OUTPUTDIR}/${OUTPUT_BASE}.tar.gz"
+TMP="${OUTPUTDIR}/gcp-tmp"
 
 mkdir -p "$TMP"
 
@@ -25,7 +52,7 @@ mmd -i "$TMP/esp.img" ::EFI ::EFI/BOOT
 
 # Copy files with deterministic timestamps
 # -D o sets file times to 1980-01-01 (DOS epoch)
-mcopy -D o -i "$TMP/esp.img" "$EFI" ::EFI/BOOT/BOOTX64.EFI
+mcopy -D o -i "$TMP/esp.img" "$EFI_FILE" ::EFI/BOOT/BOOTX64.EFI
 
 # Create 1GB disk with GPT
 dd if=/dev/zero of="$TMP/disk.raw" bs=1M count=1024
@@ -51,3 +78,12 @@ touch -d "2024-01-01 00:00:00 UTC" "$TMP/disk.raw" 2>/dev/null || true
 tar --format=oldgnu -Sczf "$TAR" -C "$TMP" disk.raw
 
 rm -rf "$TMP"
+
+# Copy the EFI file with matching name (for measurements script)
+if [[ "$OUTPUT_BASE" != "$BASE_NAME" ]]; then
+    EFI_OUTPUT="${OUTPUTDIR}/${OUTPUT_BASE}.efi"
+    cp "$EFI_FILE" "$EFI_OUTPUT"
+    echo "Copied EFI file to: $EFI_OUTPUT"
+fi
+
+echo "Successfully created TAR.GZ: $TAR"
