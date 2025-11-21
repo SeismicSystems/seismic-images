@@ -1,8 +1,8 @@
 [Unit]
 Description=Prometheus Monitoring System
 Documentation=https://prometheus.io/docs/introduction/overview/
-After=network-online.target seismic-reth.service
-Wants=network-online.target seismic-reth.service
+After=network-online.target reth.service
+Wants=network-online.target reth.service
 
 [Service]
 Type=simple

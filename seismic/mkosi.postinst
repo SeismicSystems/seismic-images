@@ -31,7 +31,7 @@ mkosi-chroot chown grafana:grafana /var/log/grafana
 
 # Make scripts executable
 chmod +x "$BUILDROOT/usr/bin/setup-nginx-ssl"
-chmod +x "$BUILDROOT/usr/bin/start-seismic-enclave"
+chmod +x "$BUILDROOT/usr/bin/start-enclave"
 
 # Enable services
 mkdir -p "$BUILDROOT/etc/systemd/system/minimal.target.wants"
@@ -39,8 +39,8 @@ for service in \
     openntpd.service \
     nginx-ssl-setup.service \
     tpm-permissions.service \
-    seismic-reth.service \
-    seismic-enclave.service \
+    reth.service \
+    enclave.service \
     summit.service \
     prometheus.service \
     grafana-server.service
