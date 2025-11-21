@@ -11809,7 +11809,7 @@
   "templating": {
     "list": [
       {
-        "current": {},
+        "current": {"value": "prometheus-reth", "text": "Prometheus-Reth"},
         "datasource": {
           "type": "prometheus",
           "uid": "${datasource}"
@@ -11830,7 +11830,7 @@
         "type": "query"
       },
       {
-        "current": {},
+        "current": {"value": "prometheus-reth", "text": "Prometheus-Reth"},
         "includeAll": false,
         "label": "Datasource",
         "name": "datasource",

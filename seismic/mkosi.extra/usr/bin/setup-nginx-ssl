@@ -31,7 +31,7 @@ if [ -z "$DOMAIN_NAME" ] || [ "$DOMAIN_NAME" = "null" ]; then
     exit 0
 fi
 
-echo "Setting up nginx for domains: $DOMAIN_NAME and g.$DOMAIN_NAME"
+echo "Setting up nginx for domains: $DOMAIN_NAME and metrics.$DOMAIN_NAME"
 
 # Create persistent directories
 mkdir -p /persistent/conf
@@ -84,7 +84,7 @@ systemctl restart nginx
 
 # Run certbot if not already done
 if [ ! -f "$CERTBOT_DONE" ]; then
-    echo "Running certbot for $DOMAIN_NAME and g.$DOMAIN_NAME with email $DOMAIN_EMAIL"
+    echo "Running certbot for $DOMAIN_NAME and metrics.$DOMAIN_NAME with email $DOMAIN_EMAIL"
 
     # Wait for nginx to be fully up
     sleep 2
@@ -95,7 +95,7 @@ if [ ! -f "$CERTBOT_DONE" ]; then
         --agree-tos \
         --email "$DOMAIN_EMAIL" \
         --domain "$DOMAIN_NAME" \
-        --domain "g.$DOMAIN_NAME" \
+        --domain "metrics.$DOMAIN_NAME" \
         --redirect \
         --config-dir "$CERTBOT_CONFIG_DIR" \
         --work-dir "$CERTBOT_WORK_DIR" \
@@ -120,4 +120,4 @@ echo "  https://$DOMAIN_NAME/rpc"
 echo "  https://$DOMAIN_NAME/ws"
 echo "  https://$DOMAIN_NAME/summit"
 echo "  https://$DOMAIN_NAME/enclave"
-echo "  https://g.$DOMAIN_NAME/ (Grafana)"
+echo "  https://metrics.$DOMAIN_NAME/ (Grafana)"
