@@ -11,7 +11,6 @@ DEFAULT_ARGS=(
     --enclave.endpoint-addr 0.0.0.0
     --enclave.endpoint-port 7878
     --chain /usr/share/seismic-reth/genesis.json
-    --full
     --datadir /persistent/reth
     --http
     --http.addr 0.0.0.0
