@@ -1,28 +1,4 @@
 {
-  "__inputs": [
-    {
-      "name": "DS_PROMETHEUS",
-      "label": "Prometheus",
-      "description": "",
-      "type": "datasource",
-      "pluginId": "prometheus",
-      "pluginName": "Prometheus"
-    },
-    {
-      "name": "DS_EXPRESSION",
-      "label": "Expression",
-      "description": "",
-      "type": "datasource",
-      "pluginId": "__expr__"
-    },
-    {
-      "name": "VAR_INSTANCE_LABEL",
-      "type": "constant",
-      "label": "Instance Label",
-      "value": "job",
-      "description": ""
-    }
-  ],
   "__elements": {},
   "__requires": [
     {
@@ -163,7 +139,9 @@
         "orientation": "auto",
         "percentChangeColorMode": "standard",
         "reduceOptions": {
-          "calcs": ["lastNotNull"],
+          "calcs": [
+            "lastNotNull"
+          ],
           "fields": "",
           "values": false
         },
@@ -231,7 +209,9 @@
         "orientation": "auto",
         "percentChangeColorMode": "standard",
         "reduceOptions": {
-          "calcs": ["lastNotNull"],
+          "calcs": [
+            "lastNotNull"
+          ],
           "fields": "",
           "values": false
         },
@@ -299,7 +279,9 @@
         "orientation": "auto",
         "percentChangeColorMode": "standard",
         "reduceOptions": {
-          "calcs": ["lastNotNull"],
+          "calcs": [
+            "lastNotNull"
+          ],
           "fields": "",
           "values": false
         },
@@ -367,7 +349,9 @@
         "orientation": "auto",
         "percentChangeColorMode": "standard",
         "reduceOptions": {
-          "calcs": ["lastNotNull"],
+          "calcs": [
+            "lastNotNull"
+          ],
           "fields": "",
           "values": false
         },
@@ -435,7 +419,9 @@
         "orientation": "auto",
         "percentChangeColorMode": "standard",
         "reduceOptions": {
-          "calcs": ["lastNotNull"],
+          "calcs": [
+            "lastNotNull"
+          ],
           "fields": "",
           "values": false
         },
@@ -503,7 +489,9 @@
         "orientation": "auto",
         "percentChangeColorMode": "standard",
         "reduceOptions": {
-          "calcs": ["lastNotNull"],
+          "calcs": [
+            "lastNotNull"
+          ],
           "fields": "",
           "values": false
         },
@@ -583,7 +571,9 @@
         "minVizWidth": 75,
         "orientation": "auto",
         "reduceOptions": {
-          "calcs": ["lastNotNull"],
+          "calcs": [
+            "lastNotNull"
+          ],
           "fields": "",
           "values": false
         },
@@ -657,7 +647,9 @@
         "namePlacement": "auto",
         "orientation": "horizontal",
         "reduceOptions": {
-          "calcs": ["lastNotNull"],
+          "calcs": [
+            "lastNotNull"
+          ],
           "fields": "",
           "values": false
         },
@@ -757,7 +749,9 @@
         "orientation": "auto",
         "percentChangeColorMode": "standard",
         "reduceOptions": {
-          "calcs": ["lastNotNull"],
+          "calcs": [
+            "lastNotNull"
+          ],
           "fields": "",
           "values": false
         },
@@ -3480,7 +3474,9 @@
               "id": "byNames",
               "options": {
                 "mode": "exclude",
-                "names": ["Precompile cache hits"],
+                "names": [
+                  "Precompile cache hits"
+                ],
                 "prefix": "All except:",
                 "readOnly": true
               }
@@ -4905,7 +4901,7 @@
           "color": "rgba(255,0,255,0.7)"
         },
         "filterValues": {
-          "le": 1e-9
+          "le": 1E-9
         },
         "legend": {
           "show": true
@@ -5223,7 +5219,10 @@
               {
                 "id": "custom.lineStyle",
                 "value": {
-                  "dash": [0, 10],
+                  "dash": [
+                    0,
+                    10
+                  ],
                   "fill": "dot"
                 }
               },
@@ -5381,7 +5380,10 @@
               {
                 "id": "custom.lineStyle",
                 "value": {
-                  "dash": [0, 10],
+                  "dash": [
+                    0,
+                    10
+                  ],
                   "fill": "dot"
                 }
               },
@@ -5496,16 +5498,22 @@
       },
       "id": 48,
       "options": {
-        "displayLabels": ["name"],
+        "displayLabels": [
+          "name"
+        ],
         "legend": {
           "displayMode": "table",
           "placement": "right",
           "showLegend": true,
-          "values": ["value"]
+          "values": [
+            "value"
+          ]
         },
         "pieType": "pie",
         "reduceOptions": {
-          "calcs": ["lastNotNull"],
+          "calcs": [
+            "lastNotNull"
+          ],
           "fields": "",
           "values": false
         },
@@ -5672,11 +5680,15 @@
           "displayMode": "table",
           "placement": "right",
           "showLegend": true,
-          "values": ["value"]
+          "values": [
+            "value"
+          ]
         },
         "pieType": "pie",
         "reduceOptions": {
-          "calcs": ["lastNotNull"],
+          "calcs": [
+            "lastNotNull"
+          ],
           "fields": "",
           "values": false
         },
@@ -6106,16 +6118,22 @@
       },
       "id": 202,
       "options": {
-        "displayLabels": ["name"],
+        "displayLabels": [
+          "name"
+        ],
         "legend": {
           "displayMode": "table",
           "placement": "right",
           "showLegend": true,
-          "values": ["value"]
+          "values": [
+            "value"
+          ]
         },
         "pieType": "pie",
         "reduceOptions": {
-          "calcs": ["lastNotNull"],
+          "calcs": [
+            "lastNotNull"
+          ],
           "fields": "",
           "values": false
         },
@@ -7240,7 +7258,7 @@
           "color": "rgba(255,0,255,0.7)"
         },
         "filterValues": {
-          "le": 1e-9
+          "le": 1E-9
         },
         "legend": {
           "show": true
@@ -7430,7 +7448,7 @@
           "color": "rgba(255,0,255,0.7)"
         },
         "filterValues": {
-          "le": 1e-9
+          "le": 1E-9
         },
         "legend": {
           "show": true
@@ -11437,7 +11455,9 @@
             "orientation": "auto",
             "percentChangeColorMode": "standard",
             "reduceOptions": {
-              "calcs": ["lastNotNull"],
+              "calcs": [
+                "lastNotNull"
+              ],
               "fields": "",
               "values": false
             },
@@ -11830,7 +11850,10 @@
         "type": "query"
       },
       {
-        "current": {},
+        "current": {
+          "text": "Prometheus",
+          "value": "prometheus"
+        },
         "includeAll": false,
         "label": "Datasource",
         "name": "datasource",
