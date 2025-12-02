@@ -85,6 +85,23 @@ make_git_package \
     "$SUMMIT_BUILD_CMD" \
     "target/release/summit:/usr/bin/summit"
 
+STAKING_REPO="https://github.com/SeismicSystems/staking-ui"
+STAKING_COMMIT="8f338d9e6f2e09af492c3dae2b67bb8267f06495"
+
+STAKING_BUILD_CMD="
+    git checkout $STAKING_COMMIT
+    npm install --legacy-peer-deps
+    export PATH=\"\$PWD/node_modules/.bin:\$PATH\"
+    npm run build
+"
+
+make_git_package \
+   "staking-ui" \
+   "$STAKING_COMMIT" \
+   "$STAKING_REPO" \
+   "$STAKING_BUILD_CMD" \
+   "dist:/var/www/html/staking"
+
 # Install Prometheus
 PROM_VERSION=$(curl -s https://api.github.com/repos/prometheus/prometheus/releases/latest | grep tag_name | cut -d '"' -f 4 | cut -c 2-)
 echo "Installing Prometheus version ${PROM_VERSION}"
@@ -106,4 +123,3 @@ cp -r /tmp/grafana-${GRAFANA_VERSION}/* "$DESTDIR/usr/share/grafana/"
 ln -sf /usr/share/grafana/bin/grafana "$DESTDIR/usr/sbin/grafana"
 ln -sf /usr/share/grafana/bin/grafana-cli "$DESTDIR/usr/sbin/grafana-cli"
 rm -rf /tmp/grafana*
-
