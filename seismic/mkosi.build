@@ -19,7 +19,7 @@ ENCLAVE_BRANCH="seismic"
 ENCLAVE_COMMIT="90d53fd7c49600d78d0ab815869d05e2f4187ca8"
 
 SUMMIT_BRANCH="main"
-SUMMIT_COMMIT="bd75e1ba18fa79532a1b5761ebe2e13ae4070ba7"
+SUMMIT_COMMIT="695ddc7b13abfee4e2c1624fa9693a8700b8c28e"
 
 # Build seismic-reth
 RETH_BUILD_CMD="
@@ -86,7 +86,7 @@ make_git_package \
     "target/release/summit:/usr/bin/summit"
 
 STAKING_REPO="https://github.com/SeismicSystems/staking-ui"
-STAKING_COMMIT="8f338d9e6f2e09af492c3dae2b67bb8267f06495"
+STAKING_COMMIT="896d37aa3a2b814ea565b56139d8168e94182010"
 
 STAKING_BUILD_CMD="
     git checkout $STAKING_COMMIT
