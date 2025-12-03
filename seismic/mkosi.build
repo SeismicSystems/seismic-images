@@ -86,7 +86,7 @@ make_git_package \
     "target/release/summit:/usr/bin/summit"
 
 STAKING_REPO="https://github.com/SeismicSystems/staking-ui"
-STAKING_COMMIT="896d37aa3a2b814ea565b56139d8168e94182010"
+STAKING_COMMIT="32f706e253ce8e843b47dd1bafd6fffbe42fea41"
 
 STAKING_BUILD_CMD="
     git checkout $STAKING_COMMIT
