@@ -7,7 +7,6 @@ Requires=persistent-mount.service nginx-ssl-setup.service enclave.service reth.s
 Type=simple
 User=summit
 Group=eth
-LimitNOFILE=65536
 UMask=0002
 
 ExecStartPre=+/bin/mkdir -p /persistent/summit/db
