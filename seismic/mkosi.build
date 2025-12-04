@@ -12,14 +12,10 @@ mkosi-chroot bash -c '
 '
 
 # Branches & commit hashes for reproducible builds
-RETH_BRANCH="seismic" # new-genesis
 RETH_COMMIT="a61f4f675a5797d17f043ae04eb3f43de7cbcebb"
-
-ENCLAVE_BRANCH="seismic"
 ENCLAVE_COMMIT="90d53fd7c49600d78d0ab815869d05e2f4187ca8"
-
-SUMMIT_BRANCH="main"
-SUMMIT_COMMIT="bd75e1ba18fa79532a1b5761ebe2e13ae4070ba7"
+SUMMIT_COMMIT="695ddc7b13abfee4e2c1624fa9693a8700b8c28e"
+STAKING_COMMIT="cb410b3a9a61b5f0cc48c67f527d3c1875db55ed"
 
 # Build seismic-reth
 RETH_BUILD_CMD="
@@ -85,6 +81,20 @@ make_git_package \
     "$SUMMIT_BUILD_CMD" \
     "target/release/summit:/usr/bin/summit"
 
+STAKING_BUILD_CMD="
+    git checkout $STAKING_COMMIT
+    npm install --legacy-peer-deps
+    export PATH=\"\$PWD/node_modules/.bin:\$PATH\"
+    npm run build
+"
+
+make_git_package \
+   "staking-ui" \
+   "$STAKING_COMMIT" \
+   "https://github.com/SeismicSystems/staking-ui" \
+   "$STAKING_BUILD_CMD" \
+   "dist:/var/www/html/staking"
+
 # Install Prometheus
 PROM_VERSION=$(curl -s https://api.github.com/repos/prometheus/prometheus/releases/latest | grep tag_name | cut -d '"' -f 4 | cut -c 2-)
 echo "Installing Prometheus version ${PROM_VERSION}"
@@ -106,4 +116,3 @@ cp -r /tmp/grafana-${GRAFANA_VERSION}/* "$DESTDIR/usr/share/grafana/"
 ln -sf /usr/share/grafana/bin/grafana "$DESTDIR/usr/sbin/grafana"
 ln -sf /usr/share/grafana/bin/grafana-cli "$DESTDIR/usr/sbin/grafana-cli"
 rm -rf /tmp/grafana*
-
