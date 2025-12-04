@@ -49,4 +49,10 @@ do
     ln -sf "/etc/systemd/system/$service" "$BUILDROOT/etc/systemd/system/minimal.target.wants/"
 done
 
+# Check for required assets
+if [ ! -f "$BUILDROOT/var/www/html/staking/seis_logo.png" ]; then
+    echo "Error: staking logo missing at /var/www/html/staking/seis_logo.png"
+    exit 1
+fi
+
 # Note: certbot-renew.timer is enabled by setup-nginx-ssl after initial certbot run
