@@ -12,14 +12,10 @@ mkosi-chroot bash -c '
 '
 
 # Branches & commit hashes for reproducible builds
-RETH_BRANCH="seismic" # new-genesis
 RETH_COMMIT="a61f4f675a5797d17f043ae04eb3f43de7cbcebb"
-
-ENCLAVE_BRANCH="seismic"
 ENCLAVE_COMMIT="90d53fd7c49600d78d0ab815869d05e2f4187ca8"
-
-SUMMIT_BRANCH="main"
 SUMMIT_COMMIT="695ddc7b13abfee4e2c1624fa9693a8700b8c28e"
+STAKING_COMMIT="cb410b3a9a61b5f0cc48c67f527d3c1875db55ed"
 
 # Build seismic-reth
 RETH_BUILD_CMD="
@@ -85,9 +81,6 @@ make_git_package \
     "$SUMMIT_BUILD_CMD" \
     "target/release/summit:/usr/bin/summit"
 
-STAKING_REPO="https://github.com/SeismicSystems/staking-ui"
-STAKING_COMMIT="705a53394a37a857fa808d1ac2802b35c1c02f25"
-
 STAKING_BUILD_CMD="
     git checkout $STAKING_COMMIT
     npm install --legacy-peer-deps
@@ -98,7 +91,7 @@ STAKING_BUILD_CMD="
 make_git_package \
    "staking-ui" \
    "$STAKING_COMMIT" \
-   "$STAKING_REPO" \
+   "https://github.com/SeismicSystems/staking-ui" \
    "$STAKING_BUILD_CMD" \
    "dist:/var/www/html/staking"
 
