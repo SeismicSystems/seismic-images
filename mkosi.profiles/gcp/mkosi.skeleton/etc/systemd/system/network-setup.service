@@ -7,9 +7,9 @@ Wants=network.target
 [Service]
 Type=oneshot
 ExecStart=ip link set lo up
-ExecStart=ip link set eth0 up
+ExecStart=ip link set ens4 up
 ExecStart=chattr +i /etc/resolv.conf
-ExecStart=/usr/sbin/udhcpc -i eth0 -n
+ExecStart=/usr/sbin/udhcpc -i ens4 -n
 RemainAfterExit=yes
 
 [Install]
