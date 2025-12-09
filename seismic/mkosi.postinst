@@ -46,7 +46,6 @@ for service in \
     grafana-server.service
 do
     mkosi-chroot systemctl enable "$service"
-    ln -sf "/etc/systemd/system/$service" "$BUILDROOT/etc/systemd/system/minimal.target.wants/"
 done
 
 # Check for required assets
