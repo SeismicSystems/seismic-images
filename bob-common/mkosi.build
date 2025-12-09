@@ -35,7 +35,7 @@ make_git_package \
 # Build tdx-init (using fork with JSON config support)
 make_git_package \
     "tdx-init" \
-    "79d72844e4930b7f77c95c1c79a24f70456b7a5e" \
+    "7bdf99a4c95c4b91a7f48101a310b4f24f58034d" \
     "https://github.com/SeismicSystems/tdx-init" \
     'cd tdx-init-rs && cargo build --release --target-dir ./build' \
     "tdx-init-rs/build/release/tdx-init:/usr/bin/tdx-init"
