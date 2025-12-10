@@ -1,80 +1,8 @@
 #!/bin/bash
-set -euo pipefail
-
-# GCP-specific kernel build script
-# This downloads and installs Ubuntu's pre-built -gcp kernel instead of building from source
-# This is required because GCP's TDX environment needs specific kernel patches
-
+# GCP profile uses linux-image-cloud-amd64 package instead of custom kernel build
+# This is Debian's cloud-optimized kernel (equivalent to Ubuntu's linux-image-gcp)
+# This script overrides the base kernel/mkosi.build for GCP only
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo "Installing Ubuntu GCP kernel (pre-built)"
+echo "GCP: Using Debian linux-image-cloud-amd64 (cloud-optimized kernel)"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-
-# Configuration
-UBUNTU_RELEASE="noble"  # Ubuntu 24.04 LTS
-UBUNTU_MIRROR="http://archive.ubuntu.com/ubuntu"
-KERNEL_VERSION="6.14.0-1021-gcp"
-KERNEL_PACKAGE="linux-image-${KERNEL_VERSION}"
-
-# Create temp directory for downloads
-temp_dir=$(mktemp -d)
-trap "rm -rf $temp_dir" EXIT
-
-cd "$temp_dir"
-
-echo "Downloading Ubuntu GCP kernel packages..."
-
-# Download the kernel image package
-apt-get download \
-    -o Dir::Etc::SourceList=/dev/null \
-    -o Dir::Etc::SourceParts=/dev/null \
-    -o APT::Get::List-Cleanup=0 \
-    -o Acquire::AllowInsecureRepositories=true \
-    -o Acquire::AllowDowngradeToInsecureRepositories=true \
-    "$KERNEL_PACKAGE" || {
-    echo "Failed to download via apt-get, trying direct URL..."
-
-    # Fallback: construct direct download URL
-    # Format: pool/main/l/linux-gcp/linux-image-6.14.0-1021-gcp_6.14.0-1021.22~24.04.1_amd64.deb
-    POOL_PATH="pool/main/l/linux-gcp"
-    DEB_FILE="${KERNEL_PACKAGE}_${KERNEL_VERSION}.22~24.04.1_amd64.deb"
-    URL="${UBUNTU_MIRROR}/${POOL_PATH}/${DEB_FILE}"
-
-    echo "Downloading from: $URL"
-    curl -fsSL "$URL" -o "${KERNEL_PACKAGE}.deb"
-}
-
-# Extract the .deb package
-echo "Extracting kernel package..."
-for deb in *.deb; do
-    dpkg-deb -x "$deb" extracted/
-done
-
-# Install kernel files to the image
-echo "Installing kernel to image..."
-
-# Copy kernel image
-mkdir -p "$DESTDIR/usr/lib/modules/$KERNEL_VERSION"
-if [ -f "extracted/boot/vmlinuz-$KERNEL_VERSION" ]; then
-    cp "extracted/boot/vmlinuz-$KERNEL_VERSION" "$DESTDIR/usr/lib/modules/$KERNEL_VERSION/vmlinuz"
-    echo "✓ Kernel image installed"
-else
-    echo "ERROR: Kernel image not found in package!"
-    find extracted/ -name "vmlinuz*"
-    exit 1
-fi
-
-# Copy kernel modules if present
-if [ -d "extracted/lib/modules/$KERNEL_VERSION" ]; then
-    cp -r "extracted/lib/modules/$KERNEL_VERSION" "$DESTDIR/usr/lib/modules/"
-    echo "✓ Kernel modules installed"
-fi
-
-# Copy kernel config if present
-if [ -f "extracted/boot/config-$KERNEL_VERSION" ]; then
-    cp "extracted/boot/config-$KERNEL_VERSION" "$DESTDIR/usr/lib/modules/$KERNEL_VERSION/config"
-    echo "✓ Kernel config installed"
-fi
-
-echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo "Ubuntu GCP kernel $KERNEL_VERSION installed successfully"
-echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+exit 0
