@@ -31,7 +31,8 @@ KERNEL=="nvme*", ATTRS{model}=="nvme_card", ENV{ID_SERIAL}="Google_EphemeralDisk
 KERNEL=="nvme*n*", ATTRS{model}=="nvme_card[0-9]*", IMPORT{program}="google_nvme_id -d $tempnode"
 
 # NVME Persistent Disk IO Timeout
-KERNEL=="nvme*n*", ENV{DEVTYPE}=="disk", ATTRS{model}=="nvme_card-pd", ATTR{queue/io_timeout}="4294967295"
+# REMOVED: This hangs on GCP due to kernel/udev race condition
+# KERNEL=="nvme*n*", ENV{DEVTYPE}=="disk", ATTRS{model}=="nvme_card-pd", ATTR{queue/io_timeout}="4294967295"
 
 # NVME Persistent Disk Naming
 KERNEL=="nvme*n*", ATTRS{model}=="nvme_card-pd", IMPORT{program}="google_nvme_id -d $tempnode"
