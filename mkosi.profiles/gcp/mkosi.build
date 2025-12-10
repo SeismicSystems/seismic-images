@@ -1,8 +1,0 @@
-#!/bin/bash
-# GCP profile uses linux-image-cloud-amd64 package instead of custom kernel build
-# This is Debian's cloud-optimized kernel (equivalent to Ubuntu's linux-image-gcp)
-# This script overrides the base kernel/mkosi.build for GCP only
-echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo "GCP: Using Debian linux-image-cloud-amd64 (cloud-optimized kernel)"
-echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-exit 0
