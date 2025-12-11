@@ -78,6 +78,12 @@ sgdisk -n 1:2048:2099199 \
 dd if="$TMP/esp.img" of="$TMP/disk.raw" bs=512 seek=2048 conv=notrunc
 touch -d "2024-01-01 00:00:00 UTC" "$TMP/disk.raw" 2>/dev/null || true
 
+# Validate disk image (GCP requirement)
+if command -v qemu-img >/dev/null 2>&1; then
+    echo "Validating disk image with qemu-img check..."
+    qemu-img check "$TMP/disk.raw" || echo "Warning: qemu-img check reported issues"
+fi
+
 # Create GCP tar.gz
 tar --format=oldgnu -Sczf "$TAR" -C "$TMP" disk.raw
 
