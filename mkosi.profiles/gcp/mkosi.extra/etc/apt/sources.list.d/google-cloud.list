@@ -1,2 +1,3 @@
-deb [signed-by=/etc/apt/trusted.gpg.d/google-cloud.gpg] http://packages.cloud.google.com/apt google-compute-engine-bookworm-stable main
-deb [signed-by=/etc/apt/trusted.gpg.d/google-cloud.gpg] http://packages.cloud.google.com/apt cloud-sdk main
+# Google Cloud SDK repository (for gcloud CLI tools)
+# Uncomment if you need gcloud CLI
+# deb [signed-by=/etc/apt/trusted.gpg.d/google-cloud.gpg] http://packages.cloud.google.com/apt cloud-sdk main
