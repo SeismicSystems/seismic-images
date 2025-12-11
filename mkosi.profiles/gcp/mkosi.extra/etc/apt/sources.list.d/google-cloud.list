@@ -1,1 +1,2 @@
-deb [signed-by=/etc/apt/trusted.gpg.d/google-cloud.gpg] https://packages.cloud.google.com/apt cloud-sdk main
+deb [signed-by=/etc/apt/trusted.gpg.d/google-cloud.gpg] http://packages.cloud.google.com/apt google-compute-engine-bookworm-stable main
+deb [signed-by=/etc/apt/trusted.gpg.d/google-cloud.gpg] http://packages.cloud.google.com/apt cloud-sdk main
