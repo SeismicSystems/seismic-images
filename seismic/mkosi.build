@@ -95,10 +95,56 @@ make_git_package \
    "$STAKING_BUILD_CMD" \
    "dist:/var/www/html/staking"
 
+# Function to download and cache tarballs with retry logic
+download_and_cache_tarball() {
+    local name="$1"
+    local version="$2"
+    local url="$3"
+    local output_file="$4"
+
+    local cache_file="$BUILDDIR/cache/${name}-${version}.tar.gz"
+    mkdir -p "$BUILDDIR/cache"
+
+    # Use cached tarball if available and valid
+    if [ -f "$cache_file" ] && file "$cache_file" | grep -q "gzip compressed"; then
+        echo "Using cached ${name} tarball"
+        cp "$cache_file" "$output_file"
+        return 0
+    fi
+
+    echo "Downloading ${name} version ${version}..."
+    # Download with retries and validation
+    for i in 1 2 3; do
+        echo "Download attempt $i..."
+        if curl -fsSL --retry 3 --retry-delay 5 "$url" -o "$output_file"; then
+            # Verify it's actually a gzip file
+            if file "$output_file" | grep -q "gzip compressed"; then
+                echo "Download successful, caching for future builds"
+                cp "$output_file" "$cache_file"
+                return 0
+            else
+                echo "Downloaded file is not gzip format, retrying..."
+                rm -f "$output_file"
+            fi
+        fi
+        if [ $i -eq 3 ]; then
+            echo "Failed to download ${name} after 3 attempts"
+            return 1
+        fi
+        sleep 2
+    done
+}
+
 # Install Prometheus
 PROM_VERSION=$(curl -s https://api.github.com/repos/prometheus/prometheus/releases/latest | grep tag_name | cut -d '"' -f 4 | cut -c 2-)
 echo "Installing Prometheus version ${PROM_VERSION}"
-curl -L "https://github.com/prometheus/prometheus/releases/download/v${PROM_VERSION}/prometheus-${PROM_VERSION}.linux-amd64.tar.gz" -o /tmp/prometheus.tar.gz
+
+download_and_cache_tarball \
+    "prometheus" \
+    "${PROM_VERSION}" \
+    "https://github.com/prometheus/prometheus/releases/download/v${PROM_VERSION}/prometheus-${PROM_VERSION}.linux-amd64.tar.gz" \
+    "/tmp/prometheus.tar.gz"
+
 tar -xzf /tmp/prometheus.tar.gz -C /tmp
 mkdir -p "$DESTDIR/usr/bin"
 install -m 755 "/tmp/prometheus-${PROM_VERSION}.linux-amd64/prometheus" "$DESTDIR/usr/bin/prometheus"
@@ -106,9 +152,15 @@ install -m 755 "/tmp/prometheus-${PROM_VERSION}.linux-amd64/promtool" "$DESTDIR/
 rm -rf /tmp/prometheus*
 
 # Install Grafana
-echo "Installing Grafana"
 GRAFANA_VERSION="12.2.1"
-curl -L "https://dl.grafana.com/oss/release/grafana-${GRAFANA_VERSION}.linux-amd64.tar.gz" -o /tmp/grafana.tar.gz
+echo "Installing Grafana version ${GRAFANA_VERSION}"
+
+download_and_cache_tarball \
+    "grafana" \
+    "${GRAFANA_VERSION}" \
+    "https://dl.grafana.com/oss/release/grafana-${GRAFANA_VERSION}.linux-amd64.tar.gz" \
+    "/tmp/grafana.tar.gz"
+
 tar -xzf /tmp/grafana.tar.gz -C /tmp
 mkdir -p "$DESTDIR/usr/share/grafana"
 mkdir -p "$DESTDIR/usr/sbin"
