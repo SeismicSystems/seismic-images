@@ -24,7 +24,6 @@ for service in \
     network-setup.service \
     logrotate.service \
     fluent-bit.service \
-    wait-for-key.service \
     searcher-firewall.service \
     dropbear.service \
     searcher-container.service \
