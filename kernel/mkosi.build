@@ -34,8 +34,16 @@ else
     # Clone if needed
     [[ ! -d "$build_dir" ]] && git clone --depth 1 --branch "v${KERNEL_VERSION}" "$KERNEL_REPO" "$build_dir"
 
-    # Build kernel
+    # Apply patches
     cd "$build_dir"
+    if [[ -d "$SRCDIR/kernel/patches" ]]; then
+        echo "Applying kernel patches..."
+        for patch in "$SRCDIR/kernel/patches"/*.patch; do
+            [[ -f "$patch" ]] && git apply --verbose "$patch" || echo "Warning: Failed to apply $patch"
+        done
+    fi
+
+    # Build kernel
     cp "$config_file" .config
     export KBUILD_BUILD_TIMESTAMP="$(date -u -d @${SOURCE_DATE_EPOCH:-$(date +%s)})"
     export KBUILD_BUILD_USER="mkosi" KBUILD_BUILD_HOST="mkosi-builder"
