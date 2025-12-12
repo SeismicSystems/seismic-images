@@ -13,24 +13,21 @@ boot when TDX is enabled, causing all block device operations to hang.
 
 Signed-off-by: Seismic <noreply@seismic.systems>
 ---
- kernel/dma/direct.c | 5 +++--
- 1 file changed, 3 insertions(+), 2 deletions(-)
+ kernel/dma/direct.c | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
 
 diff --git a/kernel/dma/direct.c b/kernel/dma/direct.c
 index 000000000000..111111111111 100644
 --- a/kernel/dma/direct.c
 +++ b/kernel/dma/direct.c
-@@ -175,8 +175,9 @@ void *dma_direct_alloc(struct device *dev, size_t size,
- 	 * allocations via CMA need to be marked as compound.
- 	 */
- 	if (force_dma_unencrypted(dev) && (gfp & __GFP_COMP)) {
+@@ -1,4 +1,4 @@
+-	if (force_dma_unencrypted(dev) && (gfp & __GFP_COMP)) {
 -		WARN_ON_ONCE(1);
 -		return NULL;
-+		/* Auto-clear __GFP_COMP for encrypted DMA instead of failing */
+-	}
++	if (force_dma_unencrypted(dev) && (gfp & __GFP_COMP))
 +		gfp &= ~__GFP_COMP;
-+		pr_debug("DMA: Cleared __GFP_COMP flag for encrypted device %s\n", dev_name(dev));
- 	}
++
 
- 	if (IS_ENABLED(CONFIG_DMA_DIRECT_REMAP) && !gfpflags_allow_blocking(gfp) &&
 --
 2.43.0
