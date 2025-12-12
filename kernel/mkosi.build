@@ -34,37 +34,9 @@ else
     # Clone if needed
     [[ ! -d "$build_dir" ]] && git clone --depth 1 --branch "v${KERNEL_VERSION}" "$KERNEL_REPO" "$build_dir"
 
-    # Apply TDX DMA fix
+    # No kernel patches needed - fix is via CONFIG_DMA_COHERENT_POOL=y
     cd "$build_dir"
-    echo "=== APPLYING TDX DMA FIX ==="
-
-    # First, let's see what we're dealing with
-    echo "Searching for force_dma_unencrypted + __GFP_COMP pattern..."
-    if grep -n "force_dma_unencrypted" kernel/dma/direct.c | grep "__GFP_COMP"; then
-        echo "Found the buggy pattern!"
-
-        # Show context before fix
-        echo "Code BEFORE fix:"
-        grep -B 2 -A 5 "force_dma_unencrypted.*__GFP_COMP" kernel/dma/direct.c | head -10
-
-        # Apply the fix: replace WARN + return NULL with gfp &= ~__GFP_COMP
-        perl -i -pe '
-            if (/force_dma_unencrypted.*__GFP_COMP/) {
-                $_ .= "\t\t/* TDX FIX: Clear __GFP_COMP instead of failing */\n\t\tgfp &= ~__GFP_COMP;\n";
-            }
-            $_ = "" if /^\s*WARN_ON_ONCE.*1.*\);?$/;
-            $_ = "" if /^\s*return NULL;/ and $last_was_warn;
-            $last_was_warn = /WARN_ON_ONCE/;
-        ' kernel/dma/direct.c
-
-        echo "✓ Fix applied!"
-        echo "Code AFTER fix:"
-        grep -B 2 -A 5 "force_dma_unencrypted.*__GFP_COMP" kernel/dma/direct.c | head -10
-    else
-        echo "⚠ Bug pattern not found - checking if already patched or different kernel"
-    fi
-
-    echo "=== PATCHES COMPLETE ==="
+    echo "Kernel source ready for build"
 
     # Build kernel
     cp "$config_file" .config
