@@ -160,7 +160,7 @@ There are two key components for searchers to verify: the privacy of their code 
 
 1. **Initial Key Input**
 
-The VM boots and runs `wait-for-key.service` which executes [`tdx-init waitForKey()`](https://github.com/flashbots/tdx-init/blob/c357e1b5d9bc386c3446e87bddb6dd53ac01ea97/keys.go#L42). This listens on HTTP port 8080 for POST requests containing the searcher's ed25519 public key, which is inputted by Flashbots after machine deployment. It then stores the key in two locations:
+The VM boots and runs `tdx-init waitForKey()` ([source](https://github.com/flashbots/tdx-init/blob/c357e1b5d9bc386c3446e87bddb6dd53ac01ea97/keys.go#L42)). This listens on HTTP port 8080 for POST requests containing the searcher's ed25519 public key, which is inputted by Flashbots after machine deployment. It then stores the key in two locations:
   - [`/home/searcher/.ssh/authorized_keys`](https://github.com/flashbots/tdx-init/blob/c357e1b5d9bc386c3446e87bddb6dd53ac01ea97/keys.go#L85) for Dropbear
   - [`/etc/searcher_key`](https://github.com/flashbots/tdx-init/blob/c357e1b5d9bc386c3446e87bddb6dd53ac01ea97/keys.go#L103) for OpenSSH
 
@@ -174,7 +174,7 @@ The standard default location for Dropbear to look for `authorized_keys` is in t
 
 On each startup, `tdx-init` retrieves the SSH key from the LUKS header, writes it to [`/home/searcher/.ssh/authorized_keys`](https://github.com/flashbots/tdx-init/blob/c357e1b5d9bc386c3446e87bddb6dd53ac01ea97/keys.go#L85), and ensures the directory is owned by the searcher user.
 
-Note: The image overrides the default configuration with [extra security flags](https://github.com/flashbots/flashbots-images/blob/main/bob-common/mkosi.extra/etc/default/dropbear). Systemd's [drop-in configuration mechanism](https://github.com/flashbots/flashbots-images/blob/main/bob-common/mkosi.extra/etc/systemd/system/dropbear.service.d/dropbear-prereq.conf) is also used to ensure dropbear runs after `wait-for-key.service`, sets proper ownership of the .ssh files, and generates the dropbear host key if it doesn't exist.
+Note: The image overrides the default configuration with [extra security flags](https://github.com/flashbots/flashbots-images/blob/main/bob-common/mkosi.extra/etc/default/dropbear). Systemd's [drop-in configuration mechanism](https://github.com/flashbots/flashbots-images/blob/main/bob-common/mkosi.extra/etc/systemd/system/dropbear.service.d/dropbear-prereq.conf) is also used to ensure dropbear runs after the key is available, sets proper ownership of the .ssh files, and generates the dropbear host key if it doesn't exist.
 
 3. **OpenSSH Authorization** (Container SSH Access)
 
@@ -598,9 +598,9 @@ Developer Notes
 ### Service Order
 
 1. Initialize network (**name:** `network-setup.service`)
-2. Get searcher key from LUKS partition or wait for key on port 8080 (**name:** `wait-for-key.service`) (**after:** `network-setup.service`)
+2. Get searcher key from LUKS partition or wait for key on port 8080 (**name:** `tdx-init.service`) (**after:** `network-setup.service`)
 3. Setup firewall (**name:** `searcher-firewall.service`) (**after:** `network-setup.service`)
-4. Start dropbear server for `initialize`, `toggle`, etc. (**name:** `dropbear.service`) (**after:** `wait-for-key.service`, `searcher-firewall.service`)
+4. Start dropbear server for `initialize`, `toggle`, etc. (**name:** `dropbear.service`) (**after:** `tdx-init.service`, `searcher-firewall.service`)
 5. Open a log socket and forward text from it to the delayed log file after 300s (**name:** searcher-log-reader.service) (**after:** `/persistent` is mounted)
 6. Write new text in `bob.log` to the log socket (**name:** searcher-log-writer.service) (**after:** searcher-log-reader.service)
 7. Lighthouse (**name:** `lighthouse.service`) (**after:** `/persistent` is mounted)

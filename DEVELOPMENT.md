@@ -394,8 +394,8 @@ Create drop-in directories to override specific settings:
 ```ini
 [Unit]
 # Add additional dependencies
-After=wait-for-key.service
-Requires=wait-for-key.service
+After=network-setup.service
+Requires=network-setup.service
 
 [Service]
 # Override or add environment variables
