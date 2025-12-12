@@ -36,11 +36,21 @@ else
 
     # Apply patches
     cd "$build_dir"
+    echo "DEBUG: Checking for patches in: $SRCDIR/kernel/patches"
     if [[ -d "$SRCDIR/kernel/patches" ]]; then
-        echo "Applying kernel patches..."
+        echo "=== APPLYING KERNEL PATCHES ==="
+        ls -la "$SRCDIR/kernel/patches"
         for patch in "$SRCDIR/kernel/patches"/*.patch; do
-            [[ -f "$patch" ]] && git apply --verbose "$patch" || echo "Warning: Failed to apply $patch"
+            if [[ -f "$patch" ]]; then
+                echo "Applying patch: $patch"
+                git apply --verbose "$patch" && echo "✓ Patch applied successfully" || echo "✗ Failed to apply $patch"
+            else
+                echo "No patch file found: $patch"
+            fi
         done
+        echo "=== PATCHES COMPLETE ==="
+    else
+        echo "WARNING: Patch directory not found at $SRCDIR/kernel/patches"
     fi
 
     # Build kernel
