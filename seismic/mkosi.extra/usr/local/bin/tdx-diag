@@ -1,0 +1,147 @@
+#!/bin/bash
+# TDX Diagnostics - Wrapper script for disk lseek diagnostic tests
+
+DIAG_DIR="/usr/local/lib/tdx-diagnostics"
+
+show_help() {
+    cat << EOF
+TDX Disk Diagnostics Tool
+
+Usage: tdx-diag [COMMAND] [OPTIONS]
+
+Commands:
+    list              List all available tests
+    run <number>      Run a specific test (1-5)
+    run-all           Run all tests in sequence
+    monitor           Monitor a hanging process
+    help              Show this help message
+
+Options:
+    --disk DEVICE     Specify device (default: /dev/nvme0n2)
+
+Examples:
+    tdx-diag list
+    tdx-diag run 1
+    tdx-diag run 2 --disk /dev/sdb
+    tdx-diag run-all
+    tdx-diag monitor 1234
+
+Tests:
+    1. Basic disk operations (baseline)
+    2. Minimal lseek hang test
+    3. O_DIRECT combinations test
+    4. Cryptsetup ioctl sequence
+    5. With crypto sockets test
+
+For detailed documentation, see: $DIAG_DIR/README.md
+EOF
+}
+
+list_tests() {
+    echo "Available diagnostic tests:"
+    echo ""
+    echo "  1. 1_basic_disk_ops.py         - Basic disk operations (start here)"
+    echo "  2. 2_minimal_lseek_hang.py     - Minimal lseek hang reproduction"
+    echo "  3. 3_odirect_combinations.py   - O_DIRECT flag combinations"
+    echo "  4. 4_cryptsetup_ioctl_sequence.py - Cryptsetup ioctl sequence"
+    echo "  5. 5_with_crypto_sockets.py    - Test with crypto sockets"
+    echo ""
+    echo "  * check_kernel_hang_state.py   - Monitor hanging processes"
+    echo ""
+    echo "Run with: tdx-diag run <number> [--disk DEVICE]"
+}
+
+run_test() {
+    local test_num="$1"
+    shift
+    local args="$@"
+
+    case "$test_num" in
+        1)
+            echo "Running: Basic disk operations test"
+            "$DIAG_DIR/1_basic_disk_ops.py" $args
+            ;;
+        2)
+            echo "Running: Minimal lseek hang test (may hang - use timeout)"
+            timeout 10 "$DIAG_DIR/2_minimal_lseek_hang.py" $args
+            ;;
+        3)
+            echo "Running: O_DIRECT combinations test"
+            timeout 30 "$DIAG_DIR/3_odirect_combinations.py" $args
+            ;;
+        4)
+            echo "Running: Cryptsetup ioctl sequence (may hang - use timeout)"
+            timeout 10 "$DIAG_DIR/4_cryptsetup_ioctl_sequence.py" $args
+            ;;
+        5)
+            echo "Running: With crypto sockets test"
+            timeout 10 "$DIAG_DIR/5_with_crypto_sockets.py" $args
+            ;;
+        *)
+            echo "Error: Invalid test number. Use 1-5."
+            echo "Run 'tdx-diag list' to see available tests."
+            exit 1
+            ;;
+    esac
+}
+
+run_all() {
+    local args="$@"
+
+    echo "=========================================="
+    echo "TDX Disk Diagnostics - Full Test Suite"
+    echo "=========================================="
+    echo ""
+
+    for i in {1..5}; do
+        echo "[Test $i/5]"
+        run_test $i $args
+        echo ""
+    done
+
+    echo "=========================================="
+    echo "All tests completed"
+    echo "=========================================="
+}
+
+monitor() {
+    local pid="$1"
+    if [ -z "$pid" ]; then
+        "$DIAG_DIR/check_kernel_hang_state.py"
+    else
+        "$DIAG_DIR/check_kernel_hang_state.py" "$pid"
+    fi
+}
+
+# Main command processing
+case "${1:-help}" in
+    list)
+        list_tests
+        ;;
+    run)
+        if [ -z "$2" ]; then
+            echo "Error: Please specify a test number (1-5)"
+            echo "Usage: tdx-diag run <number> [--disk DEVICE]"
+            exit 1
+        fi
+        shift
+        run_test "$@"
+        ;;
+    run-all)
+        shift
+        run_all "$@"
+        ;;
+    monitor)
+        shift
+        monitor "$@"
+        ;;
+    help|--help|-h)
+        show_help
+        ;;
+    *)
+        echo "Error: Unknown command '$1'"
+        echo ""
+        show_help
+        exit 1
+        ;;
+esac
