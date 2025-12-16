@@ -3,8 +3,18 @@ set -euo pipefail
 
 CONFIG_FILE="/persistent/conf/node.json"
 
-# Default args as a string
-DEFAULT_ARGS='run --engine-ipc-path /var/volatile/reth_engine_api.ipc --genesis-path /persistent/summit/genesis.toml --store-path /persistent/summit/db --key-store-path /persistent/summit/keys --port 18551 --rpc-port 3030 --prom-port 9002 --db-prefix quarts'
+DEFAULT_ARGS=(
+    run
+    --engine-ipc-path /var/volatile/reth_engine_api.ipc
+    --genesis-path /persistent/summit/genesis.toml
+    --store-path /persistent/summit/db
+    --key-store-path /persistent/summit/keys
+    --port 18551
+    --rpc-port 3030
+    --prom-port 9002
+    --db-prefix quarts
+    --checkpoint-or-default /persistent/summit/db/checkpoint
+)
 
 # Extract custom args if config exists
 CUSTOM_ARGS=""
@@ -17,4 +27,4 @@ fi
 export RUST_LOG=$RUST_LOG
 
 # Execute summit with defaults + custom args
-exec /usr/bin/summit $DEFAULT_ARGS $CUSTOM_ARGS --log-level $RUST_LOG
+exec /usr/bin/summit "${DEFAULT_ARGS[@]}" $CUSTOM_ARGS --log-level $RUST_LOG
