@@ -19,8 +19,8 @@ ExecStartPre=/usr/bin/summit keys generate -n --key-store-path /persistent/summi
 ExecStart=/usr/bin/start-summit
 
 # Disabling on testnet
-Restart=on-failure
-RestartSec=10
+# Restart=on-failure
+# RestartSec=10
 StandardOutput=journal
 StandardError=journal
 

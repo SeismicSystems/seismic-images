@@ -18,8 +18,9 @@ ExecStartPre=+/bin/chmod g+s /persistent/reth
 
 ExecStart=/usr/bin/start-reth
 
-Restart=on-failure
-RestartSec=10
+# Disabling on testnet
+# Restart=on-failure
+# RestartSec=10
 StandardOutput=journal
 StandardError=journal
 
