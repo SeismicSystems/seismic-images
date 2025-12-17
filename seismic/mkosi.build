@@ -13,7 +13,7 @@ mkosi-chroot bash -c '
 
 # Branches & commit hashes for reproducible builds
 RETH_COMMIT="4141f746b6169f5afeb7a94b9bf087cc2fe35221"
-ENCLAVE_COMMIT="074aa8336bff2db21dc4b0e4453397c191d93c6d"
+ENCLAVE_COMMIT="76ed0151b655ea347bc096534431774c650a7a2e"
 SUMMIT_COMMIT="846ad5a2e1ccb5173f8fddd8e052acc270730171"
 STAKING_COMMIT="cb410b3a9a61b5f0cc48c67f527d3c1875db55ed"
 
