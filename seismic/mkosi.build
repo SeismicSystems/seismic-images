@@ -51,7 +51,7 @@ ENCLAVE_BUILD_CMD="
     export CARGO_PROFILE_RELEASE_OPT_LEVEL='z'
 
     cargo fetch
-    cargo build --release --frozen --bin seismic-enclave-server
+    cargo build --release --frozen --bin seismic-enclave-server --features systemctl
 "
 make_git_package \
     "enclave" \
