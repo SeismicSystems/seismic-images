@@ -1,7 +1,7 @@
 [Unit]
 Description=Summit Consensus Server
 After=network.target persistent-mount.service nginx-ssl-setup.service enclave.service reth.service
-Requires=persistent-mount.service nginx-ssl-setup.service enclave.service reth.service
+Requires=persistent-mount.service nginx-ssl-setup.service
 
 [Service]
 Type=simple
@@ -18,6 +18,7 @@ ExecStartPre=/usr/bin/summit keys generate -n --key-store-path /persistent/summi
 
 ExecStart=/usr/bin/start-summit
 
+# Disabling on testnet
 Restart=on-failure
 RestartSec=10
 StandardOutput=journal
