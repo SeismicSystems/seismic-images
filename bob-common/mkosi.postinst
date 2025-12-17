@@ -27,6 +27,7 @@ for service in \
     searcher-firewall.service \
     dropbear.service \
     searcher-container.service \
+    wait-for-key.service \
     ssh-pubkey-server.service \
     cvm-reverse-proxy.service
 do
