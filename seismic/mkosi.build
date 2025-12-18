@@ -14,7 +14,7 @@ mkosi-chroot bash -c '
 # Branches & commit hashes for reproducible builds
 RETH_COMMIT="4141f746b6169f5afeb7a94b9bf087cc2fe35221"
 ENCLAVE_COMMIT="d6c4badd0ee5639a432e96d3cced228cbf5fa3b3"
-SUMMIT_COMMIT="846ad5a2e1ccb5173f8fddd8e052acc270730171"
+SUMMIT_COMMIT="2435d1b5c762c170cf68a67ef5300052d2d66265"
 STAKING_COMMIT="cb410b3a9a61b5f0cc48c67f527d3c1875db55ed"
 
 # Build seismic-reth
