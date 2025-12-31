@@ -6,3 +6,5 @@ Requires=persistent-mount.service
 [Service]
 Type=oneshot
 ExecStart=/usr/bin/certbot renew --quiet --nginx --config-dir /persistent/conf/certbot --work-dir /persistent/conf/certbot/work --logs-dir /persistent/conf/certbot/logs
+
+# TODO: create lockfile when snapshots are running; don't run this until it's deleted
