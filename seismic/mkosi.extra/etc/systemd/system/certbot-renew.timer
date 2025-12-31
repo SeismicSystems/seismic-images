@@ -1,8 +1,8 @@
 [Unit]
-Description=Run certbot renewal twice daily
+Description=Run certbot renewal once monthly
 
 [Timer]
-OnCalendar=*-*-* 00,12:00:00
+OnCalendar=*-*-01 02:00:00
 RandomizedDelaySec=1h
 Persistent=true
 
