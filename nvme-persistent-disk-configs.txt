@@ -1,0 +1,115 @@
+NVMe and Persistent Disk Related Kernel Configuration Differences
+================================================================
+
+CRITICAL NVMe Configuration Changes:
+-----------------------------------
+CONFIG_NVME_FABRICS m -> y               # NVMe over Fabrics support
+CONFIG_NVME_FC m -> y                    # NVMe over Fibre Channel
+CONFIG_NVME_TARGET m -> y                # NVMe target support
+CONFIG_NVME_TCP m -> y                   # NVMe over TCP
+CONFIG_NVME_VERBOSE_ERRORS n -> y        # Enable verbose NVMe error reporting
+
+NVMe Features Disabled in Seismic:
+----------------------------------
+-CONFIG_NVME_HWMON y                     # Hardware monitoring for NVMe
+-CONFIG_NVME_RDMA m                      # NVMe over RDMA
+-CONFIG_NVME_TARGET_FCLOOP n             # FC loopback target
+-CONFIG_NVME_TARGET_PCI_EPF m            # PCI endpoint function target
+-CONFIG_NVME_TARGET_RDMA m               # RDMA target
+-CONFIG_NVME_TARGET_TCP_TLS y            # TLS for TCP target
+
+CONFIG_NVME_TARGET_AUTH y -> n           # Authentication disabled
+CONFIG_NVME_TARGET_FC m -> n             # FC target disabled
+CONFIG_NVME_TARGET_LOOP m -> n           # Loopback target disabled
+CONFIG_NVME_TARGET_PASSTHRU y -> n       # Passthrough disabled
+CONFIG_NVME_TARGET_TCP m -> n            # TCP target disabled
+CONFIG_NVME_TCP_TLS y -> n               # TLS for TCP disabled
+
+Block Device Storage Configuration:
+-----------------------------------
+CONFIG_BLK_DEV_RAM m -> y                # RAM disk support enabled
+CONFIG_BLK_DEV_RAM_COUNT 16 -> 1         # Reduced RAM disk count
+CONFIG_BLK_DEV_RAM_SIZE 65536 -> 6144    # Reduced RAM disk size
+
+CONFIG_BLK_DEV_BSG y -> n                # Block SCSI generic disabled
+CONFIG_BLK_DEV_MD y -> n                 # Multiple device support disabled
+CONFIG_BLK_DEV_ZONED y -> n              # Zoned block device support disabled
+
+Block Device Features Disabled:
+-------------------------------
+-CONFIG_BLK_DEV_IO_TRACE y               # Block I/O tracing
+-CONFIG_BLK_DEV_PMEM m                   # Persistent memory block device
+-CONFIG_BLK_DEV_RNBD y                   # Remote network block device
+-CONFIG_BLK_DEV_RNBD_CLIENT m            # RNBD client
+-CONFIG_BLK_DEV_RNBD_SERVER m            # RNBD server
+
+Device Mapper and Encryption (CRITICAL for GCP Persistent Disks):
+=================================================================
+CONFIG_DM_CRYPT m -> y                   # Device mapper crypto target ENABLED
+CONFIG_DM_BUFIO m -> y                   # Device mapper buffered I/O ENABLED  
+CONFIG_DM_INTEGRITY m -> y               # Device mapper integrity ENABLED
+
+Device Mapper Features Disabled:
+--------------------------------
+CONFIG_DM_INIT y -> n                    # Device mapper init disabled
+CONFIG_DM_UEVENT y -> n                  # Device mapper uevents disabled
+
+Encryption and Cryptographic Features:
+======================================
+CONFIG_CRYPTO_AES_NI_INTEL m -> y       # Intel AES-NI acceleration ENABLED
+CONFIG_CRYPTO_AES_TI m -> y              # AES table implementation ENABLED
+CONFIG_CRYPTO_AUTHENC m -> y             # Authenticated encryption ENABLED
+CONFIG_CRYPTO_BLAKE2B m -> y             # BLAKE2b hash ENABLED
+CONFIG_CRYPTO_CMAC m -> y                # CMAC authentication ENABLED
+CONFIG_CRYPTO_CTR y -> m                 # CTR mode changed to module
+CONFIG_CRYPTO_DES m -> y                 # DES encryption ENABLED
+CONFIG_CRYPTO_ESSIV m -> y               # ESSIV support ENABLED
+CONFIG_CRYPTO_GCM y -> m                 # GCM mode changed to module
+CONFIG_CRYPTO_GHASH y -> m               # GHASH changed to module
+CONFIG_CRYPTO_LIB_DES m -> y             # DES library ENABLED
+
+Encryption Features Disabled:
+-----------------------------
+CONFIG_BLK_INLINE_ENCRYPTION y -> n     # Block layer inline encryption DISABLED
+CONFIG_FS_ENCRYPTION y -> n             # Filesystem encryption DISABLED
+CONFIG_ENCRYPTED_KEYS y -> n            # Encrypted keys DISABLED
+
+Virtualization Storage:
+======================
+CONFIG_VIRTIO_BALLOON m -> y            # VirtIO balloon driver ENABLED
+CONFIG_VIRTIO_DMA_SHARED_BUFFER m -> y   # VirtIO DMA shared buffer ENABLED
+CONFIG_VIRTIO_VSOCKETS m -> y           # VirtIO sockets ENABLED
+CONFIG_DRM_VIRTIO_GPU m -> y             # VirtIO GPU ENABLED
+CONFIG_HW_RANDOM_VIRTIO m -> y           # VirtIO RNG ENABLED
+
+VirtIO Features Disabled:
+------------------------
+-CONFIG_VIRTIO_MEM m                     # VirtIO memory
+-CONFIG_VIRTIO_PMEM m                    # VirtIO persistent memory
+CONFIG_VIRTIO_FS m -> n                  # VirtIO filesystem disabled
+
+SCSI Subsystem Changes:
+======================
+CONFIG_SCSI_FC_ATTRS m -> y             # Fibre Channel attributes ENABLED
+
+Most SCSI drivers disabled including:
+- All major RAID controllers (3ware, AACRAID, etc.)
+- All SAS/SATA controllers
+- FC/iSCSI initiators and targets
+- Debug and logging features
+
+Summary for NVMe Persistent Disks:
+==================================
+1. Core NVMe support appears intact (base NVMe driver not shown = likely still enabled)
+2. NVMe over network protocols (TCP, FC) are ENABLED
+3. Device mapper crypto is ENABLED - critical for encrypted persistent disks
+4. VirtIO drivers are ENABLED - important for GCP virtualization
+5. Hardware crypto acceleration (AES-NI) is ENABLED
+6. Block device RAM disk support is optimized for minimal usage
+7. Most legacy storage controllers and protocols are DISABLED
+
+Key concerns for persistent disk functionality:
+- NVMe hardware monitoring is disabled (may affect diagnostics)
+- Block I/O tracing is disabled (may affect debugging)
+- Device mapper uevents are disabled (may affect auto-mounting)
+- Filesystem encryption is disabled (relies on device-level encryption)

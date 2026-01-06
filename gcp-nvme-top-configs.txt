@@ -1,0 +1,192 @@
+Top 20 Most Critical Kernel Configs for GCP VMs with NVMe Persistent Disks
+==========================================================================
+
+Legend: U = Enabled in Ubuntu config, S = Enabled in Seismic config
+
+PRIORITY 1: CRITICAL FOR GCP PERSISTENT DISKS
+=============================================
+
+1. Device Mapper Crypto Stack (ENCRYPTION SUPPORT)
+   CONFIG_DM_CRYPT m -> y                    [U=module, S=built-in]
+   CONFIG_DM_BUFIO m -> y                    [U=module, S=built-in] 
+   CONFIG_DM_INTEGRITY m -> y                [U=module, S=built-in]
+   
+   Meaning: Device mapper cryptographic target for encrypted persistent disks.
+   GCP persistent disks are encrypted by default. DM_CRYPT provides transparent
+   disk encryption, DM_BUFIO handles buffered I/O for crypto operations, and
+   DM_INTEGRITY provides data integrity checking. These being built-in (y) vs
+   module (m) in seismic means faster boot and no module loading delays.
+
+2. Hardware Crypto Acceleration
+   CONFIG_CRYPTO_AES_NI_INTEL m -> y         [U=module, S=built-in]
+   CONFIG_CRYPTO_AES_TI m -> y               [U=module, S=built-in]
+   CONFIG_CRYPTO_AUTHENC m -> y              [U=module, S=built-in]
+   
+   Meaning: Intel AES-NI hardware acceleration for encryption/decryption.
+   Critical for performance with encrypted persistent disks. AES_TI is table-based
+   AES implementation, AUTHENC provides authenticated encryption modes.
+
+PRIORITY 2: NVMe DIAGNOSTICS AND MONITORING
+===========================================
+
+3. NVMe Error Reporting
+   CONFIG_NVME_VERBOSE_ERRORS n -> y         [U=disabled, S=enabled]
+   
+   Meaning: Enables detailed NVMe error messages. Seismic enables this while
+   Ubuntu disables it. Critical for debugging NVMe issues in production.
+
+4. NVMe Hardware Monitoring (DISABLED IN SEISMIC!)
+   -CONFIG_NVME_HWMON y                      [U=enabled, S=MISSING]
+   
+   Meaning: Exposes NVMe drive health metrics via hwmon interface. Ubuntu has
+   this but Seismic removes it entirely. This could impact monitoring drive
+   health, temperature, and wear leveling in GCP environments.
+
+5. Block I/O Tracing (DISABLED IN SEISMIC!)
+   -CONFIG_BLK_DEV_IO_TRACE y                [U=enabled, S=MISSING]
+   
+   Meaning: Kernel block I/O tracing infrastructure. GCP monitoring systems
+   likely use this for disk performance metrics. Seismic completely removes it.
+
+PRIORITY 3: GCP VIRTUALIZATION LAYER
+====================================
+
+6. VirtIO Core Drivers (ENABLED IN SEISMIC)
+   CONFIG_VIRTIO_BALLOON m -> y             [U=module, S=built-in]
+   CONFIG_VIRTIO_VSOCKETS m -> y            [U=module, S=built-in]
+   CONFIG_VIRTIO_DMA_SHARED_BUFFER m -> y   [U=module, S=built-in]
+   
+   Meaning: VirtIO balloon for dynamic memory management, VirtIO sockets for
+   host-guest communication, and DMA shared buffers. All made built-in for
+   better performance in GCP VMs.
+
+7. VirtIO Advanced Features (DISABLED IN SEISMIC!)
+   -CONFIG_VIRTIO_MEM m                      [U=module, S=MISSING]
+   -CONFIG_VIRTIO_PMEM m                     [U=module, S=MISSING]
+   
+   Meaning: VirtIO memory hotplug and persistent memory. Ubuntu includes these
+   but Seismic removes them. Could affect memory scaling features in GCP.
+
+PRIORITY 4: DEVICE DETECTION AND EVENTS
+=======================================
+
+8. Device Mapper Events (DISABLED IN SEISMIC!)
+   CONFIG_DM_UEVENT y -> n                  [U=enabled, S=disabled]
+   
+   Meaning: Device mapper uevent notifications to userspace. Critical for
+   auto-mounting and device detection. Disabling this could break automatic
+   persistent disk mounting in GCP.
+
+9. Block Device Generic Interface (DISABLED IN SEISMIC!)
+   CONFIG_BLK_DEV_BSG y -> n                [U=enabled, S=disabled]
+   
+   Meaning: Block SCSI Generic interface for sending raw SCSI commands.
+   Some GCP disk management tools may require this.
+
+PRIORITY 5: NVME NETWORK PROTOCOLS
+==================================
+
+10. NVMe over TCP/FC (ENABLED IN SEISMIC)
+    CONFIG_NVME_FABRICS m -> y              [U=module, S=built-in]
+    CONFIG_NVME_TCP m -> y                  [U=module, S=built-in]
+    CONFIG_NVME_FC m -> y                   [U=module, S=built-in]
+    
+    Meaning: NVMe over network fabrics support. While local NVMe doesn't need
+    this, GCP may use network-attached storage in some configurations.
+
+11. NVMe Target Features (MOSTLY DISABLED IN SEISMIC!)
+    CONFIG_NVME_TARGET m -> y               [U=module, S=built-in]
+    CONFIG_NVME_TARGET_AUTH y -> n          [U=enabled, S=disabled]
+    CONFIG_NVME_TARGET_PASSTHRU y -> n      [U=enabled, S=disabled]
+    
+    Meaning: NVMe target mode (making VM act as NVMe device). Authentication
+    and passthrough disabled in Seismic. Likely not needed for standard GCP VMs.
+
+PRIORITY 6: MEMORY AND STORAGE OPTIMIZATION
+===========================================
+
+12. RAM Disk Configuration (OPTIMIZED IN SEISMIC)
+    CONFIG_BLK_DEV_RAM m -> y               [U=module, S=built-in]
+    CONFIG_BLK_DEV_RAM_COUNT 16 -> 1        [U=16 devices, S=1 device]
+    CONFIG_BLK_DEV_RAM_SIZE 65536 -> 6144   [U=64MB, S=6MB]
+    
+    Meaning: RAM disk support with reduced count and size in Seismic.
+    Optimized for minimal resource usage while maintaining functionality.
+
+13. Block Device Zoned Storage (DISABLED IN SEISMIC!)
+    CONFIG_BLK_DEV_ZONED y -> n             [U=enabled, S=disabled]
+    
+    Meaning: Support for zoned storage devices (SMR drives, NVMe ZNS).
+    Some newer NVMe drives support zoned namespaces.
+
+PRIORITY 7: ENCRYPTION ALGORITHMS
+=================================
+
+14. Core Crypto Modes
+    CONFIG_CRYPTO_CTR y -> m                [U=built-in, S=module]
+    CONFIG_CRYPTO_GCM y -> m                [U=built-in, S=module]
+    CONFIG_CRYPTO_GHASH y -> m              [U=built-in, S=module]
+    
+    Meaning: Counter mode, Galois/Counter mode, and GHASH for authenticated
+    encryption. Ubuntu has built-in, Seismic makes them modules. Could affect
+    crypto performance.
+
+15. Advanced Encryption (DISABLED IN SEISMIC!)
+    CONFIG_BLK_INLINE_ENCRYPTION y -> n     [U=enabled, S=disabled]
+    CONFIG_FS_ENCRYPTION y -> n             [U=enabled, S=disabled]
+    
+    Meaning: Block layer inline encryption and filesystem encryption.
+    Seismic disables these, relying on device-mapper encryption instead.
+
+PRIORITY 8: LEGACY STORAGE SUPPORT
+==================================
+
+16. Software RAID (DISABLED IN SEISMIC!)
+    CONFIG_BLK_DEV_MD y -> n                [U=enabled, S=disabled]
+    CONFIG_DM_INIT y -> n                   [U=enabled, S=disabled]
+    
+    Meaning: Multiple device (software RAID) support and device mapper
+    initialization. GCP typically handles redundancy at infrastructure level.
+
+17. Network Block Devices (DISABLED IN SEISMIC!)
+    -CONFIG_BLK_DEV_RNBD y                  [U=enabled, S=MISSING]
+    -CONFIG_BLK_DEV_RNBD_CLIENT m           [U=module, S=MISSING]
+    
+    Meaning: Remote network block device support. Could be used for
+    network-attached storage in some GCP configurations.
+
+PRIORITY 9: SCSI SUBSYSTEM
+==========================
+
+18. SCSI Core Features (MOSTLY DISABLED IN SEISMIC!)
+    CONFIG_SCSI_CONSTANTS y -> n            [U=enabled, S=disabled]
+    CONFIG_SCSI_LOGGING y -> n              [U=enabled, S=disabled] 
+    CONFIG_SCSI_SCAN_ASYNC y -> n           [U=enabled, S=disabled]
+    
+    Meaning: SCSI error constants, debug logging, and async scanning.
+    While NVMe doesn't use SCSI, some virtual storage might.
+
+PRIORITY 10: PERSISTENT MEMORY
+==============================
+
+19. Persistent Memory Block Device (DISABLED IN SEISMIC!)
+    -CONFIG_BLK_DEV_PMEM m                  [U=module, S=MISSING]
+    
+    Meaning: Persistent memory block device support. Could be relevant
+    for GCP's memory-optimized instances or future persistent memory offerings.
+
+20. VirtIO Graphics (ENABLED IN SEISMIC)
+    CONFIG_DRM_VIRTIO_GPU m -> y            [U=module, S=built-in]
+    
+    Meaning: VirtIO GPU driver for graphics in VMs. Made built-in in Seismic
+    for better performance, though not directly storage-related.
+
+SUMMARY:
+========
+Seismic config is SIGNIFICANTLY more restrictive than Ubuntu:
+- Focuses on core NVMe functionality with built-in crypto
+- Disables most monitoring, tracing, and diagnostic features  
+- Removes legacy storage protocols and RAID support
+- Optimizes VirtIO drivers for GCP environment
+- May impact troubleshooting and monitoring capabilities
+- Trades feature completeness for security and minimal attack surface
