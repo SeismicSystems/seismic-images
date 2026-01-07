@@ -8,12 +8,12 @@ mkdir -p "$DESTDIR/usr/bin"
 mkosi-chroot gcc -o "$DESTDIR/usr/bin/searchersh" "$SRCDIR/bob-common/searchersh.c"
 chmod 755 "$DESTDIR/usr/bin/searchersh"
 
-# Compile cryptsetup
+# Compile cryptsetup with debug symbols and logging
 make_git_package \
     "cryptsetup" \
     "9cfdd6ba068b375a2b6cda429b3f92388448dd67" \
     "https://gitlab.com/cryptsetup/cryptsetup" \
-    './autogen.sh && ./configure --with-crypto_backend=kernel --disable-veritysetup --disable-integritysetup --disable-asciidoc && make -j$(nproc)' \
+    './autogen.sh && ./configure --with-crypto_backend=kernel --disable-veritysetup --disable-integritysetup --disable-asciidoc --enable-debug && make -j$(nproc)' \
     ".libs/cryptsetup:/usr/sbin/cryptsetup" \
     ".libs/libcryptsetup.so.12.11.0:/usr/lib/libcryptsetup.so.12"
 
@@ -35,7 +35,7 @@ make_git_package \
 # Build tdx-init (using fork with JSON config support)
 make_git_package \
     "tdx-init" \
-    "660b1edb82360fde18710994b531fd8346cc9f5d" \
+    "3bf64914ea94f8eb13240e3467dfb42290930011" \
     "https://github.com/SeismicSystems/tdx-init" \
     'cd tdx-init-rs && cargo build --release --target-dir ./build' \
     "tdx-init-rs/build/release/tdx-init:/usr/bin/tdx-init"

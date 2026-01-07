@@ -38,12 +38,20 @@ setup: ## Install dependencies (Linux only)
 	@scripts/setup_deps.sh
 
 # Build module
-build: check-perms setup ## Build the specified module
+build: check-perms setup ## Build the specified module (default: baremetal, optionally specify PROFILE=azure|gcp)
+ifdef PROFILE
+	$(WRAPPER) mkosi --force --profile=$(PROFILE) -I $(IMAGE).conf
+else
 	$(WRAPPER) mkosi --force -I $(IMAGE).conf
+endif
 
 # Build module with devtools profile
-build-dev: check-perms setup ## Build module with development tools
+build-dev: check-perms setup ## Build module with development tools (default: baremetal, optionally specify PROFILE=azure|gcp)
+ifdef PROFILE
+	$(WRAPPER) mkosi --force --profile=devtools,$(PROFILE) -I $(IMAGE).conf
+else
 	$(WRAPPER) mkosi --force --profile=devtools -I $(IMAGE).conf
+endif
 
 ##@ Utilities
 

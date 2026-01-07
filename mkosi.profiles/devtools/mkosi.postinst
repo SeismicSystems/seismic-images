@@ -2,7 +2,7 @@
 set -euxo pipefail
 
 # Deterministically set root password
-PASSWORD="dqSPjo4p"
+PASSWORD="dev"
 HASH=$(mkosi-chroot openssl passwd -6 -salt salt "$PASSWORD")
 mkosi-chroot passwd -u root
 mkosi-chroot usermod -p "$HASH" root

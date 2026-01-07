@@ -105,7 +105,9 @@ if should_use_lima; then
     lima_exec "cd ~/mnt && /home/debian/.nix-profile/bin/nix develop -c ${cmd[*]@Q}"
 
     if is_mkosi_cmd; then
-        lima_exec "mkdir -p ~/mnt/build; mv '$mkosi_output'/* ~/mnt/build/ || true"
+        # Use cp -rf to merge directories (handles existing subdirs like gcp/)
+        # -r for recursive, -f to overwrite without prompting
+        lima_exec "mkdir -p ~/mnt/build && cp -rf '$mkosi_output'/* ~/mnt/build/ && rm -rf '$mkosi_output'/* || true"
 
         echo "Check ./build/ directory for output files"
         echo

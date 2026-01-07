@@ -1,11 +1,42 @@
 #!/bin/bash
 set -euxo pipefail
 
-EFI="${OUTPUTDIR}/tdx-debian.efi"
-TAR="${OUTPUTDIR}/tdx-debian.tar.gz"
-TMP="${OUTPUTDIR}/gcp-tmp"
+# Find the most recently modified .efi file in the output directory
+EFI_FILE=$(ls -t "${OUTPUTDIR}"/*.efi 2>/dev/null | head -n1)
 
-[ ! -f "$EFI" ] && echo "Error: $EFI not found" && exit 1
+if [ -z "$EFI_FILE" ] || [ ! -f "$EFI_FILE" ]; then
+    echo "Error: No .efi file found in ${OUTPUTDIR}"
+    exit 1
+fi
+
+echo "Using EFI file: $EFI_FILE"
+
+# Get the base name from the actual EFI file
+BASE_NAME=$(basename "$EFI_FILE" .efi)
+
+# Check if this is a dev build by looking for devtools profile marker
+IS_DEV=""
+if echo "${PROFILES:-}" | grep -q "devtools"; then
+    IS_DEV="dev-"
+fi
+
+# Generate timestamp in YYYYMMDDHHMMSS format
+TIMESTAMP=$(date -u +%Y%m%d%H%M%S)
+
+# Construct the output filename
+# For non-seismic/bob-l1 images (like tdx-debian), use old naming
+if [[ "$BASE_NAME" == "seismic" ]] || [[ "$BASE_NAME" == "bob-l1" ]]; then
+    OUTPUT_BASE="${BASE_NAME}-${IS_DEV}gcp-${TIMESTAMP}"
+else
+    OUTPUT_BASE="${BASE_NAME}"
+fi
+
+# Create gcp subdirectory
+GCP_DIR="${OUTPUTDIR}/gcp"
+mkdir -p "$GCP_DIR"
+
+TAR="${GCP_DIR}/${OUTPUT_BASE}.tar.gz"
+TMP="${OUTPUTDIR}/gcp-tmp"
 
 mkdir -p "$TMP"
 
@@ -14,8 +45,8 @@ DISK_GUID="12345678-1234-5678-1234-567812345678"
 PARTITION_GUID="87654321-4321-8765-4321-876543218765"
 FAT_SERIAL="12345678"
 
-# Create 500MB ESP
-dd if=/dev/zero of="$TMP/esp.img" bs=1M count=500
+# Create 1GB ESP
+dd if=/dev/zero of="$TMP/esp.img" bs=1M count=1024
 
 # Format with fixed volume serial number and label
 mformat -i "$TMP/esp.img" -F -v "ESP" -N "$FAT_SERIAL" ::
@@ -25,10 +56,10 @@ mmd -i "$TMP/esp.img" ::EFI ::EFI/BOOT
 
 # Copy files with deterministic timestamps
 # -D o sets file times to 1980-01-01 (DOS epoch)
-mcopy -D o -i "$TMP/esp.img" "$EFI" ::EFI/BOOT/BOOTX64.EFI
+mcopy -D o -i "$TMP/esp.img" "$EFI_FILE" ::EFI/BOOT/BOOTX64.EFI
 
-# Create 1GB disk with GPT
-dd if=/dev/zero of="$TMP/disk.raw" bs=1M count=1024
+# Create 2GB disk with GPT
+dd if=/dev/zero of="$TMP/disk.raw" bs=1M count=2048
 sgdisk --disk-guid="$DISK_GUID" "$TMP/disk.raw"
 
 # Create ESP partition
@@ -36,7 +67,7 @@ sgdisk --disk-guid="$DISK_GUID" "$TMP/disk.raw"
 # -t sets type (1:ef00 for ESP)
 # -u sets partition GUID
 # -c sets partition name
-sgdisk -n 1:2048:1026047 \
+sgdisk -n 1:2048:2099199 \
         -t 1:ef00 \
         -u 1:"$PARTITION_GUID" \
         -c 1:"ESP" \
@@ -47,7 +78,22 @@ sgdisk -n 1:2048:1026047 \
 dd if="$TMP/esp.img" of="$TMP/disk.raw" bs=512 seek=2048 conv=notrunc
 touch -d "2024-01-01 00:00:00 UTC" "$TMP/disk.raw" 2>/dev/null || true
 
+# Validate disk image (GCP requirement)
+if command -v qemu-img >/dev/null 2>&1; then
+    echo "Validating disk image with qemu-img check..."
+    qemu-img check "$TMP/disk.raw" || echo "Warning: qemu-img check reported issues"
+fi
+
 # Create GCP tar.gz
 tar --format=oldgnu -Sczf "$TAR" -C "$TMP" disk.raw
 
 rm -rf "$TMP"
+
+# Copy the EFI file with matching name (for measurements script)
+if [[ "$OUTPUT_BASE" != "$BASE_NAME" ]]; then
+    EFI_OUTPUT="${GCP_DIR}/${OUTPUT_BASE}.efi"
+    cp "$EFI_FILE" "$EFI_OUTPUT"
+    echo "Copied EFI file to: $EFI_OUTPUT"
+fi
+
+echo "Successfully created TAR.GZ: $TAR"

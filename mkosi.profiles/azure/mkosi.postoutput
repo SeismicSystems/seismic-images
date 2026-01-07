@@ -32,7 +32,11 @@ else
     OUTPUT_BASE="${BASE_NAME}"
 fi
 
-VHD_FILE="${OUTPUTDIR}/${OUTPUT_BASE}.vhd"
+# Create azure subdirectory
+AZURE_DIR="${OUTPUTDIR}/azure"
+mkdir -p "$AZURE_DIR"
+
+VHD_FILE="${AZURE_DIR}/${OUTPUT_BASE}.vhd"
 WORK_DIR="${OUTPUTDIR}/azure-tmp"
 
 echo "Converting $EFI_FILE to VHD format..."
@@ -80,7 +84,7 @@ rm -rf "$WORK_DIR"
 
 # Copy the EFI file with matching name (for measurements script)
 if [[ "$OUTPUT_BASE" != "$BASE_NAME" ]]; then
-    EFI_OUTPUT="${OUTPUTDIR}/${OUTPUT_BASE}.efi"
+    EFI_OUTPUT="${AZURE_DIR}/${OUTPUT_BASE}.efi"
     cp "$EFI_FILE" "$EFI_OUTPUT"
     echo "Copied EFI file to: $EFI_OUTPUT"
 fi
