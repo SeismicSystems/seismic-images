@@ -1,0 +1,13 @@
+[Unit]
+Description=TDX initialization (wait for node config via HTTP)
+After=network-online.target persistent-mount.service
+Wants=network-online.target
+Requires=persistent-mount.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/tdx-init wait-for-key
+RemainAfterExit=yes
+
+[Install]
+WantedBy=minimal.target

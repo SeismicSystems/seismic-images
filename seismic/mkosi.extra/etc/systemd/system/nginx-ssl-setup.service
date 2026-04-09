@@ -1,8 +1,8 @@
 [Unit]
 Description=Setup Nginx with SSL via Certbot
-After=network-online.target persistent-mount.service
+After=network-online.target persistent-mount.service tdx-init.service
 Wants=network-online.target
-Requires=persistent-mount.service
+Requires=persistent-mount.service tdx-init.service
 
 [Service]
 Type=oneshot

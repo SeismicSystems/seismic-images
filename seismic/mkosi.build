@@ -3,25 +3,16 @@ set -euxo pipefail
 
 source scripts/make_git_package.sh
 
-# Install Rust 1.91 via rustup in chroot (Debian cargo is too old)
-mkosi-chroot bash -c '
-    curl --proto =https --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain 1.91 --profile minimal --no-modify-path
-    export PATH="$HOME/.cargo/bin:$PATH"
-    rustc --version
-    cargo --version
-'
-
 # Branches & commit hashes for reproducible builds
-TDX_INIT_COMMIT="660b1edb82360fde18710994b531fd8346cc9f5d"
-RETH_COMMIT="a61f4f675a5797d17f043ae04eb3f43de7cbcebb"
-ENCLAVE_COMMIT="90d53fd7c49600d78d0ab815869d05e2f4187ca8"
-SUMMIT_COMMIT="695ddc7b13abfee4e2c1624fa9693a8700b8c28e"
-STAKING_COMMIT="cb410b3a9a61b5f0cc48c67f527d3c1875db55ed"
+TDX_INIT_COMMIT="e61d2e6cfd01d46ebf61310dcf4e329522c379aa"
+RETH_COMMIT="f2d9fcacba5dc3d06eaa8119d82833f2c2d37409"
+ENCLAVE_COMMIT="f90b02f38a6190e8b2ff2d051d9043f3480cd3ac"
+SUMMIT_COMMIT="82719ced40f21768f765d1ff62c25ceb1e9c0a39"
+STAKING_COMMIT="66cffcbb9e382e77d83fd3de110db24fdb6264de"
 
 # Build tdx-init (using Seismic fork with JSON config support)
 TDX_INIT_BUILD_CMD="
     cd tdx-init-rs
-    export PATH=\"\$HOME/.cargo/bin:\$PATH\"
     cargo build --release --target-dir ./build
 "
 make_git_package \
@@ -34,7 +25,6 @@ make_git_package \
 # Build seismic-reth
 RETH_BUILD_CMD="
     git checkout $RETH_COMMIT
-    export PATH=\"\$HOME/.cargo/bin:\$PATH\"
     export RUSTFLAGS='-C target-cpu=generic -C link-arg=-Wl,--build-id=none -C symbol-mangling-version=v0'
     export CARGO_PROFILE_RELEASE_LTO='thin'
     export CARGO_PROFILE_RELEASE_CODEGEN_UNITS='1'
@@ -56,7 +46,6 @@ make_git_package \
 # Build enclave (seismic-enclave-server)
 ENCLAVE_BUILD_CMD="
     git checkout $ENCLAVE_COMMIT
-    export PATH=\"\$HOME/.cargo/bin:\$PATH\"
     export RUSTFLAGS='-C target-cpu=generic -C link-arg=-Wl,--build-id=none -C symbol-mangling-version=v0'
     export CARGO_PROFILE_RELEASE_LTO='off'
     export CARGO_PROFILE_RELEASE_CODEGEN_UNITS='1'
@@ -77,7 +66,6 @@ make_git_package \
 # Build summit (summit)
 SUMMIT_BUILD_CMD="
     git checkout $SUMMIT_COMMIT
-    export PATH=\"\$HOME/.cargo/bin:\$PATH\"
     export RUSTFLAGS='-C target-cpu=generic -C link-arg=-Wl,--build-id=none -C symbol-mangling-version=v0'
     export CARGO_PROFILE_RELEASE_LTO='thin'
     export CARGO_PROFILE_RELEASE_CODEGEN_UNITS='1'

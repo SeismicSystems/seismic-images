@@ -35,8 +35,13 @@ chmod +x "$BUILDROOT/usr/bin/start-enclave"
 
 # Enable services
 mkdir -p "$BUILDROOT/etc/systemd/system/minimal.target.wants"
+# seismic-firewall: nftables rules (see seismic/mkosi.extra/etc/nftables/seismic.conf).
+# On Azure, a drop-in in mkosi.profiles/azure/ delays startup until
+# azure-complete-provisioning.service finishes.
 for service in \
-    openntpd.service \
+    persistent-mount.service \
+    seismic-firewall.service \
+    tdx-init.service \
     nginx-ssl-setup.service \
     tpm-permissions.service \
     reth.service \
