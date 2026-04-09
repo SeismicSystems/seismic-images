@@ -31,17 +31,8 @@ make_git_package() {
 
     local cache_dir="$BUILDDIR/${package}-${git_describe#${package}/}"
 
-    # Verify all artifacts are cached before using cache
-    local use_cache=false
+    # Use cached artifacts if available
     if [ -n "$cache_dir" ] && [ -d "$cache_dir" ] && [ "$(ls -A "$cache_dir" 2>/dev/null)" ]; then
-        use_cache=true
-        for artifact_map in "${@:5}"; do
-            [ -e "$cache_dir/$(echo "${artifact_map%%:*}" | tr '/' '_')" ] || use_cache=false
-        done
-    fi
-
-    # Use cached artifacts if all are available
-    if [ "$use_cache" = true ]; then
         echo "Using cached artifacts for $package version $version"
         echo "| \`$package\`  | \`$version\` (\`$git_describe\`)  | reused from cache  | \`$( du -sh $cache_dir | cut -f1 )\`  |   |" >> "$BUILDDIR/manifest.md"
         for artifact_map in "${@:5}"; do
