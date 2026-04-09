@@ -12,10 +12,24 @@ mkosi-chroot bash -c '
 '
 
 # Branches & commit hashes for reproducible builds
+TDX_INIT_COMMIT="660b1edb82360fde18710994b531fd8346cc9f5d"
 RETH_COMMIT="a61f4f675a5797d17f043ae04eb3f43de7cbcebb"
 ENCLAVE_COMMIT="90d53fd7c49600d78d0ab815869d05e2f4187ca8"
 SUMMIT_COMMIT="695ddc7b13abfee4e2c1624fa9693a8700b8c28e"
 STAKING_COMMIT="cb410b3a9a61b5f0cc48c67f527d3c1875db55ed"
+
+# Build tdx-init (using Seismic fork with JSON config support)
+TDX_INIT_BUILD_CMD="
+    cd tdx-init-rs
+    export PATH=\"\$HOME/.cargo/bin:\$PATH\"
+    cargo build --release --target-dir ./build
+"
+make_git_package \
+    "tdx-init" \
+    "$TDX_INIT_COMMIT" \
+    "https://github.com/SeismicSystems/tdx-init" \
+    "$TDX_INIT_BUILD_CMD" \
+    "tdx-init-rs/build/release/tdx-init:/usr/bin/tdx-init"
 
 # Build seismic-reth
 RETH_BUILD_CMD="
