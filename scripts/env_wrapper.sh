@@ -37,7 +37,7 @@ setup_lima() {
 
         echo -e "Creating $LIMA_VM VM..."
         # Portable way to expand array on bash 3 & 4
-        limactl create -y --name "$LIMA_VM" ${args[@]+"${args[@]}"} lima.yaml
+        limactl create -y --name "$LIMA_VM" --set ".mounts[0].location = \"$PWD\"" ${args[@]+"${args[@]}"} lima.yaml
     fi
 
     # Start VM if not running
