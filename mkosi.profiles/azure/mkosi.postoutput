@@ -41,7 +41,8 @@ echo "Converting $EFI_FILE to VHD format..."
 mkdir -p "$WORK_DIR"
 
 # Create ESP filesystem image (500MB should be plenty)
-ESP_SIZE_MB=500
+# Note(seismic): bumped 500->1024 because we were running out of space.
+ESP_SIZE_MB=1024
 ESP_IMAGE="$WORK_DIR/esp.img"
 
 # Create empty ESP image and format it as FAT32
