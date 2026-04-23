@@ -44,9 +44,10 @@ The two formats differ because Azure and GCP expose TDX quotes through different
 | `seismic-enclave-server` | Shielded-tx decryption + key derivation; runs in-TEE                                                            | [SeismicSystems/enclave](https://github.com/SeismicSystems/enclave)           |
 | `summit`                 | Consensus client                                                                                                | [SeismicSystems/summit](https://github.com/SeismicSystems/summit)             |
 | `staking-ui`             | Staking dApp served at `/staking`                                                                               | [SeismicSystems/staking-ui](https://github.com/SeismicSystems/staking-ui)     |
-| `nginx` + `certbot`      | HTTPS termination with Let's Encrypt for public RPC/WS/grafana                                                  | Debian                                                                        |
-| `prometheus` + `grafana` | Observability (scrapes reth at `:9001`, summit at `:9002`)                                                      | upstream release tarballs                                                     |
+| `nginx` + `certbot`      | HTTPS termination with Let's Encrypt for public RPC/WS/metrics                                                  | Debian                                                                        |
 | `nftables`               | Firewall — see [`seismic/mkosi.extra/etc/nftables/seismic.conf`](seismic/mkosi.extra/etc/nftables/seismic.conf) | Debian                                                                        |
+
+Observability (Prometheus, Grafana) runs externally — reth metrics are exposed at `https://{domain}/metrics/reth`, summit metrics at `https://{domain}/metrics/summit`. Keeping them out of the image means bumping Prometheus or a Grafana dashboard doesn't change the TDX measurement.
 
 Source-built pins are in [`seismic/mkosi.build`](seismic/mkosi.build).
 
