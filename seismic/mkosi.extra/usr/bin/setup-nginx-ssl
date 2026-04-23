@@ -3,11 +3,8 @@ set -euo pipefail
 
 CONFIG_FILE="/persistent/conf/node.json"
 NODE_TEMPLATE="/etc/nginx/node-template.conf"
-GRAFANA_TEMPLATE="/etc/nginx/grafana-template.conf"
 NODE_NGINX_CONF="/persistent/conf/node-nginx.conf"
-GRAFANA_NGINX_CONF="/persistent/conf/grafana-nginx.conf"
 NODE_NGINX_ENABLED="/etc/nginx/sites-enabled/node"
-GRAFANA_NGINX_ENABLED="/etc/nginx/sites-enabled/grafana"
 CERTBOT_DONE="/persistent/conf/.certbot-done"
 
 # Certbot directories in /persistent/conf/certbot/
@@ -31,21 +28,18 @@ if [ -z "$DOMAIN_NAME" ] || [ "$DOMAIN_NAME" = "null" ]; then
     exit 0
 fi
 
-echo "Setting up nginx for domains: $DOMAIN_NAME and metrics.$DOMAIN_NAME"
+echo "Setting up nginx for domain: $DOMAIN_NAME"
 
 # Create persistent directories
 mkdir -p /persistent/conf
 mkdir -p "$CERTBOT_CONFIG_DIR" "$CERTBOT_WORK_DIR" "$CERTBOT_LOGS_DIR"
 
-# Generate nginx configs from templates (only if certbot hasn't run yet)
+# Generate nginx config from template (only if certbot hasn't run yet)
 if [ ! -f "$CERTBOT_DONE" ]; then
     echo "Generating node nginx config from template"
     sed "s/DOMAIN_NAME_PLACEHOLDER/$DOMAIN_NAME/g" "$NODE_TEMPLATE" > "$NODE_NGINX_CONF"
-
-    echo "Generating grafana nginx config from template"
-    sed "s/DOMAIN_NAME_PLACEHOLDER/$DOMAIN_NAME/g" "$GRAFANA_TEMPLATE" > "$GRAFANA_NGINX_CONF"
 else
-    echo "Certbot already configured, preserving existing nginx configs"
+    echo "Certbot already configured, preserving existing nginx config"
 fi
 
 # Generate config for Staking UI
@@ -72,22 +66,12 @@ rm -f /etc/nginx/sites-enabled/default
 rm -f "$NODE_NGINX_ENABLED"
 ln -s "$NODE_NGINX_CONF" "$NODE_NGINX_ENABLED"
 
-# Create grafana symlink
-rm -f "$GRAFANA_NGINX_ENABLED"
-ln -s "$GRAFANA_NGINX_CONF" "$GRAFANA_NGINX_ENABLED"
-
-# Verify symlinks were created
+# Verify symlink was created
 if [ ! -L "$NODE_NGINX_ENABLED" ]; then
     echo "ERROR: Failed to create symlink at $NODE_NGINX_ENABLED"
     exit 1
 fi
-if [ ! -L "$GRAFANA_NGINX_ENABLED" ]; then
-    echo "ERROR: Failed to create symlink at $GRAFANA_NGINX_ENABLED"
-    exit 1
-fi
-echo "Symlinks created:"
-echo "  $NODE_NGINX_ENABLED -> $NODE_NGINX_CONF"
-echo "  $GRAFANA_NGINX_ENABLED -> $GRAFANA_NGINX_CONF"
+echo "Symlink created: $NODE_NGINX_ENABLED -> $NODE_NGINX_CONF"
 
 # Test nginx config
 nginx -t
@@ -98,18 +82,16 @@ systemctl restart nginx
 
 # Run certbot if not already done
 if [ ! -f "$CERTBOT_DONE" ]; then
-    echo "Running certbot for $DOMAIN_NAME and metrics.$DOMAIN_NAME with email $DOMAIN_EMAIL"
+    echo "Running certbot for $DOMAIN_NAME with email $DOMAIN_EMAIL"
 
     # Wait for nginx to be fully up
     sleep 2
 
-    # Run certbot with persistent directories for both domains
     certbot --nginx \
         --non-interactive \
         --agree-tos \
         --email "$DOMAIN_EMAIL" \
         --domain "$DOMAIN_NAME" \
-        --domain "metrics.$DOMAIN_NAME" \
         --redirect \
         --config-dir "$CERTBOT_CONFIG_DIR" \
         --work-dir "$CERTBOT_WORK_DIR" \
@@ -122,8 +104,8 @@ if [ ! -f "$CERTBOT_DONE" ]; then
     systemctl enable certbot-renew.timer
     systemctl start certbot-renew.timer
 
-    echo "SSL certificates obtained successfully"
-    echo "Automatic renewal enabled (runs twice daily)"
+    echo "SSL certificate obtained successfully"
+    echo "Automatic renewal enabled"
 else
     echo "Certbot already run, skipping (remove $CERTBOT_DONE to re-run)"
 fi
@@ -134,4 +116,5 @@ echo "  https://$DOMAIN_NAME/rpc"
 echo "  https://$DOMAIN_NAME/ws"
 echo "  https://$DOMAIN_NAME/summit"
 echo "  https://$DOMAIN_NAME/enclave"
-echo "  https://metrics.$DOMAIN_NAME/ (Grafana)"
+echo "  https://$DOMAIN_NAME/metrics/reth"
+echo "  https://$DOMAIN_NAME/metrics/summit"
