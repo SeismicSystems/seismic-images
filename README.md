@@ -1,167 +1,84 @@
-# Flashbots Images 📦⚡📦
+# Seismic Images
 
-**Reproducible hardened Linux images for confidential computing and safe MEV**
+**TDX confidential VM images for Seismic nodes.**
 
-This repository provides a toolkit for building minimal, hardened Linux images
-designed for confidential computing environments and MEV (Maximum Extractable
-Value) applications. Built on mkosi and Nix, it provides reproducible,
-security-focused Linux distributions with strong network isolation, attestation
-capabilities, and blockchain infrastructure support.
+Fork of [flashbots/flashbots-images](https://github.com/flashbots/flashbots-images), extended with a `seismic/` module that bundles the Seismic node stack into a reproducible [mkosi](https://github.com/systemd/mkosi)-built image deployable to Azure and GCP Confidential VMs.
 
-It contains our [bottom-of-block searcher sandbox](https://collective.flashbots.net/t/searching-in-tdx/3902)
-infrastructure and will soon contain our [BuilderNet](https://buildernet.org/blog/introducing-buildernet)
-infrastructure as well, along with any future TDX projects we implement.
+## Quick start
 
-For more information about this repository, see
-[the Flashbots collective post](https://collective.flashbots.net/t/beyond-yocto-exploring-mkosi-for-tdx-images/4739).
+Requires [Lima](https://lima-vm.io/) on macOS/Linux. For alternatives (native Nix, etc.), see [DEVELOPMENT.md](DEVELOPMENT.md).
 
-## 🌟 Features
-
-- **Reproducible Builds**: Deterministic image generation using Nix and frozen Debian snapshots
-- **Confidential Computing**: Built-in support for Intel TDX and remote attestation
-- **Minimal Attack Surface**: Uses very few packages (20Mb base)
-- **Flexible Deployment**: Support for Bare Metal TDX, QEMU, Azure, and GCP
-
-## 🚀 Quick Start
-
-### Prerequisites
-
-By default, builds run inside a [Lima](https://lima-vm.io/) VM, which requires installing Lima prior to using this repository. This works on both Mac and Linux and requires no other dependencies.
-
-Alternatively, it is possible to build natively with [Nix](https://nixos.org/download/) by creating a `.bypass-lima` file in the repo root. Reproducible builds are only supported on standard Debian Bookworm/Trixie installations, but other distros with a recent systemd installation should work too. This is not the recommended way of reproducing official Flashbots images.
-
-### Building Images
-
-Build the image:
-
-```bash
-# Build the Flashbox (searcher sandbox) image
-make build IMAGE=flashbox-l1
-
-# Build the Buildernet image
-make build IMAGE=buildernet
-
-# Build the l2 builder image
-make build IMAGE=l2-builder
-
-# Build with development tools
-make build-dev IMAGE=flashbox-l1
-
-# View all available targets
-make help
+```sh
+make build IMAGE=seismic
 ```
 
-### Measuring TDX Boot Process
+Produces in `build/`:
 
-**Export TDX measurements** for the built image:
-```bash
-make measure
+| File                                 | Purpose                                                        |
+| ------------------------------------ | -------------------------------------------------------------- |
+| `seismic_{VERSION}.efi`              | Unified Kernel Image — the boot artifact, shared across clouds |
+| `seismic_{VERSION}.vhd`              | Azure Confidential VM disk image                               |
+| `seismic_{VERSION}.tar.gz`           | GCP Confidential VM custom-image tarball                       |
+| `seismic_{VERSION}.manifest`         | JSON SBOM of every Debian package in the image                 |
+| `seismic_{VERSION}.{initrd,vmlinuz}` | Debug extracts of the UKI's contents                           |
+
+`{VERSION}` is `{commit-date}.{commit-hash}[-dirty]` — see [mkosi.version](mkosi.version).
+
+## TDX measurements
+
+Generate expected measurement values (RTMRs, MRTD) for the built UKI so a verifier can attest that a running node booted from exactly this image:
+
+```sh
+make measure       # Azure-style measurements -> build/measurements.json
+make measure-gcp   # GCP-style measurements   -> build/gcp_measurements.json
 ```
 
-This generates measurement files in the `build/` directory for attestation and verification.
+The two formats differ because Azure and GCP expose TDX quotes through different mechanisms — Azure via `tpm2-tools` + the Microsoft attestation service, GCP via the [`dstack`](https://github.com/Dstack-TEE/dstack) toolchain. The deploy tooling (and the Seismic enclave's attestation path) consume these files to verify that deployed nodes match a known-good image.
 
-### Running Images
+## What's in the image
 
-**Add yourself to the kvm group** (to run QEMU without sudo):
-```bash
-sudo usermod -aG kvm $USER
-# Log out and back in for the change to take effect
-```
+| Component                | Purpose                                                                                                         | Source                                                                        |
+| ------------------------ | --------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------- |
+| `tdx-init`               | First-boot LUKS provisioning; writes `/persistent/conf/node.json`                                               | [SeismicSystems/tdx-init](https://github.com/SeismicSystems/tdx-init)         |
+| `seismic-reth`           | Execution client                                                                                                | [SeismicSystems/seismic-reth](https://github.com/SeismicSystems/seismic-reth) |
+| `seismic-enclave-server` | Shielded-tx decryption + key derivation; runs in-TEE                                                            | [SeismicSystems/enclave](https://github.com/SeismicSystems/enclave)           |
+| `summit`                 | Consensus client                                                                                                | [SeismicSystems/summit](https://github.com/SeismicSystems/summit)             |
+| `staking-ui`             | Staking dApp served at `/staking`                                                                               | [SeismicSystems/staking-ui](https://github.com/SeismicSystems/staking-ui)     |
+| `nginx` + `certbot`      | HTTPS termination with Let's Encrypt for public RPC/WS/grafana                                                  | Debian                                                                        |
+| `prometheus` + `grafana` | Observability (scrapes reth at `:9001`, summit at `:9002`)                                                      | upstream release tarballs                                                     |
+| `nftables`               | Firewall — see [`seismic/mkosi.extra/etc/nftables/seismic.conf`](seismic/mkosi.extra/etc/nftables/seismic.conf) | Debian                                                                        |
 
-**Create persistent storage** (for stateful applications):
-   ```bash
-   qemu-img create -f qcow2 persistent.qcow2 2048G
-   ```
+Source-built pins are in [`seismic/mkosi.build`](seismic/mkosi.build).
 
-**Run QEMU**:
-  ```bash
-  qemu-system-x86_64 \
-    -enable-kvm \
-    -machine type=q35,smm=on \
-    -m 16384M \
-    -nographic \
+## Our diff vs upstream
+
+You can track [diff with upstream](https://github.com/SeismicSystems/seismic-images/compare/main...seismic) by comparing the `seismic` branch with `origin/main` (which is pinned to the upstream commit we most recently rebased on).
+
+## Where to look next
+
+- [**DEVELOPMENT.md**](DEVELOPMENT.md) — generic mkosi module/kernel-config/reproducibility guidance (from upstream)
+- [`seismic/mkosi.conf`](seismic/mkosi.conf) — Debian packages in the image
+- [`seismic/mkosi.build`](seismic/mkosi.build) — pinned commits for `reth` / `enclave` / `summit` / `tdx-init` / `staking-ui`
+- [`seismic/mkosi.postinst`](seismic/mkosi.postinst) — systemd services enabled on boot
+- [`seismic/mkosi.extra/`](seismic/mkosi.extra/) — per-service unit files and configs
+- Deploy tooling lives in a separate repo.
+
+## Running locally
+
+To boot a built image under QEMU for smoke testing (without TDX):
+
+```sh
+qemu-system-x86_64 \
+    -enable-kvm -machine type=q35,smm=on -m 16384M -nographic \
     -drive if=pflash,format=raw,readonly=on,file=/usr/share/edk2/x64/OVMF_CODE.secboot.4m.fd \
-    -drive file=/usr/share/edk2/x64/OVMF_VARS.4m.fd,if=pflash,format=raw \
+    -drive if=pflash,format=raw,file=/usr/share/edk2/x64/OVMF_VARS.4m.fd \
     -kernel build/latest.efi \
     -netdev user,id=net0,hostfwd=tcp::2222-:22,hostfwd=tcp::8080-:8080 \
-    -device virtio-net-pci,netdev=net0 \
-    -device virtio-scsi-pci,id=scsi0 \
-    -drive file=persistent.qcow2,format=qcow2,if=none,id=disk0 \
-    -device scsi-hd,drive=disk0,bus=scsi0.0,channel=0,scsi-id=0,lun=10
-  ```
+    -device virtio-net-pci,netdev=net0
+```
 
-**With TDX confidential computing** (requires TDX-enabled hardware/hypervisor):
-  ```bash
-  qemu-system-x86_64 \
-    -accel kvm \
-    -machine type=q35,kernel_irqchip=split,confidential-guest-support=tdx0 \
-    -object tdx-guest,id=tdx0 \
-    -cpu host,-kvm-steal-time,-kvmclock \
-    -m 16384M \
-    -nographic \
-    -kernel build/latest.efi \
-    # ... rest of options same as above
-  ```
+TDX-enabled invocation and troubleshooting are in the [upstream README](https://github.com/flashbots/flashbots-images/blob/main/README.md).
 
-> [!NOTE]
->
-> Depending on your Linux distro, these commands may require changing the
-> supplied OVMF paths or installing your distro's OVMF package.
+## Acknowledgements
 
-> [!NOTE]
->
-> Running `systemctl status` generates a report with an `unmerged-bin` taint. That's
-> expected.
->
-> See [bug report #1085370](https://bugs.debian.org/cgi-bin/bugreport.cgi?bug=1085370)
-> for details.
-
-## Building Without Lima
-
-1. Install [Nix](https://nixos.org/download/) and enable flakes in `~/.config/nix/nix.conf`:
-
-    ```conf
-    experimental-features = nix-command flakes
-    ```
-
-2. Create a `.bypass-lima` file in the repo root:
-
-    ```bash
-    touch .bypass-lima
-    ```
-
-Then build as normal with `make build IMAGE=...`.
-
-### Troubleshooting
-
-- If you encounter `mkosi was forbidden to unshare namespaces`, try
-adding an apparmor profile like so:
-
-  ```bash
-    sudo cat <<EOF > /etc/apparmor.d/mkosi
-    abi <abi/4.0>,
-    include <tunables/global>
-
-    /nix/store/*-mkosi-*/bin/mkosi flags=(default_allow) {
-      userns,
-    }
-    EOF
-
-    sudo systemctl reload apparmor
-  ```
-
-- If you encounter `unshare: setgroups failed: Operation not permitted`,
-try to disable apparmor's restriction:
-
-  ```bash
-  sudo sysctl kernel.apparmor_restrict_unprivileged_userns=0
-
-  sudo -c 'echo "kernel.apparmor_restrict_unprivileged_userns=0" >> /etc/sysctl.conf'
-  ```
-
-- If you encounter `bootctl: unrecognized option '--root=/buildroot'`, you'll need to upgrade to a newer version of systemd (at least v250), which is only supported by recent versions of Ubuntu/Debian.
-
-## 📖 Documentation
-
-- [Development Guide](DEVELOPMENT.md) - Comprehensive guide for creating new modules and extending existing ones
-- [Flashbox L1 Module Guide](modules/flashbox/flashbox-l1/readme.md) - Detailed documentation for the MEV searcher environment
+Built on [flashbots/flashbots-images](https://github.com/flashbots/flashbots-images). Thanks to the Flashbots team for the mkosi-based TDX image tooling that this repo forks.
