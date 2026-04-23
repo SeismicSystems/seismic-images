@@ -83,11 +83,29 @@ make_git_package \
     "$SUMMIT_BUILD_CMD" \
     "target/release/summit:/usr/bin/summit"
 
+# staking-ui's package.json delegates to bun for its workspace build.
+# bun isn't in Debian's repos, so fetch a pinned release directly (matches
+# the Prometheus/Grafana pattern below; release assets are immutable).
+BUN_VERSION="1.2.0"
 STAKING_BUILD_CMD="
+    set -eo pipefail
     git checkout $STAKING_COMMIT
+
+    curl -fsSL https://github.com/oven-sh/bun/releases/download/bun-v$BUN_VERSION/bun-linux-x64.zip -o /tmp/bun.zip
+    unzip -q /tmp/bun.zip -d /tmp
+    export PATH=\"/tmp/bun-linux-x64:\$PATH\"
+
     npm install --legacy-peer-deps
     export PATH=\"\$PWD/node_modules/.bin:\$PATH\"
     npm run build
+
+    # Vite writes dist into the @staking-ui/web workspace subdir; surface
+    # it at the repo root so make_git_package's 'dist:/...' mapping finds it.
+    if [ ! -d dist ]; then
+        WEB_DIST=\$(find . -type d -name dist -not -path '*/node_modules/*' | head -n1)
+        [ -n \"\$WEB_DIST\" ] || { echo 'ERROR: no dist directory found after build' >&2; exit 1; }
+        cp -r \"\$WEB_DIST\" ./dist
+    fi
 "
 
 make_git_package \
