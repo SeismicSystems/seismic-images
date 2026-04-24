@@ -42,20 +42,6 @@ else
     echo "Certbot already configured, preserving existing nginx config"
 fi
 
-# Generate config for Staking UI
-STAKING_ROOT="/var/www/html/staking"
-if [ -d "$STAKING_ROOT" ]; then
-    echo "Generating Staking UI config"
-    # Write config.js with the domain/endpoints
-    cat > "$STAKING_ROOT/config.js" <<EOF
-window.APP_CONFIG = {
-    domain: "$DOMAIN_NAME",
-    rpcUrl: "https://$DOMAIN_NAME/rpc",
-    wsUrl: "wss://$DOMAIN_NAME/ws"
-};
-EOF
-fi
-
 # Create symlinks to nginx sites-enabled
 mkdir -p /etc/nginx/sites-enabled
 
