@@ -13,7 +13,6 @@ mkosi-chroot useradd -r -s /bin/false -G eth summit
 
 # Make scripts executable
 chmod +x "$BUILDROOT/usr/bin/setup-nginx-ssl"
-chmod +x "$BUILDROOT/usr/bin/start-enclave"
 
 # Enable services
 mkdir -p "$BUILDROOT/etc/systemd/system/minimal.target.wants"

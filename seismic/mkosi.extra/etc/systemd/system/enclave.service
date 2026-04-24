@@ -8,6 +8,7 @@ Type=simple
 User=enclave
 Group=eth
 Environment=RUST_BACKTRACE=full
+Environment=RUST_LOG=info
 
 # The +/… prefix forces these to run as root regardless of the User= setting.
 # The enclave user needs /persistent/enclave to exist and be writable; only
@@ -16,7 +17,7 @@ ExecStartPre=+/bin/mkdir -p /persistent/enclave
 ExecStartPre=+/bin/chown -R enclave:eth /persistent/enclave
 ExecStartPre=+/bin/chmod 775 /persistent /persistent/enclave
 
-ExecStart=/usr/bin/start-enclave
+ExecStart=/usr/bin/seismic-enclave-server --ip 0.0.0.0 --port 7878
 
 Restart=always
 RestartSec=60
