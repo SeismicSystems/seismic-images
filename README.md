@@ -44,7 +44,6 @@ The two formats differ because Azure and GCP expose TDX quotes through different
 | `seismic-reth`           | Execution client                                                                                                | [SeismicSystems/seismic-reth](https://github.com/SeismicSystems/seismic-reth) |
 | `summit`                 | Consensus client                                                                                                | [SeismicSystems/summit](https://github.com/SeismicSystems/summit)             |
 | `nginx` + `certbot`      | HTTPS termination with Let's Encrypt for public RPC/WS/metrics                                                  | Debian                                                                        |
-| `nftables`               | Firewall — see [`seismic/mkosi.extra/etc/nftables/seismic.conf`](seismic/mkosi.extra/etc/nftables/seismic.conf) | Debian                                                                        |
 
 Source-built pins are in [`seismic/mkosi.build`](seismic/mkosi.build).
 
