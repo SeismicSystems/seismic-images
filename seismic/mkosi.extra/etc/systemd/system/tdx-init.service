@@ -8,6 +8,8 @@ Requires=persistent-mount.service
 Type=oneshot
 ExecStart=/usr/bin/tdx-init wait-for-key
 RemainAfterExit=yes
+Restart=on-failure
+RestartSec=5
 
 [Install]
 WantedBy=minimal.target
