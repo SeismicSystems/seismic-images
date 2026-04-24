@@ -1,6 +1,6 @@
 [Unit]
 Description=Setup TPM Device Permissions
-Before=seismic-enclave.service
+Before=enclave.service
 DefaultDependencies=no
 
 [Service]
