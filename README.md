@@ -37,13 +37,13 @@ The two formats differ because Azure and GCP expose TDX quotes through different
 
 ## What's in the image
 
-| Component                | Purpose                                                                                                         | Source                                                                        |
-| ------------------------ | --------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------- |
-| `tdx-init`               | First-boot LUKS provisioning; writes `/persistent/conf/node.json`                                               | [SeismicSystems/tdx-init](https://github.com/SeismicSystems/tdx-init)         |
-| `seismic-enclave-server` | Shielded-tx decryption + key derivation; runs in-TEE                                                            | [SeismicSystems/enclave](https://github.com/SeismicSystems/enclave)           |
-| `seismic-reth`           | Execution client                                                                                                | [SeismicSystems/seismic-reth](https://github.com/SeismicSystems/seismic-reth) |
-| `summit`                 | Consensus client                                                                                                | [SeismicSystems/summit](https://github.com/SeismicSystems/summit)             |
-| `nginx` + `certbot`      | HTTPS termination with Let's Encrypt for public RPC/WS/metrics                                                  | Debian                                                                        |
+| Component                | Purpose                                                           | Source                                                                        |
+| ------------------------ | ----------------------------------------------------------------- | ----------------------------------------------------------------------------- |
+| `tdx-init`               | First-boot LUKS provisioning; writes `/persistent/conf/node.json` | [SeismicSystems/tdx-init](https://github.com/SeismicSystems/tdx-init)         |
+| `seismic-enclave-server` | Shielded-tx decryption + key derivation; runs in-TEE              | [SeismicSystems/enclave](https://github.com/SeismicSystems/enclave)           |
+| `seismic-reth`           | Execution client                                                  | [SeismicSystems/seismic-reth](https://github.com/SeismicSystems/seismic-reth) |
+| `summit`                 | Consensus client                                                  | [SeismicSystems/summit](https://github.com/SeismicSystems/summit)             |
+| `nginx` + `certbot`      | HTTPS termination with Let's Encrypt for public RPC/WS/metrics    | Debian                                                                        |
 
 Source-built pins are in [`seismic/mkosi.build`](seismic/mkosi.build).
 
@@ -83,19 +83,56 @@ You can track [diff with upstream](https://github.com/SeismicSystems/seismic-ima
 
 ## Running locally
 
-To boot a built image under QEMU for smoke testing (without TDX):
+Boot a built image under QEMU for smoke testing (without TDX). 
+TDX-enabled invocation and troubleshooting are in the [upstream README](https://github.com/flashbots/flashbots-images/blob/main/README.md).
+
+### macOS via Lima
+
+Uses the Lima VM you already run for builds. Nested virt isn't available, so boot goes through software emulation (TCG) — slow (~10 min to reach systemd) but works without any extra setup on the host.
+
+Enter the Lima VM:
+
+```sh
+limactl shell <your-lima-vm>   # e.g. tee-builder-<hash>
+cd ~/mnt                       # where the repo is mounted
+```
+
+Everything below runs *inside* that shell.
+
+One-time setup:
+
+```sh
+sudo apt-get install -y qemu-system-x86 ovmf
+cp /usr/share/OVMF/OVMF_VARS.fd /tmp/OVMF_VARS.fd   # writable NVRAM
+```
+
+Boot:
 
 ```sh
 qemu-system-x86_64 \
-    -enable-kvm -machine type=q35,smm=on -m 16384M -nographic \
-    -drive if=pflash,format=raw,readonly=on,file=/usr/share/edk2/x64/OVMF_CODE.secboot.4m.fd \
-    -drive if=pflash,format=raw,file=/usr/share/edk2/x64/OVMF_VARS.4m.fd \
+    -accel tcg -machine type=q35,smm=on -m 1024M -nographic \
+    -drive if=pflash,format=raw,readonly=on,file=/usr/share/OVMF/OVMF_CODE.secboot.fd \
+    -drive if=pflash,format=raw,file=/tmp/OVMF_VARS.fd \
     -kernel build/latest.efi \
     -netdev user,id=net0,hostfwd=tcp::2222-:22,hostfwd=tcp::8080-:8080 \
     -device virtio-net-pci,netdev=net0
 ```
 
-TDX-enabled invocation and troubleshooting are in the [upstream README](https://github.com/flashbots/flashbots-images/blob/main/README.md).
+Exit QEMU with `Ctrl-a x`.
+
+### Linux with KVM
+
+> **TODO: not validated in this repo.** The upstream-inherited command below assumes bare-metal Linux with KVM access and should boot in seconds, but hasn't been tested in our fork — please update this section if you run it successfully.
+
+```sh
+qemu-system-x86_64 \
+    -enable-kvm -machine type=q35,smm=on -m 16384M -nographic \
+    -drive if=pflash,format=raw,readonly=on,file=/usr/share/OVMF/OVMF_CODE.secboot.fd \
+    -drive if=pflash,format=raw,file=/usr/share/OVMF/OVMF_VARS.fd \
+    -kernel build/latest.efi \
+    -netdev user,id=net0,hostfwd=tcp::2222-:22,hostfwd=tcp::8080-:8080 \
+    -device virtio-net-pci,netdev=net0
+```
 
 ## Acknowledgements
 
