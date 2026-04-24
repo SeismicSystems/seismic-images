@@ -5,10 +5,9 @@ source scripts/make_git_package.sh
 
 # Branches & commit hashes for reproducible builds
 TDX_INIT_COMMIT="e61d2e6cfd01d46ebf61310dcf4e329522c379aa"
-RETH_COMMIT="f2d9fcacba5dc3d06eaa8119d82833f2c2d37409"
 ENCLAVE_COMMIT="f90b02f38a6190e8b2ff2d051d9043f3480cd3ac"
+RETH_COMMIT="f2d9fcacba5dc3d06eaa8119d82833f2c2d37409"
 SUMMIT_COMMIT="82719ced40f21768f765d1ff62c25ceb1e9c0a39"
-STAKING_COMMIT="66cffcbb9e382e77d83fd3de110db24fdb6264de"
 
 # Build tdx-init (using Seismic fork with JSON config support)
 TDX_INIT_BUILD_CMD="
@@ -82,36 +81,4 @@ make_git_package \
     "https://github.com/SeismicSystems/summit" \
     "$SUMMIT_BUILD_CMD" \
     "target/release/summit:/usr/bin/summit"
-
-# staking-ui's package.json delegates to bun for its workspace build.
-# bun isn't in Debian's repos, so fetch a pinned release directly (matches
-# the Prometheus/Grafana pattern below; release assets are immutable).
-BUN_VERSION="1.2.0"
-STAKING_BUILD_CMD="
-    set -eo pipefail
-    git checkout $STAKING_COMMIT
-
-    curl -fsSL https://github.com/oven-sh/bun/releases/download/bun-v$BUN_VERSION/bun-linux-x64.zip -o /tmp/bun.zip
-    unzip -q /tmp/bun.zip -d /tmp
-    export PATH=\"/tmp/bun-linux-x64:\$PATH\"
-
-    npm install --legacy-peer-deps
-    export PATH=\"\$PWD/node_modules/.bin:\$PATH\"
-    npm run build
-
-    # Vite writes dist into the @staking-ui/web workspace subdir; surface
-    # it at the repo root so make_git_package's 'dist:/...' mapping finds it.
-    if [ ! -d dist ]; then
-        WEB_DIST=\$(find . -type d -name dist -not -path '*/node_modules/*' | head -n1)
-        [ -n \"\$WEB_DIST\" ] || { echo 'ERROR: no dist directory found after build' >&2; exit 1; }
-        cp -r \"\$WEB_DIST\" ./dist
-    fi
-"
-
-make_git_package \
-   "staking-ui" \
-   "$STAKING_COMMIT" \
-   "https://github.com/SeismicSystems/staking-ui" \
-   "$STAKING_BUILD_CMD" \
-   "dist:/var/www/html/staking"
 
