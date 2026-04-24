@@ -40,15 +40,34 @@ The two formats differ because Azure and GCP expose TDX quotes through different
 | Component                | Purpose                                                                                                         | Source                                                                        |
 | ------------------------ | --------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------- |
 | `tdx-init`               | First-boot LUKS provisioning; writes `/persistent/conf/node.json`                                               | [SeismicSystems/tdx-init](https://github.com/SeismicSystems/tdx-init)         |
-| `seismic-reth`           | Execution client                                                                                                | [SeismicSystems/seismic-reth](https://github.com/SeismicSystems/seismic-reth) |
 | `seismic-enclave-server` | Shielded-tx decryption + key derivation; runs in-TEE                                                            | [SeismicSystems/enclave](https://github.com/SeismicSystems/enclave)           |
+| `seismic-reth`           | Execution client                                                                                                | [SeismicSystems/seismic-reth](https://github.com/SeismicSystems/seismic-reth) |
 | `summit`                 | Consensus client                                                                                                | [SeismicSystems/summit](https://github.com/SeismicSystems/summit)             |
 | `nginx` + `certbot`      | HTTPS termination with Let's Encrypt for public RPC/WS/metrics                                                  | Debian                                                                        |
 | `nftables`               | Firewall — see [`seismic/mkosi.extra/etc/nftables/seismic.conf`](seismic/mkosi.extra/etc/nftables/seismic.conf) | Debian                                                                        |
 
-Observability (Prometheus, Grafana) runs externally — reth metrics are exposed at `https://{domain}/metrics/reth`, summit metrics at `https://{domain}/metrics/summit`. Keeping them out of the image means bumping Prometheus or a Grafana dashboard doesn't change the TDX measurement.
-
 Source-built pins are in [`seismic/mkosi.build`](seismic/mkosi.build).
+
+## Exposed HTTPS endpoints
+
+nginx terminates TLS (Let's Encrypt) and reverse-proxies the following paths to in-TEE services. See [`seismic/mkosi.extra/etc/nginx/node-template.conf`](seismic/mkosi.extra/etc/nginx/node-template.conf).
+
+| Route             | Backend                          | Purpose                                                                                               | Public?                                |
+| ----------------- | -------------------------------- | ----------------------------------------------------------------------------------------------------- | -------------------------------------- |
+| `/rpc`            | `reth` `:8545`                   | Ethereum JSON-RPC (shielded tx support via TxSeismic)                                                 | ✅ intended public                      |
+| `/ws`             | `reth` `:8546`                   | Ethereum WebSocket RPC                                                                                | ✅ intended public                      |
+| `/summit`         | `summit` `:3030`                 | Consensus REST API, incl. `/summit/get_deposit_signature/...` used by the staking UI                  | ⚠️ **overly broad** — see warning below |
+| `/enclave`        | `seismic-enclave-server` `:7878` | Enclave API (attestation quotes, public key queries, shielded-tx decryption, key derivation, signing) | ⚠️ **overly broad** — see warning below |
+| `/metrics/reth`   | `reth` `:9001`                   | Prometheus metrics                                                                                    | ⚠️ unauthenticated                      |
+| `/metrics/summit` | `summit` `:9002`                 | Prometheus metrics                                                                                    | ⚠️ unauthenticated                      |
+
+### ⚠️ Known sharp edges
+
+Everything above listens on the single public `:443`. The intended long-term fix is to split nginx into two tiers — a public server block with only the endpoints that should reach the open internet (`/rpc`, `/ws`, a narrowed `/summit/get_deposit_signature`, attestation-quote queries on `/enclave`), and an internal server block on a separate port with the rest (`/metrics/*`, the full `/summit/*` query surface, operator-facing `/enclave/*`). The deploy tooling would then configure cloud firewall rules (Azure NSG / GCP firewall) to allow the public port from `0.0.0.0/0` and restrict the internal port to the VPC CIDR. Until that split lands, the concrete issues are:
+
+- **`/summit/*` is a blanket proxy.** Summit exposes a JSON-RPC surface (via `jsonrpsee`) with ~20 methods: mostly read-only state queries (`getCheckpoint`, `getValidatorBalance`, `getDeposit`, etc. — analogous to `eth_*` reads and safe to expose), plus `getDepositSignature` which causes a BLS signature in the enclave, plus `sendGenesis` on the genesis-setup API which must *never* be public at runtime. Narrowing requires JSON-RPC-method-level filtering (all calls are `POST /`, so you can't gate by URL path alone). `getDepositSignature` additionally has no rate limiting — trivially DoS-able — and should gain `limit_req` regardless of network controls.
+- **`/enclave/*` is a blanket proxy.** Only endpoints *designed* to be public should be reachable (attestation quotes, public-key queries). Operation-causing endpoints (decrypt calldata, sign consensus messages, key derivation) are meant for reth/summit over localhost only. Current config doesn't enforce this; we rely on the enclave's own auth (if any) to reject external callers. Pending the public/internal port split, or narrowing via an explicit allowlist.
+- **`/metrics/*` is unauthenticated.** Operationally safe on a locked-down network (the cloud firewall rule above is the right fix), but anyone who can reach the port can scrape sync status, peer info, and resource usage. Do *not* expose the internal port to the open internet without adding basic auth or an IP allowlist on top.
 
 ## Our diff vs upstream
 
@@ -58,7 +77,7 @@ You can track [diff with upstream](https://github.com/SeismicSystems/seismic-ima
 
 - [**DEVELOPMENT.md**](DEVELOPMENT.md) — generic mkosi module/kernel-config/reproducibility guidance (from upstream)
 - [`seismic/mkosi.conf`](seismic/mkosi.conf) — Debian packages in the image
-- [`seismic/mkosi.build`](seismic/mkosi.build) — pinned commits for `reth` / `enclave` / `summit` / `tdx-init` / `staking-ui`
+- [`seismic/mkosi.build`](seismic/mkosi.build) — pinned commits for `reth` / `enclave` / `summit` / `tdx-init`
 - [`seismic/mkosi.postinst`](seismic/mkosi.postinst) — systemd services enabled on boot
 - [`seismic/mkosi.extra/`](seismic/mkosi.extra/) — per-service unit files and configs
 - Deploy tooling lives in a separate repo.
