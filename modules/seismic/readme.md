@@ -2,7 +2,7 @@ Seismic Image Module
 ===
 
 This directory is the Seismic-specific mkosi module — everything that layers on
-top of [`shared/`](../shared/) to turn a generic Debian base into a Seismic
+top of [`shared/`](../../shared/) to turn a generic Debian base into a Seismic
 node.
 
 Top-level files at a glance:

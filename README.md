@@ -2,7 +2,7 @@
 
 **TDX confidential VM images for Seismic nodes.**
 
-Fork of [flashbots/flashbots-images](https://github.com/flashbots/flashbots-images), extended with a `seismic/` module that bundles the Seismic node stack into a reproducible [mkosi](https://github.com/systemd/mkosi)-built image deployable to Azure and GCP Confidential VMs.
+Fork of [flashbots/flashbots-images](https://github.com/flashbots/flashbots-images), extended with a `modules/seismic/` module that bundles the Seismic node stack into a reproducible [mkosi](https://github.com/systemd/mkosi)-built image deployable to Azure and GCP Confidential VMs.
 
 ## Quick start
 
@@ -45,11 +45,11 @@ The two formats differ because Azure and GCP expose TDX quotes through different
 | `summit`                 | Consensus client                                                  | [SeismicSystems/summit](https://github.com/SeismicSystems/summit)             |
 | `nginx` + `certbot`      | HTTPS termination with Let's Encrypt for public RPC/WS/metrics    | Debian                                                                        |
 
-Source-built pins are in [`seismic/mkosi.build`](seismic/mkosi.build).
+Source-built pins are in [`modules/seismic/mkosi.build`](modules/seismic/mkosi.build).
 
 ## Exposed HTTPS endpoints
 
-nginx terminates TLS (Let's Encrypt) and reverse-proxies the following paths to in-TEE services. See [`seismic/mkosi.extra/etc/nginx/node-template.conf`](seismic/mkosi.extra/etc/nginx/node-template.conf).
+nginx terminates TLS (Let's Encrypt) and reverse-proxies the following paths to in-TEE services. See [`modules/seismic/mkosi.extra/etc/nginx/node-template.conf`](modules/seismic/mkosi.extra/etc/nginx/node-template.conf).
 
 | Route             | Backend                          | Purpose                                                                                               | Public?                                |
 | ----------------- | -------------------------------- | ----------------------------------------------------------------------------------------------------- | -------------------------------------- |
@@ -75,10 +75,10 @@ You can track [diff with upstream](https://github.com/SeismicSystems/seismic-ima
 ## Where to look next
 
 - [**DEVELOPMENT.md**](DEVELOPMENT.md) — generic mkosi module/kernel-config/reproducibility guidance (from upstream)
-- [`seismic/mkosi.conf`](seismic/mkosi.conf) — Debian packages in the image
-- [`seismic/mkosi.build`](seismic/mkosi.build) — pinned commits for `reth` / `enclave` / `summit` / `tdx-init`
-- [`seismic/mkosi.postinst`](seismic/mkosi.postinst) — systemd services enabled on boot
-- [`seismic/mkosi.extra/`](seismic/mkosi.extra/) — per-service unit files and configs
+- [`modules/seismic/mkosi.conf`](modules/seismic/mkosi.conf) — Debian packages in the image
+- [`modules/seismic/mkosi.build`](modules/seismic/mkosi.build) — pinned commits for `reth` / `enclave` / `summit` / `tdx-init`
+- [`modules/seismic/mkosi.postinst`](modules/seismic/mkosi.postinst) — systemd services enabled on boot
+- [`modules/seismic/mkosi.extra/`](modules/seismic/mkosi.extra/) — per-service unit files and configs
 - Deploy tooling lives in a separate repo.
 
 ## Running locally
