@@ -8,6 +8,14 @@ Type=simple
 User=summit
 Group=eth
 UMask=0002
+# TODO: RUST_LOG currently has no effect on summit. Its telemetry setup
+# calls tracing_subscriber::EnvFilter::new(level.to_string()) with the
+# --log-level CLI value, instead of EnvFilter::from_default_env() which
+# would pick up RUST_LOG. See node/src/telemetry.rs in SeismicSystems/summit.
+# Until summit is fixed, --log-level on the ExecStart line below is the
+# only control knob; this env var is here for parity with reth/enclave
+# and will start working once summit's EnvFilter construction is updated.
+Environment=RUST_LOG=info
 
 ExecStartPre=+/bin/mkdir -p /persistent/summit/db
 ExecStartPre=+/bin/mkdir -p /persistent/summit/keys
@@ -16,7 +24,16 @@ ExecStartPre=+/bin/chmod -R g+rwX /persistent/summit
 ExecStartPre=+/bin/chmod g+s /persistent/summit
 ExecStartPre=/usr/bin/summit keys generate -n --key-store-path /persistent/summit/keys
 
-ExecStart=/usr/bin/start-summit
+ExecStart=/usr/bin/summit run \
+    --engine-ipc-path /var/volatile/reth_engine_api.ipc \
+    --genesis-path /persistent/summit/genesis.toml \
+    --store-path /persistent/summit/db \
+    --key-store-path /persistent/summit/keys \
+    --port 18551 \
+    --rpc-port 3030 \
+    --prom-port 9002 \
+    --db-prefix quarts \
+    --log-level info
 
 Restart=on-failure
 RestartSec=10
