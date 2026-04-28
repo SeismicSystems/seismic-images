@@ -1,7 +1,7 @@
 [Unit]
 Description=Certbot SSL Certificate Renewal
-After=network-online.target persistent-mount.service
-Requires=persistent-mount.service
+After=network-online.target persistent-luks-setup.service
+Requires=persistent-luks-setup.service
 
 [Service]
 Type=oneshot

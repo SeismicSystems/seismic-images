@@ -4,14 +4,13 @@ set -euxo pipefail
 source scripts/make_git_package.sh
 
 # Branches & commit hashes for reproducible builds
-TDX_INIT_COMMIT="e61d2e6cfd01d46ebf61310dcf4e329522c379aa"
+TDX_INIT_COMMIT="6f79b7ace1811b11a5827f8859de8859dc1494f6"
 ENCLAVE_COMMIT="f90b02f38a6190e8b2ff2d051d9043f3480cd3ac"
 RETH_COMMIT="f2d9fcacba5dc3d06eaa8119d82833f2c2d37409"
 SUMMIT_COMMIT="82719ced40f21768f765d1ff62c25ceb1e9c0a39"
 
 # Build tdx-init (using Seismic fork with JSON config support)
 TDX_INIT_BUILD_CMD="
-    cd tdx-init-rs
     cargo build --release --target-dir ./build
 "
 make_git_package \
@@ -19,7 +18,7 @@ make_git_package \
     "$TDX_INIT_COMMIT" \
     "https://github.com/SeismicSystems/tdx-init" \
     "$TDX_INIT_BUILD_CMD" \
-    "tdx-init-rs/build/release/tdx-init:/usr/bin/tdx-init"
+    "build/release/tdx-init:/usr/bin/tdx-init"
 
 # Build seismic-reth
 RETH_BUILD_CMD="
