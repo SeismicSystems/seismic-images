@@ -10,14 +10,16 @@ mkosi-chroot useradd -r -s /bin/false -g tss -G eth tss 2>/dev/null || true  # t
 mkosi-chroot useradd -r -s /bin/false -G eth reth
 mkosi-chroot useradd -r -s /bin/false -G eth,tss enclave
 mkosi-chroot useradd -r -s /bin/false -G eth summit
+mkosi-chroot useradd -r -s /bin/false -G eth tdx-init
 
 # Make scripts executable
 chmod +x "$BUILDROOT/usr/bin/setup-nginx-ssl"
+chmod +x "$BUILDROOT/usr/bin/setup-persistent-luks"
 
 # Enable services
 mkdir -p "$BUILDROOT/etc/systemd/system/minimal.target.wants"
 for service in \
-    persistent-mount.service \
+    persistent-luks-setup.service \
     tdx-init.service \
     nginx-ssl-setup.service \
     tpm-permissions.service \

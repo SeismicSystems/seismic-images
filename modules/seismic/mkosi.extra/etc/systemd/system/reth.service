@@ -1,7 +1,7 @@
 [Unit]
 Description=Seismic Reth Node
-After=network.target persistent-mount.service nginx-ssl-setup.service enclave.service
-Requires=persistent-mount.service nginx-ssl-setup.service enclave.service
+After=network.target persistent-luks-setup.service nginx-ssl-setup.service enclave.service
+Requires=persistent-luks-setup.service nginx-ssl-setup.service enclave.service
 
 [Service]
 Type=simple

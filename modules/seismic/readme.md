@@ -26,16 +26,23 @@ enabled (added to `minimal.target.wants`) via the loop in
 **Boot chain (services ordered by when they're needed):**
 
 ```
-  persistent-mount.service         tpm-permissions.service
-          │                             (sysinit.target)
-          ▼                                     │
-  tdx-init.service                              │
-          │                                     │
-          ▼                                     │
-  nginx-ssl-setup.service                       │
-          │                                     │
-          ▼                                     │
-  enclave.service ◄─────────────────────────────┘
+  tpm-permissions.service
+  (sysinit.target)
+          │
+          ▼
+  persistent-luks-setup.service
+          │
+          ▼
+  tdx-init.service
+          │
+          ▼
+  nginx-ssl-setup.service ──► certbot-renew.timer
+          │                    (cron-style, fires
+          │                     certbot-renew.service
+          │                     monthly to renew the
+          │                     Let's Encrypt cert)
+          ▼
+  enclave.service
           │
           ▼
   reth.service
@@ -44,7 +51,7 @@ enabled (added to `minimal.target.wants`) via the loop in
   summit.service
 ```
 
-`tpm-permissions` (`WantedBy=sysinit.target`) has no ordering relationship with the main-chain services (`persistent-mount`, `tdx-init`, `nginx-ssl-setup`) — the two tracks run in parallel. They converge at `enclave.service`, which has hard `Requires=` on both `nginx-ssl-setup.service` and `tpm-permissions.service` (shown by the `◄──` arrow).
+`tpm-permissions` runs at `sysinit.target` (very early). Every later service is transitively after it via `persistent-luks-setup`'s `Requires=tpm-permissions.service` (the LUKS script needs `/dev/tpm0` to enroll/unseal the keyslot). `enclave.service` redundantly re-declares the dependency — harmless, defensive against the chain ever being restructured.
 
 ### `tpm-permissions.service`
 
@@ -60,26 +67,56 @@ have no way to produce attestation quotes.
 `libtss2-esys-…` and `libtss2-tctildr0t64` (in `mkosi.conf` Packages) are
 the TPM2 libraries the enclave links against.
 
-### `persistent-mount.service`
+### `persistent-luks-setup.service`
 
-Oneshot that blocks until `/persistent` is mounted (polls `/proc/mounts`).
-`/persistent` is the LUKS-encrypted data disk provisioned by `tdx-init` at
-first boot; everything downstream (node config, reth/summit/enclave state)
-lives on it, so subsequent services gate on this.
+Oneshot that runs
+[`setup-persistent-luks`](mkosi.extra/usr/bin/setup-persistent-luks),
+which provisions or unlocks the persistent LUKS volume and mounts it at
+`/persistent`. Idempotent across boots:
 
-Byte-identical to flashbox's `persistent-mount.service` — copied verbatim.
+- **First boot.** Generates a 32-byte CSPRNG key, `cryptsetup luksFormat`
+  with that key, `mkfs.ext4`, then `systemd-cryptenroll --tpm2-device=auto
+  --tpm2-pcrs=4+9+11` to seal an unlock key under a TPM2 PCR policy bound
+  to the TDX measurement, finally wipes the original CSPRNG keyslot. No
+  human ever knows the unlock material.
+- **Every subsequent boot.** `cryptsetup isLuks` is true; the script
+  invokes `systemd-cryptsetup attach … tpm2-device=auto`, which TPM2-
+  unseals the keyslot — fails closed if the PCRs differ from when the
+  slot was sealed (tampered image, different VM, etc.).
+
+`Requires=tpm-permissions.service` because the script reads `/dev/tpm0`
+during enroll/unseal. `Restart=on-failure RestartSec=5` to ride out
+transient cases like the data disk not yet attached or the vTPM not yet
+ready; systemd gives up after a few cycles, surfacing a hard failure if
+the underlying issue is permanent.
+
+The disk discovery defaults to `/dev/disk/by-path/*10` (Azure LUN 10).
+Override with one or more globs in `/etc/seismic-images/persistent-disk-glob`
+for other clouds (GCP exposes `/dev/disk/by-id/google-<diskname>`,
+no LUN concept). TODO: have deploy tooling write the override file at
+provisioning time.
+
+Replaces the LUKS provisioning that previously lived inside the `tdx-init`
+binary; the binary now handles only HTTP config receipt. See
+`tdx-init` commit `695a2f7` for the rationale.
 
 ### `tdx-init.service`
 
-Runs `tdx-init wait-for-key`, which blocks until a provisioner POSTs the
-node's configuration (domain name, certbot email) via HTTP. On success,
-`tdx-init` writes the config to `/persistent/conf/node.json`.
+Runs `tdx-init wait-for-config`, which on first boot blocks until a
+provisioner POSTs the node's configuration (domain name, certbot email)
+via HTTP and writes it to `/persistent/conf/node.json`. On every
+subsequent boot the unit is a no-op (config file already exists, binary
+exits immediately).
 
-`setup-nginx-ssl` reads the domain + email from that file for certbot.
-The other services (reth, enclave, summit) take their args statically from
-the systemd unit files — they don't touch `node.json`, so in principle
-they could start without waiting for tdx-init, but the current boot
-chain serializes them after it for simplicity.
+Runs as the `tdx-init` system user (group `eth`). `ExecStartPre=+...`
+ensures `/persistent/conf` exists with `tdx-init:eth` ownership before
+the binary writes into it.
+
+`setup-nginx-ssl` reads the domain + email from `node.json` for certbot.
+The other services (reth, enclave, summit) take their args statically
+from the systemd unit files — they don't touch `node.json`, so in
+principle they could start without waiting for tdx-init, but the current
+boot chain serializes them after it for simplicity.
 
 ### `nginx-ssl-setup.service`
 
@@ -114,7 +151,7 @@ network encryption key, validator BLS keys, and derives per-purpose
 secrets sealed to the TDX measurement. See the enclave repo for details
 on the RPC surface.
 
-Depends on `persistent-mount` (needs `/persistent` for sealed state),
+Depends on `persistent-luks-setup` (needs `/persistent` for sealed state),
 `nginx-ssl-setup` (for the public HTTPS endpoint), and `tpm-permissions`
 (for attestation quote generation).
 
