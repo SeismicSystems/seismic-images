@@ -1,7 +1,7 @@
 [Unit]
 Description=Seismic Enclave Server
-After=network.target persistent-mount.service nginx-ssl-setup.service tpm-permissions.service
-Requires=persistent-mount.service nginx-ssl-setup.service tpm-permissions.service
+After=network.target persistent-luks-setup.service nginx-ssl-setup.service tpm-permissions.service
+Requires=persistent-luks-setup.service nginx-ssl-setup.service tpm-permissions.service
 
 [Service]
 Type=simple

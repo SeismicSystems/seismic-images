@@ -1,12 +1,22 @@
 [Unit]
 Description=TDX initialization (wait for node config via HTTP)
-After=network-online.target persistent-mount.service
+After=network-online.target persistent-luks-setup.service
 Wants=network-online.target
-Requires=persistent-mount.service
+Requires=persistent-luks-setup.service
 
 [Service]
 Type=oneshot
-ExecStart=/usr/bin/tdx-init wait-for-key
+User=tdx-init
+Group=eth
+
+# The +/… prefix forces these to run as root regardless of the User= setting.
+# /persistent/conf needs to exist and be writable by tdx-init on first boot;
+# only root can chown the freshly-created directory.
+ExecStartPre=+/bin/mkdir -p /persistent/conf
+ExecStartPre=+/bin/chown tdx-init:eth /persistent/conf
+ExecStartPre=+/bin/chmod 0750 /persistent/conf
+
+ExecStart=/usr/bin/tdx-init wait-for-config
 RemainAfterExit=yes
 Restart=on-failure
 RestartSec=5

@@ -1,0 +1,264 @@
+#!/bin/bash
+# Provision (first boot) or unlock (subsequent boots) the persistent LUKS
+# disk and mount it at /persistent. Idempotent: on any boot, the script
+# inspects on-disk state and does only what's needed.
+#
+# Threat model: operator-untrusted. No human knows the LUKS unlock material.
+# On first boot we generate a 32-byte CSPRNG key as bootstrap unlock material
+# for keyslot 0, format the disk (cryptsetup generates the actual master key
+# itself, independently — we never see it), enroll a TPM2-sealed keyslot
+# bound to the TDX measurement (PCRs 4/9/11), then wipe the bootstrap
+# keyslot. Every subsequent boot unlocks via TPM2 unseal — a tampered image
+# fails the PCR policy.
+#
+# End-state LUKS2 keyslot layout we're targeting:
+#
+#   ┌──────────────────────────────────────────────────────────────────┐
+#   │ Slot 0:  WIPED — first-boot bootstrap                            │
+#   │          Random 32B from /dev/urandom, used once as the unlock   │
+#   │          material for cryptsetup luksFormat. Killed via          │
+#   │          luksKillSlot 0 after slot 1 is enrolled; never re-used. │
+#   │          Random material lives only in tmpfs (TDX-protected RAM) │
+#   │          and is shredded immediately after the kill.             │
+#   ├──────────────────────────────────────────────────────────────────┤
+#   │ Slot 1:  TPM2-sealed — everyday unlock                           │
+#   │          tpm_unlock_secret sealed in a LUKS2 token by the local  │
+#   │          TPM under a PCR policy. Released only when the booting  │
+#   │          image's PCRs satisfy the policy → a tampered image      │
+#   │          fails to unseal → /persistent doesn't mount.            │
+#   ├──────────────────────────────────────────────────────────────────┤
+#   │ Slot 2:  TODO — Multisig-signed PCR policy — upgrade authority   │
+#   │          Same TPM2-sealed shape as slot 1, but the PCR policy is │
+#   │          PolicyAuthorize-bound to a multisig public key          │
+#   │          (validator-set threshold / DAO / operator council).     │
+#   │          The multisig signs predicted PCRs of each new image     │
+#   │          release offline; the signature ships in the image; the  │
+#   │          TPM verifies the signature against the enrolled multi-  │
+#   │          sig pubkey before unseal. Decouples "what image is      │
+#   │          allowed to unlock" from per-node enrollment — upgrades  │
+#   │          are authorized by the network, not by re-touching every │
+#   │          deployed node.                                          │
+#   └──────────────────────────────────────────────────────────────────┘
+#
+# Current script implements slot 0 + slot 1 only (slot 1 with a literal-PCR
+# policy, not yet signed-policy). Slot 2 — and the migration path from
+# "today's single-signer slot 1" to "tomorrow's multisig-signed slot" — is
+# the BLOCKER tracked below.
+#
+# ============================================================================
+# 🔴 BLOCKER before any node ships outside the test bench
+# ============================================================================
+# This script enrolls TPM2 under *literal* PCR values
+# (`--tpm2-pcrs=4+9+11` in provision_luks), which means any image update
+# changes PCRs and breaks unlock — the node bricks on first boot of the
+# new image. Fine for the first deploy; catastrophic on the second.
+#
+# Fix shape: signed-PCR-policy enrollment. The systemd-cryptenroll call
+# in provision_luks becomes:
+#     systemd-cryptenroll \
+#         --tpm2-device=auto \
+#         --tpm2-public-key=/etc/seismic/release-pub.pem \
+#         --tpm2-public-key-pcrs="$TPM2_PCRS" \
+#         "$device"
+# Per release, predicted PCRs are signed (via `systemd-measure sign`)
+# under the private key matching release-pub.pem, and the signature is
+# bundled in the image at /etc/systemd/tpm2-pcr-signature.json. At boot,
+# systemd-cryptsetup reads the signature, hands it + current PCRs to
+# the TPM, the TPM verifies the signature against the enrolled public
+# key, and releases the unlock key.
+#
+# The binding-style choice has to be made BEFORE first enroll — switching
+# later is chicken-and-egg (you'd need the literal-PCR unlock to migrate,
+# which v2 can't satisfy because its PCRs differ from v1's).
+#
+# TODO: figure out who is going to hold this key and sign:
+#   - validator-set?
+#   - on-chain governance vote? Produces an authorization, with a
+#     small relayer or attestation gadget that converts the on-chain
+#     decision into something the TPM accepts
+#   - operator-council M-of-N multisig?
+# ============================================================================
+
+set -euo pipefail
+
+MAPPER_NAME="persistent"
+MAPPER_DEVICE="/dev/mapper/${MAPPER_NAME}"
+MOUNT_POINT="/persistent"
+
+# Default disk glob: Azure attaches the persistent data disk at LUN 10 by
+# convention (set in deploy/.../azure/api.py::attach_data_disk). Override
+# via /etc/seismic-images/persistent-disk-glob (one glob per line) for
+# other clouds — GCP uses /dev/disk/by-id/google-<diskname>, no LUN concept.
+# TODO: ship the override from the per-cloud mkosi profile, e.g.
+#   mkosi.profiles/gcp/mkosi.extra/etc/seismic-images/persistent-disk-glob
+# Until that lands, GCP-built images silently fall back to the Azure
+# default and fail to discover the data disk.
+DEFAULT_DISK_GLOB="/dev/disk/by-path/*10"
+DISK_GLOB_OVERRIDE_FILE="/etc/seismic-images/persistent-disk-glob"
+
+# TPM2 PCRs reproducible across builds on Azure TDX:
+#   4  — UEFI Boot Manager Code & Boot Attempts
+#   9  — kernel + initrd loaded from the UKI's .linux / .initrd sections
+#   11 — UKI sections (.linux/.initrd/.cmdline) measured by systemd-stub
+# Other PCRs vary across hosts due to closed-source firmware measurements.
+# Reference: modules/flashbox/flashbox-l1/readme.md "Trusted Boot Process".
+TPM2_PCRS="4+9+11"
+
+log() { echo "[setup-persistent-luks] $*" >&2; }
+
+# Locate the persistent data disk's block-device path. Walks a list of
+# glob patterns (one per line in $DISK_GLOB_OVERRIDE_FILE if present,
+# else just $DEFAULT_DISK_GLOB), takes the first pattern with at least
+# one match, resolves the symlink, and prints the absolute device path
+# to stdout. Returns non-zero if no pattern matches — caller must check.
+discover_disk() {
+    local patterns=()
+    if [[ -r "$DISK_GLOB_OVERRIDE_FILE" ]]; then
+        mapfile -t patterns < "$DISK_GLOB_OVERRIDE_FILE"
+    else
+        patterns=("$DEFAULT_DISK_GLOB")
+    fi
+
+    shopt -s nullglob
+    for pattern in "${patterns[@]}"; do
+        # shellcheck disable=SC2206  # intentional unquoted glob expansion
+        local matches=( $pattern )
+        if (( ${#matches[@]} > 0 )); then
+            if (( ${#matches[@]} > 1 )); then
+                log "WARNING: pattern '$pattern' matched multiple devices: ${matches[*]}; using first"
+            fi
+            realpath "${matches[0]}"
+            return 0
+        fi
+    done
+
+    log "ERROR: no persistent disk found (tried: ${patterns[*]})"
+    return 1
+}
+
+# First-boot LUKS provisioning. Runs only when the disk has no LUKS
+# header yet (caller checks with `cryptsetup isLuks`); on every boot
+# after that, unlock_via_tpm handles the unseal-and-open path.
+#
+# Sequence:
+#   1. mktemp + 32 bytes of /dev/urandom → temporary keyfile holding the
+#      bootstrap unlock material. Lives only in tmpfs.
+#   2. cryptsetup luksFormat: writes the LUKS2 header AND generates the
+#      master key internally (cryptsetup's own CSPRNG, independent of
+#      our keyfile — we never see the master key). Then stores
+#      Enc_KEK_0(master_key) in keyslot 0, where
+#      KEK_0 = KDF(<our keyfile>, salt_0). cryptsetup runs the KDF
+#      even though our input is already maximum entropy — the
+#      stretching is wasted but harmless.
+#   3. cryptsetup open: uses our keyfile as unlock material → KDF →
+#      KEK_0 → decrypts slot 0 → recovers master key into the kernel →
+#      attaches dm-crypt mapper at /dev/mapper/persistent.
+#   4. mkfs.ext4 on the mapper device.
+#   5. systemd-cryptenroll: generates a fresh tpm_unlock_secret in
+#      memory, asks the TPM to seal it under a PCR policy (PCRs 4/9/11
+#      — the reproducible Azure-TDX set), stores the sealed blob as a
+#      LUKS2 token, and creates a *new* keyslot containing
+#      Enc_KEK_TPM(master_key) where KEK_TPM = KDF(tpm_unlock_secret,
+#      salt_N). The TPM-bound slot is what every subsequent boot uses;
+#      tpm_unlock_secret is discarded from memory after enrollment.
+#   6. cryptsetup luksKillSlot 0: wipes the bootstrap keyslot. After
+#      this, the disk can ONLY be unlocked via TPM unseal under the
+#      enrolled PCR policy — no human ever knows the unlock material.
+#   7. shred -u on the temporary keyfile.
+#
+# After this returns, /dev/mapper/persistent is already open (from
+# step 3), so the caller can mount /persistent without a second unlock.
+provision_luks() {
+    local device=$1
+    log "first-boot: provisioning LUKS2 on $device"
+
+    local tmp_unlock_key_file
+    tmp_unlock_key_file=$(mktemp)
+    chmod 0600 "$tmp_unlock_key_file"
+    head -c 32 /dev/urandom > "$tmp_unlock_key_file"
+
+    # TODO: add `--integrity hmac-sha256` once the ~2× write amplification
+    # has been measured against expected node IO. Without integrity,
+    # AES-XTS is malleable in 16-byte blocks, but state-root mismatches
+    # surface tampering at the chain layer on next read.
+    cryptsetup luksFormat --type luks2 --batch-mode --key-file "$tmp_unlock_key_file" "$device"
+
+    cryptsetup open --key-file "$tmp_unlock_key_file" "$device" "$MAPPER_NAME"
+
+    log "creating ext4 filesystem on $MAPPER_DEVICE"
+    mkfs.ext4 -q "$MAPPER_DEVICE"
+
+    log "enrolling TPM2 keyslot (PCRs=$TPM2_PCRS)"
+    systemd-cryptenroll --unlock-key-file="$tmp_unlock_key_file" --tpm2-device=auto --tpm2-pcrs="$TPM2_PCRS" "$device"
+
+    log "wiping random-key keyslot 0"
+    cryptsetup luksKillSlot --batch-mode --key-file "$tmp_unlock_key_file" "$device" 0
+
+    shred -u "$tmp_unlock_key_file"
+}
+
+# Steady-state unlock path: every boot after first. systemd-cryptsetup
+# does the full TPM-unseal-and-attach in one call:
+#   1. Reads the LUKS2 header on $device, finds the `systemd-tpm2` token.
+#   2. Hands the sealed blob in that token + the current PCR values to
+#      the local TPM. TPM verifies PCRs against the policy embedded at
+#      enroll time. Match → returns tpm_unlock_secret. Mismatch → refuses
+#      (this script then exits non-zero, systemd retries per Restart=).
+#   3. KDF(tpm_unlock_secret, salt_N) → KEK_TPM → decrypts the TPM-bound
+#      keyslot → recovers the master key.
+#   4. Hands the master key to the kernel's dm-crypt subsystem, which
+#      stores it in the per-mapper kernel struct and creates
+#      /dev/mapper/persistent. Master key lives in kernel memory only,
+#      never visible to userspace, wiped when the mapper is closed
+#      (or at reboot when memory clears).
+# After return, /dev/mapper/persistent is a usable block device — every
+# IO through it is transparently encrypted/decrypted by the kernel
+# using the held master key.
+#
+# The `-` argument to systemd-cryptsetup is the keyfile slot — bare
+# dash means "no static keyfile; use the configured TPM2 token instead."
+unlock_via_tpm() {
+    local device=$1
+    # No-op if the mapper already exists (e.g. systemd is retrying this
+    # service after a transient failure later in main()).
+    if [[ -e "$MAPPER_DEVICE" ]]; then
+        log "$MAPPER_DEVICE already open"
+        return 0
+    fi
+    log "unlocking $device via TPM2"
+    /usr/lib/systemd/systemd-cryptsetup attach "$MAPPER_NAME" "$device" - tpm2-device=auto
+}
+
+# Mount the now-decrypted dm-crypt mapper device at /persistent. No-op
+# if /persistent is already a mountpoint (e.g. the script ran earlier
+# in the same boot and is being retried by systemd's Restart=on-failure).
+mount_persistent() {
+    if mountpoint -q "$MOUNT_POINT"; then
+        log "$MOUNT_POINT already mounted"
+        return 0
+    fi
+    mkdir -p "$MOUNT_POINT"
+    log "mounting $MAPPER_DEVICE at $MOUNT_POINT"
+    mount "$MAPPER_DEVICE" "$MOUNT_POINT"
+}
+
+main() {
+    # Ensure /dev/disk/by-* symlinks are populated; on early boot udev may
+    # still be settling.
+    udevadm trigger --subsystem-match=block 2>/dev/null || true
+    udevadm settle --timeout=30 2>/dev/null || true
+
+    local device
+    device=$(discover_disk)
+    log "persistent disk: $device"
+
+    if cryptsetup isLuks "$device"; then
+        unlock_via_tpm "$device"
+    else
+        provision_luks "$device"
+    fi
+
+    mount_persistent
+}
+
+main "$@"
