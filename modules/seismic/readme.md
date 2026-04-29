@@ -11,9 +11,42 @@ Top-level files at a glance:
 | -------------------------------------- | ----------------------------------------------------------------------------------------------- |
 | [`mkosi.conf`](mkosi.conf)             | Debian packages (`nginx`, `certbot`, `cryptsetup`, …) + build packages                          |
 | [`mkosi.build`](mkosi.build)           | Source-builds: pinned commits of `tdx-init`, `seismic-reth`, `seismic-enclave-server`, `summit` |
+| [`sources.yaml`](sources.yaml)         | Pinned git refs read by `mkosi.build` (structured manifest, Renovate/Dependabot-friendly)       |
 | [`mkosi.postinst`](mkosi.postinst)     | Creates users/groups, enables systemd services                                                  |
 | [`kernel/config.d/`](kernel/config.d/) | Seismic-specific kernel config snippets                                                         |
 | [`mkosi.extra/`](mkosi.extra/)         | Filesystem overlay — systemd units, nginx config, helper scripts                                |
+
+What ends up in the image
+---
+
+Files in this directory aren't all part of the produced image — some are
+build-inputs only. The image rootfs is the union of four channels:
+
+| Channel                                    | What it puts in the image                                                                                                                              |
+| ------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| [`mkosi.extra/`](mkosi.extra/)             | Copied wholesale at matching paths — see tree below.                                                                                                   |
+| `Packages=` in [`mkosi.conf`](mkosi.conf)  | apt-installed Debian packages: `nginx`, `certbot`, `python3-certbot-nginx`, `cryptsetup`, `systemd-cryptsetup`, `tpm2-tools`, `libtss2-*`, `jq`, `lz4` |
+| [`mkosi.build`](mkosi.build)               | Compiled binaries written to `$DESTDIR`: `tdx-init`, `seismic-reth`, `seismic-enclave-server`, `summit` → `/usr/bin/`; reth dev genesis → `/usr/share/seismic-reth/genesis.json` |
+| [`mkosi.postinst`](mkosi.postinst)         | Image-fs mutations: system users + `eth`/`tss` groups in `/etc/{passwd,group}`, services symlinked into `/etc/systemd/system/minimal.target.wants/`, `setup-*` helper scripts made executable |
+
+`mkosi.extra/` lays out exactly what its name suggests — the same paths
+relative to the image root:
+
+```
+mkosi.extra/
+├── etc/
+│   ├── nginx/node-template.conf            → /etc/nginx/node-template.conf
+│   ├── security/limits.d/nofile.conf       → /etc/security/limits.d/nofile.conf
+│   ├── seismic/tmpfiles-persistent.conf    → /etc/seismic/tmpfiles-persistent.conf
+│   ├── systemd/system/*.{service,timer}    → /etc/systemd/system/...
+│   └── udev/rules.d/60-tpm-permissions.rules → /etc/udev/rules.d/...
+└── usr/
+    └── bin/{setup-nginx-ssl,setup-persistent-luks} → /usr/bin/...
+```
+
+Module-root files that are **not** in the image: `mkosi.conf`,
+`mkosi.build`, `mkosi.postinst`, `sources.yaml`, `kernel/config.d/`.
+They're read at build time and never copied to `$DESTDIR`.
 
 Services
 ---
