@@ -1,9 +1,10 @@
 #!/bin/bash
 set -euxo pipefail
 
-# Create user and group
-# NOTE: Due to a limitation in mkosi, all folders are owned by root by default
-# https://github.com/systemd/mkosi/issues/3065
+# Create the system users/groups our services run as (User=, Group= in unit files).
+# They have to exist in the image's /etc/passwd and /etc/group at boot;
+# hence build-time creation here via mkosi-chroot, not at first boot. Each user is referenced 
+# by name in the corresponding service unit; deleting any of these breaks startup.
 mkosi-chroot groupadd -r eth
 mkosi-chroot groupadd -r tss || true  # tss group may already exist from libtss2 package
 mkosi-chroot useradd -r -s /bin/false -g tss -G eth tss 2>/dev/null || true  # tss user may already exist
@@ -22,7 +23,6 @@ for service in \
     persistent-luks-setup.service \
     tdx-init.service \
     nginx-ssl-setup.service \
-    tpm-permissions.service \
     reth.service \
     enclave.service \
     summit.service

@@ -17,15 +17,18 @@ UMask=0002
 # and will start working once summit's EnvFilter construction is updated.
 Environment=RUST_LOG=info
 
-ExecStartPre=+/bin/mkdir -p /persistent/summit/db
-ExecStartPre=+/bin/mkdir -p /persistent/summit/keys
-ExecStartPre=+/bin/chown -R summit:eth /persistent/summit
-ExecStartPre=+/bin/chmod -R g+rwX /persistent/summit
-ExecStartPre=+/bin/chmod g+s /persistent/summit
+# /persistent/summit{,/db,/keys} are created by /etc/seismic/tmpfiles-persistent.conf
+# via persistent-luks-setup's ExecStartPost. `summit keys generate -n` then generates two
+# keys into /persistent/summit/keys if they don't already exist:
+#   - node_key.pem      ed25519 — libp2p peer identity (commonware-p2p)
+#   - consensus_key.pem BLS12-381 — Simplex BFT validator signing key
+# `-n` means "don't overwrite if present," so first boot generates both
+# and every subsequent boot is a no-op (these are this validator's
+# persistent identity, generated once and kept for life).
 ExecStartPre=/usr/bin/summit keys generate -n --key-store-path /persistent/summit/keys
 
 ExecStart=/usr/bin/summit run \
-    --engine-ipc-path /var/volatile/reth_engine_api.ipc \
+    --engine-ipc-path /run/reth-engine/api.ipc \
     --genesis-path /persistent/summit/genesis.toml \
     --store-path /persistent/summit/db \
     --key-store-path /persistent/summit/keys \

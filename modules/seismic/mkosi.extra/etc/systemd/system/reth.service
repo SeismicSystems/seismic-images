@@ -10,13 +10,14 @@ Group=eth
 UMask=0002
 Environment=RUST_LOG=info
 
-ExecStartPre=+/bin/mkdir -p /persistent/reth
-ExecStartPre=+/bin/mkdir -p /var/volatile
-ExecStartPre=+/bin/chown reth:eth /var/volatile
-ExecStartPre=+/bin/chown -R reth:eth /persistent/reth
-ExecStartPre=+/bin/chmod -R g+rwX /persistent/reth
-ExecStartPre=+/bin/chmod g+s /persistent/reth
+# Creates /run/reth-engine at service start, where the API engine ipc socket lives.
+RuntimeDirectory=reth-engine
+RuntimeDirectoryMode=0750
+# Keeps the dir across reth restarts so summit doesn't see it disappear briefly.
+RuntimeDirectoryPreserve=restart
 
+# /persistent/reth is created by /etc/seismic/tmpfiles-persistent.conf via
+# persistent-luks-setup's ExecStartPost.
 ExecStart=/usr/bin/seismic-reth node \
     --http.corsdomain "*" \
     --ws.origins "*" \
@@ -33,7 +34,7 @@ ExecStart=/usr/bin/seismic-reth node \
     --ws.port 8546 \
     --ws.api all \
     --auth-ipc \
-    --auth-ipc.path /var/volatile/reth_engine_api.ipc \
+    --auth-ipc.path /run/reth-engine/api.ipc \
     --log.stdout.format json \
     --log.file.max-files 0 \
     --metrics 127.0.0.1:9001

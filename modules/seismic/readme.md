@@ -26,10 +26,6 @@ enabled (added to `minimal.target.wants`) via the loop in
 **Boot chain (services ordered by when they're needed):**
 
 ```
-  tpm-permissions.service
-  (sysinit.target)
-          │
-          ▼
   persistent-luks-setup.service
           │
           ▼
@@ -51,21 +47,29 @@ enabled (added to `minimal.target.wants`) via the loop in
   summit.service
 ```
 
-`tpm-permissions` runs at `sysinit.target` (very early). Every later service is transitively after it via `persistent-luks-setup`'s `Requires=tpm-permissions.service` (the LUKS script needs `/dev/tpm0` to enroll/unseal the keyslot). `enclave.service` redundantly re-declares the dependency — harmless, defensive against the chain ever being restructured.
+The boot chain has no service-level TPM-perms or per-service dir-setup;
+both are handled out-of-band:
 
-### `tpm-permissions.service`
+- **TPM device perms** — see
+  [`60-tpm-permissions.rules`](mkosi.extra/etc/udev/rules.d/60-tpm-permissions.rules)
+  (udev rule, applied at device-creation time).
+- **`/persistent/<svc>` ownership/mode** — see
+  [`tmpfiles-persistent.conf`](mkosi.extra/etc/seismic/tmpfiles-persistent.conf)
+  (applied by `persistent-luks-setup.service`'s `ExecStartPost` after
+  the LUKS volume is mounted).
 
-Runs at `sysinit.target` (very early boot). Changes ownership of
-`/dev/tpm*` from `root:root` to `root:tss` and sets mode `660`, so that
-processes running as non-root members of the `tss` group can access the
-TPM for TDX attestation quote generation.
+### TPM access
 
-Needed because `enclave.service` runs as the `enclave` user (which is in
-the `tss` group), not as root. Without this service, the enclave would
-have no way to produce attestation quotes.
+Configured declaratively via the
+[udev rule](mkosi.extra/etc/udev/rules.d/60-tpm-permissions.rules) —
+perms are set the moment the kernel publishes the device, before any
+service starts. No ordering constraints; no `Requires=`/`After=`
+against any TPM-setup unit anywhere.
 
-`libtss2-esys-…` and `libtss2-tctildr0t64` (in `mkosi.conf` Packages) are
-the TPM2 libraries the enclave links against.
+`enclave.service` gains TPM access via the `tss` supplementary group
+(`mkosi.postinst` adds the user to that group). `reth`/`summit` don't
+talk to the TPM. The TPM2 user-space libraries the enclave links against
+(`libtss2-esys-…`, `libtss2-tctildr0t64`) come from `mkosi.conf` Packages.
 
 ### `persistent-luks-setup.service`
 
@@ -84,11 +88,18 @@ which provisions or unlocks the persistent LUKS volume and mounts it at
   unseals the keyslot — fails closed if the PCRs differ from when the
   slot was sealed (tampered image, different VM, etc.).
 
-`Requires=tpm-permissions.service` because the script reads `/dev/tpm0`
-during enroll/unseal. `Restart=on-failure RestartSec=5` to ride out
-transient cases like the data disk not yet attached or the vTPM not yet
-ready; systemd gives up after a few cycles, surfacing a hard failure if
-the underlying issue is permanent.
+`Restart=on-failure RestartSec=5` to ride out transient cases like the
+data disk not yet attached or the vTPM not yet ready; systemd gives up
+after a few cycles, surfacing a hard failure if the underlying issue is
+permanent. `/dev/tpm[rm]*` perms are set by udev (see "TPM device
+permissions" above), so no explicit ordering against any TPM-setup
+service is needed.
+
+`ExecStartPost=/usr/bin/systemd-tmpfiles --create /etc/seismic/tmpfiles-persistent.conf` 
+runs after the volume is mounted to materialize the per-service `/persistent/<svc>` subdirs 
+from the central tmpfiles config. Downstream services (reth, enclave, summit, tdx-init)
+used to do this work in their own `ExecStartPre` blocks;
+centralized here so there's one auditable file describing what each service expects on disk.
 
 The disk discovery defaults to `/dev/disk/by-path/*10` (Azure LUN 10).
 Override with one or more globs in `/etc/seismic-images/persistent-disk-glob`
@@ -151,9 +162,10 @@ network encryption key, validator BLS keys, and derives per-purpose
 secrets sealed to the TDX measurement. See the enclave repo for details
 on the RPC surface.
 
-Depends on `persistent-luks-setup` (needs `/persistent` for sealed state),
-`nginx-ssl-setup` (for the public HTTPS endpoint), and `tpm-permissions`
-(for attestation quote generation).
+Depends on `persistent-luks-setup` (needs `/persistent` for sealed
+state) and `nginx-ssl-setup` (for the public HTTPS endpoint). Access to
+`/dev/tpmrm0` for attestation-quote generation comes via the udev
+rule that sets `tss` group ownership on the device node.
 
 `RestartSec=60` is unusually long — TDX quote generation can be slow on
 restart; tight loops would hammer the TPM.

@@ -1,0 +1,11 @@
+# Make /dev/tpmrm0 accessible to non-root daemons in the `tss` group:
+#   - enclave-server (attestation quotes, libtss2-esys)
+#   - setup-persistent-luks (TPM2 keyslot enroll/unseal, via systemd-
+#     cryptenroll/cryptsetup which use libtss2 internally)
+#
+# Only the resource-manager interface (/dev/tpmrm[0-9]*), not the raw
+# /dev/tpm[0-9]*. All TSS2-based callers use the resource manager, and
+# the raw device is single-user-locked — granting tss-group access to
+# it would be over-permissioning a node we never open. Raw /dev/tpm0
+# stays at kernel-default root:root 0600.
+KERNEL=="tpmrm[0-9]*", GROUP="tss", MODE="0660"
