@@ -1,13 +1,15 @@
 [Unit]
 Description=Provision and unlock the persistent LUKS volume, mount /persistent
-# Needs /dev/tpm* readable (tpm-permissions.service chowns it root:tss 0660).
-Requires=tpm-permissions.service
-After=tpm-permissions.service
 
 [Service]
 Type=oneshot
-ExecStart=/usr/bin/setup-persistent-luks
 RemainAfterExit=yes
+
+# Provision (first boot) or TPM-unseal (subsequent boots) the LUKS volume and mount /persistent.
+ExecStart=/usr/bin/setup-persistent-luks
+# Materialize per-service /persistent/<svc> ownership and mode now that /persistent is mounted.
+ExecStartPost=/usr/bin/systemd-tmpfiles --create /etc/seismic/tmpfiles-persistent.conf
+
 # Retry transient failures (e.g. data disk not yet attached, vTPM not ready)
 # rather than wedging the boot. systemd gives up after a few cycles by
 # default, surfacing a hard failure if the underlying issue is permanent.
