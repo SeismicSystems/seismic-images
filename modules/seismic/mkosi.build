@@ -3,11 +3,14 @@ set -euxo pipefail
 
 source scripts/make_git_package.sh
 
-# Branches & commit hashes for reproducible builds
-TDX_INIT_COMMIT="6f79b7ace1811b11a5827f8859de8859dc1494f6"
-ENCLAVE_COMMIT="f90b02f38a6190e8b2ff2d051d9043f3480cd3ac"
-RETH_COMMIT="f2d9fcacba5dc3d06eaa8119d82833f2c2d37409"
-SUMMIT_COMMIT="82719ced40f21768f765d1ff62c25ceb1e9c0a39"
+# Source pins live in modules/seismic/sources.yaml so they're a structured,
+# machine-editable document (Renovate/Dependabot-friendly) rather than inline shell vars.
+SOURCES_YAML="$SRCDIR/modules/seismic/sources.yaml"
+
+TDX_INIT_COMMIT=$(mkosi-chroot yq -r '.tdx_init.git_reference' < "$SOURCES_YAML")
+ENCLAVE_COMMIT=$(mkosi-chroot yq -r '.enclave.git_reference' < "$SOURCES_YAML")
+RETH_COMMIT=$(mkosi-chroot yq -r '.seismic_reth.git_reference' < "$SOURCES_YAML")
+SUMMIT_COMMIT=$(mkosi-chroot yq -r '.summit.git_reference' < "$SOURCES_YAML")
 
 # Build tdx-init (using Seismic fork with JSON config support)
 TDX_INIT_BUILD_CMD="
@@ -80,4 +83,3 @@ make_git_package \
     "https://github.com/SeismicSystems/summit" \
     "$SUMMIT_BUILD_CMD" \
     "target/release/summit:/usr/bin/summit"
-
