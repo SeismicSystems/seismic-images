@@ -1,7 +1,7 @@
 [Unit]
 Description=Seismic Enclave Server
-After=network.target persistent-luks-setup.service nginx-ssl-setup.service
-Requires=persistent-luks-setup.service nginx-ssl-setup.service
+After=network.target persistent-luks-setup.service tdx-init.service nginx-ssl-setup.service
+Requires=persistent-luks-setup.service tdx-init.service nginx-ssl-setup.service
 
 [Service]
 Type=simple
@@ -9,6 +9,12 @@ User=enclave
 Group=eth
 Environment=RUST_BACKTRACE=full
 Environment=RUST_LOG=info
+# Operator-supplied SEISMIC_ENCLAVE_GENESIS_NODE / SEISMIC_ENCLAVE_PEERS,
+# written by tdx-init at deploy time. systemd refuses to start the
+# unit if this file is missing — its existence is an invariant of the
+# boot chain (tdx-init.service is a Requires= above and produces this
+# file before exiting successfully).
+EnvironmentFile=/persistent/conf/enclave.env
 
 ExecStart=/usr/bin/seismic-enclave-server --ip 0.0.0.0 --port 7878
 
