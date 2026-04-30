@@ -1,7 +1,7 @@
 #!/bin/bash
 set -euo pipefail
 
-CONFIG_FILE="/persistent/conf/node.json"
+CONFIG_FILE="/persistent/conf/domain.env"
 NODE_TEMPLATE="/etc/nginx/node-template.conf"
 NODE_NGINX_CONF="/persistent/conf/node-nginx.conf"
 NODE_NGINX_ENABLED="/etc/nginx/sites-enabled/node"
@@ -19,11 +19,11 @@ if [ ! -f "$CONFIG_FILE" ]; then
     exit 1
 fi
 
-# Extract domain name from config
-DOMAIN_NAME=$(jq -r '.domain.name' "$CONFIG_FILE")
-DOMAIN_EMAIL=$(jq -r '.domain.email' "$CONFIG_FILE")
+# tdx-init writes DOMAIN_NAME and DOMAIN_EMAIL into this env file.
+# shellcheck source=/dev/null
+source "$CONFIG_FILE"
 
-if [ -z "$DOMAIN_NAME" ] || [ "$DOMAIN_NAME" = "null" ]; then
+if [ -z "${DOMAIN_NAME:-}" ]; then
     echo "No domain name found in config, skipping nginx/SSL setup"
     exit 0
 fi

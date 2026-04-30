@@ -22,12 +22,12 @@ What ends up in the image
 Files in this directory aren't all part of the produced image — some are
 build-inputs only. The image rootfs is the union of four channels:
 
-| Channel                                    | What it puts in the image                                                                                                                              |
-| ------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| [`mkosi.extra/`](mkosi.extra/)             | Copied wholesale at matching paths — see tree below.                                                                                                   |
-| `Packages=` in [`mkosi.conf`](mkosi.conf)  | apt-installed Debian packages: `nginx`, `certbot`, `python3-certbot-nginx`, `cryptsetup`, `systemd-cryptsetup`, `tpm2-tools`, `libtss2-*`, `jq`, `lz4` |
-| [`mkosi.build`](mkosi.build)               | Compiled binaries written to `$DESTDIR`: `tdx-init`, `seismic-reth`, `seismic-enclave-server`, `summit` → `/usr/bin/`; reth dev genesis → `/usr/share/seismic-reth/genesis.json` |
-| [`mkosi.postinst`](mkosi.postinst)         | Image-fs mutations: system users + `eth`/`tss` groups in `/etc/{passwd,group}`, services symlinked into `/etc/systemd/system/minimal.target.wants/`, `setup-*` helper scripts made executable |
+| Channel                                   | What it puts in the image                                                                                                                                                                     |
+| ----------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [`mkosi.extra/`](mkosi.extra/)            | Copied wholesale at matching paths — see tree below.                                                                                                                                          |
+| `Packages=` in [`mkosi.conf`](mkosi.conf) | apt-installed Debian packages: `nginx`, `certbot`, `python3-certbot-nginx`, `cryptsetup`, `systemd-cryptsetup`, `tpm2-tools`, `libtss2-*`, `lz4`                                              |
+| [`mkosi.build`](mkosi.build)              | Compiled binaries written to `$DESTDIR`: `tdx-init`, `seismic-reth`, `seismic-enclave-server`, `summit` → `/usr/bin/`; reth dev genesis → `/usr/share/seismic-reth/genesis.json`              |
+| [`mkosi.postinst`](mkosi.postinst)        | Image-fs mutations: system users + `eth`/`tss` groups in `/etc/{passwd,group}`, services symlinked into `/etc/systemd/system/minimal.target.wants/`, `setup-*` helper scripts made executable |
 
 `mkosi.extra/` lays out exactly what its name suggests — the same paths
 relative to the image root:
@@ -147,24 +147,29 @@ binary; the binary now handles only HTTP config receipt. See
 ### `tdx-init.service`
 
 Runs `tdx-init wait-for-config`, which on first boot blocks until a
-provisioner POSTs the node's configuration (domain name, certbot email)
-via HTTP and writes it to `/persistent/conf/node.json`. On every
-subsequent boot the unit is a no-op (config file already exists, binary
-exits immediately).
+provisioner POSTs the node's configuration (TOML: `[domain]` name/email
+and optional `[enclave]` genesis_node/peers) via HTTP. On receipt
+tdx-init translates the payload into per-service config files under
+`/persistent/conf/`: `domain.env` (for `setup-nginx-ssl`) and
+`enclave.env` (consumed by `enclave.service` via `EnvironmentFile=`).
+A sentinel at `/persistent/conf/.tdx-init-done` is touched after the
+per-service write completes; on subsequent boots the unit is a no-op
+(sentinel present, binary exits immediately).
 
 Runs as the `tdx-init` system user (group `eth`). `ExecStartPre=+...`
 ensures `/persistent/conf` exists with `tdx-init:eth` ownership before
 the binary writes into it.
 
-`setup-nginx-ssl` reads the domain + email from `node.json` for certbot.
-The other services (reth, enclave, summit) take their args statically
-from the systemd unit files — they don't touch `node.json`, so in
-principle they could start without waiting for tdx-init, but the current
-boot chain serializes them after it for simplicity.
+`setup-nginx-ssl` sources `domain.env` for certbot. `enclave.service`
+loads `enclave.env` for `SEISMIC_ENCLAVE_GENESIS_NODE` /
+`SEISMIC_ENCLAVE_PEERS`; the enclave fails fast at startup if neither
+is set (no in-binary fallback — operator config is the only source of
+peer IPs). reth and summit take their args statically from the
+systemd unit files.
 
 ### `nginx-ssl-setup.service`
 
-Oneshot. Reads domain+email from `/persistent/conf/node.json`, templates
+Oneshot. Sources `/persistent/conf/domain.env` for domain+email, templates
 [`node-template.conf`](mkosi.extra/etc/nginx/node-template.conf) into a
 real nginx config, runs certbot to obtain a Let's Encrypt cert, and
 enables the renewal timer.
