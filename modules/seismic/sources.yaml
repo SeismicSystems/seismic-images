@@ -3,6 +3,6 @@ tdx_init:
 enclave:
   git_reference: b3794e914273d23861e0b454c6bc6d1256eae19e
 seismic_reth:
-  git_reference: f2d9fcacba5dc3d06eaa8119d82833f2c2d37409
+  git_reference: 4bbc6502ea566171decc97adc0c39106967e5ad9
 summit:
-  git_reference: 82719ced40f21768f765d1ff62c25ceb1e9c0a39
+  git_reference: ed2c5c844e9ec40884ddc72fc16ece36b7d99a56
