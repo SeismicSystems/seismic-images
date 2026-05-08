@@ -46,6 +46,52 @@ build: setup ## Build the specified module
 build-dev: setup ## Build module with development tools
 	$(WRAPPER) mkosi --force --image-id $(IMAGE)-dev --profile=devtools --include=images/$(IMAGE).conf
 
+##@ Publish
+
+# Azure Blob Storage configuration.
+#
+# AZURE_CONTAINER must be one of:
+#   dev        ephemeral — manual + CI non-release builds (default)
+#   releases   long-term — tagged releases that operators pull from
+#
+# Override on the command line, or use the convenience targets below:
+#   make push-azure AZURE_CONTAINER=releases
+#   make push-azure-releases                   # equivalent
+#   make push-azure AZURE_AUTH_MODE=key        # if you don't have RBAC
+#   make push-azure AZURE_STORAGE_ACCOUNT=...  # for a different registry
+AZURE_STORAGE_ACCOUNT ?= seismicimages
+AZURE_CONTAINER ?= dev
+AZURE_AUTH_MODE ?= login
+
+.PHONY: push-azure push-azure-dev push-azure-releases
+push-azure: ## Upload latest built .vhd to Azure blob storage (uses AZURE_CONTAINER)
+	@case "$(AZURE_CONTAINER)" in \
+		dev|releases) ;; \
+		*) echo "Error: AZURE_CONTAINER='$(AZURE_CONTAINER)' must be one of: dev, releases" >&2; exit 1 ;; \
+	esac; \
+	if [ ! -L build/latest.vhd ]; then \
+		echo "Error: build/latest.vhd not found. Run 'make build' or 'make build-dev' first." >&2; \
+		exit 1; \
+	fi; \
+	VHD_PATH=build/latest.vhd; \
+	BLOB_NAME=$$(basename $$(realpath $$VHD_PATH)); \
+	echo "Uploading $$BLOB_NAME → $(AZURE_STORAGE_ACCOUNT)/$(AZURE_CONTAINER)/ ..."; \
+	az storage blob upload \
+		--account-name $(AZURE_STORAGE_ACCOUNT) \
+		--container-name $(AZURE_CONTAINER) \
+		--name $$BLOB_NAME \
+		--file $$VHD_PATH \
+		--auth-mode $(AZURE_AUTH_MODE); \
+	echo ""; \
+	echo "Done. Here is the vhd_blob_url:"; \
+	echo "  https://$(AZURE_STORAGE_ACCOUNT).blob.core.windows.net/$(AZURE_CONTAINER)/$$BLOB_NAME"
+
+push-azure-dev: ## Upload latest .vhd to dev/ (ephemeral — default)
+	@$(MAKE) push-azure AZURE_CONTAINER=dev
+
+push-azure-releases: ## Upload latest .vhd to releases/ (long-term)
+	@$(MAKE) push-azure AZURE_CONTAINER=releases
+
 ##@ Utilities
 
 measure: ## Export TDX measurements for the built EFI file
