@@ -154,17 +154,17 @@ discover_disk() {
 #      KEK_0 → decrypts slot 0 → recovers master key into the kernel →
 #      attaches dm-crypt mapper at /dev/mapper/persistent.
 #   4. mkfs.ext4 on the mapper device.
-#   5. systemd-cryptenroll: generates a fresh tpm_unlock_secret in
-#      memory, asks the TPM to seal it under a PCR policy (PCRs 4/9/11
-#      — the reproducible Azure-TDX set), stores the sealed blob as a
-#      LUKS2 token, and creates a *new* keyslot containing
-#      Enc_KEK_TPM(master_key) where KEK_TPM = KDF(tpm_unlock_secret,
-#      salt_N). The TPM-bound slot is what every subsequent boot uses;
+#   5. systemd-cryptenroll:
+#      generates a fresh tpm_unlock_secret in memory, asks the TPM to
+#      seal it under a PCR policy (PCRs 4/9/11 — the reproducible
+#      Azure-TDX set), stores the sealed blob as a LUKS2 token, and
+#      creates a *new* keyslot containing Enc_KEK_TPM(master_key) where
+#      KEK_TPM = KDF(tpm_unlock_secret, salt_N). Then wipes the
+#      bootstrap keyslot 0 in the same call (`--wipe-slot=0`).
 #      tpm_unlock_secret is discarded from memory after enrollment.
-#   6. cryptsetup luksKillSlot 0: wipes the bootstrap keyslot. After
-#      this, the disk can ONLY be unlocked via TPM unseal under the
-#      enrolled PCR policy — no human ever knows the unlock material.
-#   7. shred -u on the temporary keyfile.
+#      After this, the disk can ONLY be unlocked via TPM unseal under
+#      the enrolled PCR policy — no human ever knows the unlock material.
+#   6. shred -u on the temporary keyfile.
 #
 # After this returns, /dev/mapper/persistent is already open (from
 # step 3), so the caller can mount /persistent without a second unlock.
@@ -188,11 +188,8 @@ provision_luks() {
     log "creating ext4 filesystem on $MAPPER_DEVICE"
     mkfs.ext4 -q "$MAPPER_DEVICE"
 
-    log "enrolling TPM2 keyslot (PCRs=$TPM2_PCRS)"
-    systemd-cryptenroll --unlock-key-file="$tmp_unlock_key_file" --tpm2-device=auto --tpm2-pcrs="$TPM2_PCRS" "$device"
-
-    log "wiping random-key keyslot 0"
-    cryptsetup luksKillSlot --batch-mode --key-file "$tmp_unlock_key_file" "$device" 0
+    log "enrolling TPM2 keyslot (PCRs=$TPM2_PCRS) and wiping bootstrap slot 0"
+    systemd-cryptenroll --unlock-key-file="$tmp_unlock_key_file" --tpm2-device=auto --tpm2-pcrs="$TPM2_PCRS" --wipe-slot=0 "$device"
 
     shred -u "$tmp_unlock_key_file"
 }
