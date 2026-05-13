@@ -58,8 +58,15 @@
 #     systemd-cryptenroll \
 #         --tpm2-device=auto \
 #         --tpm2-public-key=/etc/seismic/release-pub.pem \
-#         --tpm2-public-key-pcrs="$TPM2_PCRS" \
+#         --tpm2-public-key-pcrs="4+9+11" \
+#         --tpm2-pcrs="$HEADER_PCR" \
 #         "$device"
+# Release-signed PCRs (4+9+11, image-controlled) move to
+# --tpm2-public-key-pcrs. The per-VM PCR (HEADER_PCR=14, see
+# extend_header_pcr) stays in --tpm2-pcrs as a literal bound at
+# enrollment — it's not release-controlled and can't be predicted
+# or signed at release time.
+#
 # Per release, predicted PCRs are signed (via `systemd-measure sign`)
 # under the private key matching release-pub.pem, and the signature is
 # bundled in the image at /etc/systemd/tpm2-pcr-signature.json. At boot,
@@ -100,11 +107,37 @@ DISK_GLOB_OVERRIDE_FILE="/etc/seismic-images/persistent-disk-glob"
 #   4  — UEFI Boot Manager Code & Boot Attempts
 #   9  — kernel + initrd loaded from the UKI's .linux / .initrd sections
 #   11 — UKI sections (.linux/.initrd/.cmdline) measured by systemd-stub
+#   14 — header-content binding, extended by extend_header_pcr below
+#        on every boot (per-VM, NOT release-controlled).
 # Other PCRs vary across hosts due to closed-source firmware measurements.
 # Reference: modules/flashbox/flashbox-l1/readme.md "Trusted Boot Process".
-TPM2_PCRS="4+9+11"
+HEADER_PCR="14"
+TPM2_PCRS="4+9+11+${HEADER_PCR}"
 
 log() { echo "[setup-persistent-luks] $*" >&2; }
+
+# Header-tampering defense — closes CVE-2025-59054 / CVE-2025-58356:
+# https://blog.trailofbits.com/2025/10/30/vulnerabilities-in-luks2-disk-encryption-for-confidential-vms/
+# An operator with disk write access can flip segments[*].encryption
+# to "cipher_null-ecb"; PCRs 4/9/11 cover the UKI, not the data disk,
+# so the TPM unseals anyway and any writes to /persistent after the
+# tampered boot land on disk in plaintext.
+#
+# Fix: hash the segments + digests JSON (the fields the attack
+# manipulates; both stable post-luksFormat) and extend PCR 14 with
+# it on every boot. Enrollment binds the seal to PCR 14, so a
+# tampered header hashes differently → unseal fails. We can't hash
+# the full header because keyslots/tokens mutate during enrollment.
+extend_header_pcr() {
+    local device=$1
+    local hash
+    hash=$(cryptsetup luksDump --dump-json-metadata "$device" \
+        | jq -cS '{segments, digests}' \
+        | sha256sum \
+        | awk '{print $1}')
+    log "extending PCR $HEADER_PCR with header-content hash $hash"
+    tpm2_pcrextend "${HEADER_PCR}:sha256=${hash}"
+}
 
 # Locate the persistent data disk's block-device path. Walks a list of
 # glob patterns (one per line in $DISK_GLOB_OVERRIDE_FILE if present,
@@ -154,17 +187,23 @@ discover_disk() {
 #      KEK_0 → decrypts slot 0 → recovers master key into the kernel →
 #      attaches dm-crypt mapper at /dev/mapper/persistent.
 #   4. mkfs.ext4 on the mapper device.
-#   5. systemd-cryptenroll:
+#   5. extend_header_pcr: hash H(segments+digests) into PCR 14 BEFORE
+#      enrollment so the seal policy captures this PCR 14 value.
+#      segments/digests are stable post-luksFormat, so this matches
+#      what every subsequent boot extends. See extend_header_pcr
+#      for the full rationale.
+#   6. systemd-cryptenroll:
 #      generates a fresh tpm_unlock_secret in memory, asks the TPM to
-#      seal it under a PCR policy (PCRs 4/9/11 — the reproducible
-#      Azure-TDX set), stores the sealed blob as a LUKS2 token, and
+#      seal it under a PCR policy (PCRs 4/9/11/14 — 4/9/11 are the
+#      reproducible Azure-TDX set, 14 is the header-content binding
+#      from step 5), stores the sealed blob as a LUKS2 token, and
 #      creates a *new* keyslot containing Enc_KEK_TPM(master_key) where
 #      KEK_TPM = KDF(tpm_unlock_secret, salt_N). Then wipes the
 #      bootstrap keyslot 0 in the same call (`--wipe-slot=0`).
 #      tpm_unlock_secret is discarded from memory after enrollment.
 #      After this, the disk can ONLY be unlocked via TPM unseal under
 #      the enrolled PCR policy — no human ever knows the unlock material.
-#   6. shred -u on the temporary keyfile.
+#   7. shred -u on the temporary keyfile.
 #
 # After this returns, /dev/mapper/persistent is already open (from
 # step 3), so the caller can mount /persistent without a second unlock.
@@ -188,22 +227,28 @@ provision_luks() {
     log "creating ext4 filesystem on $MAPPER_DEVICE"
     mkfs.ext4 -q "$MAPPER_DEVICE"
 
+    extend_header_pcr "$device"
+
     log "enrolling TPM2 keyslot (PCRs=$TPM2_PCRS) and wiping bootstrap slot 0"
     systemd-cryptenroll --unlock-key-file="$tmp_unlock_key_file" --tpm2-device=auto --tpm2-pcrs="$TPM2_PCRS" --wipe-slot=0 "$device"
 
     shred -u "$tmp_unlock_key_file"
 }
 
-# Steady-state unlock path: every boot after first. systemd-cryptsetup
-# does the full TPM-unseal-and-attach in one call:
-#   1. Reads the LUKS2 header on $device, finds the `systemd-tpm2` token.
-#   2. Hands the sealed blob in that token + the current PCR values to
+# Steady-state unlock path: every boot after first.
+#   1. extend_header_pcr: replay the enroll-time extend so PCR 14
+#      matches the value the seal policy was bound to. A tampered
+#      header (e.g. cipher_null injection per CVE-2025-59054) hashes
+#      differently → PCR 14 differs → step 3 below refuses to unseal.
+# Then systemd-cryptsetup does the full TPM-unseal-and-attach in one call:
+#   2. Reads the LUKS2 header on $device, finds the `systemd-tpm2` token.
+#   3. Hands the sealed blob in that token + the current PCR values to
 #      the local TPM. TPM verifies PCRs against the policy embedded at
 #      enroll time. Match → returns tpm_unlock_secret. Mismatch → refuses
 #      (this script then exits non-zero, systemd retries per Restart=).
-#   3. KDF(tpm_unlock_secret, salt_N) → KEK_TPM → decrypts the TPM-bound
+#   4. KDF(tpm_unlock_secret, salt_N) → KEK_TPM → decrypts the TPM-bound
 #      keyslot → recovers the master key.
-#   4. Hands the master key to the kernel's dm-crypt subsystem, which
+#   5. Hands the master key to the kernel's dm-crypt subsystem, which
 #      stores it in the per-mapper kernel struct and creates
 #      /dev/mapper/persistent. Master key lives in kernel memory only,
 #      never visible to userspace, wiped when the mapper is closed
@@ -222,6 +267,7 @@ unlock_via_tpm() {
         log "$MAPPER_DEVICE already open"
         return 0
     fi
+    extend_header_pcr "$device"
     log "unlocking $device via TPM2"
     /usr/lib/systemd/systemd-cryptsetup attach "$MAPPER_NAME" "$device" - tpm2-device=auto
 }
