@@ -176,13 +176,15 @@ discover_disk() {
 # Sequence:
 #   1. mktemp + 32 bytes of /dev/urandom → temporary keyfile holding the
 #      bootstrap unlock material. Lives only in tmpfs.
-#   2. cryptsetup luksFormat: writes the LUKS2 header AND generates the
-#      master key internally (cryptsetup's own CSPRNG, independent of
-#      our keyfile — we never see the master key). Then stores
-#      Enc_KEK_0(master_key) in keyslot 0, where
-#      KEK_0 = KDF(<our keyfile>, salt_0). cryptsetup runs the KDF
-#      even though our input is already maximum entropy — the
-#      stretching is wasted but harmless.
+#   2. cryptsetup luksFormat: writes the LUKS2 header, generates the
+#      AES-XTS master key AND the separate HMAC integrity key
+#      internally (cryptsetup's own CSPRNG, independent of our keyfile
+#      — we never see either). Stores Enc_KEK_0(XTS_key || HMAC_key)
+#      in keyslot 0, where KEK_0 = KDF(<our keyfile>, salt_0). cryptsetup
+#      runs the KDF even though our input is already maximum entropy —
+#      the stretching is wasted but harmless. With --integrity, this
+#      call ALSO performs a full-device wipe to initialize every
+#      sector's integrity tag (might take a while..).
 #   3. cryptsetup open: uses our keyfile as unlock material → KDF →
 #      KEK_0 → decrypts slot 0 → recovers master key into the kernel →
 #      attaches dm-crypt mapper at /dev/mapper/persistent.
@@ -197,8 +199,8 @@ discover_disk() {
 #      seal it under a PCR policy (PCRs 4/9/11/14 — 4/9/11 are the
 #      reproducible Azure-TDX set, 14 is the header-content binding
 #      from step 5), stores the sealed blob as a LUKS2 token, and
-#      creates a *new* keyslot containing Enc_KEK_TPM(master_key) where
-#      KEK_TPM = KDF(tpm_unlock_secret, salt_N). Then wipes the
+#      creates a *new* keyslot containing Enc_KEK_TPM(XTS_key || HMAC_key)
+#      where KEK_TPM = KDF(tpm_unlock_secret, salt_N). Then wipes the
 #      bootstrap keyslot 0 in the same call (`--wipe-slot=0`).
 #      tpm_unlock_secret is discarded from memory after enrollment.
 #      After this, the disk can ONLY be unlocked via TPM unseal under
@@ -216,11 +218,28 @@ provision_luks() {
     chmod 0600 "$tmp_unlock_key_file"
     head -c 32 /dev/urandom > "$tmp_unlock_key_file"
 
-    # TODO: add `--integrity hmac-sha256` once the ~2× write amplification
-    # has been measured against expected node IO. Without integrity,
-    # AES-XTS is malleable in 16-byte blocks, but state-root mismatches
-    # surface tampering at the chain layer on next read.
-    cryptsetup luksFormat --type luks2 --batch-mode --key-file "$tmp_unlock_key_file" "$device"
+    # aes-xts-random + hmac-sha256 via dm-integrity (no-journal):
+    # - aes-xts-random stores a fresh per-sector random IV in dm-integrity's
+    #   metadata area. Closes the equality-oracle attack class (snapshot-diff
+    #   watermarking + the disk analog of TEE.fail-class ciphertext side
+    #   channels that exploit deterministic XTS to extract keys via repeated
+    #   crypto ops). The random IV is the load-bearing piece; HMAC comes
+    #   bundled because cryptsetup doesn't expose random-IV storage without
+    #   the integrity layer in any kernel mode.
+    # - --key-size 512 = two 256-bit halves for AES-XTS-256 (data + tweak).
+    #   --integrity-key-size 256 = separate HMAC-SHA256 key. cryptsetup
+    #   generates both from its CSPRNG, independent of our bootstrap keyfile.
+    # - --integrity-no-journal skips dm-integrity's 2× write-amplification
+    #   crash journal. A crash mid-write leaves the affected sector reading
+    #   as EILSEQ. We accept this risk; in the worst case the validator is
+    #   reprovisioned from scratch.
+    cryptsetup luksFormat --type luks2 --batch-mode \
+        --cipher aes-xts-random \
+        --key-size 512 \
+        --integrity hmac-sha256 \
+        --integrity-key-size 256 \
+        --integrity-no-journal \
+        --key-file "$tmp_unlock_key_file" "$device"
 
     cryptsetup open --key-file "$tmp_unlock_key_file" "$device" "$MAPPER_NAME"
 
