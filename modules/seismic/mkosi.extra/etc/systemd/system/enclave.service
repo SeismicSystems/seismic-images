@@ -6,7 +6,7 @@ Requires=persistent-luks-setup.service tdx-init.service nginx-ssl-setup.service
 [Service]
 Type=simple
 User=enclave
-Group=eth
+
 Environment=RUST_BACKTRACE=full
 Environment=RUST_LOG=info
 # Operator-supplied SEISMIC_ENCLAVE_GENESIS_NODE / SEISMIC_ENCLAVE_PEERS,

@@ -9,7 +9,6 @@ Type=oneshot
 RemainAfterExit=yes
 
 User=tdx-init
-Group=eth
 
 ExecStart=/usr/bin/tdx-init wait-for-config
 
