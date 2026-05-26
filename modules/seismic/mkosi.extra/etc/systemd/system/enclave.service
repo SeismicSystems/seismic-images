@@ -16,7 +16,9 @@ Environment=RUST_LOG=info
 # file before exiting successfully).
 EnvironmentFile=/persistent/conf/enclave.env
 
-ExecStart=/usr/bin/seismic-enclave-server --ip 0.0.0.0 --port 7878
+# --data-dir holds root_key on the LUKS-backed /persistent/ volume.
+# VERY IMPORTANT that this data-dir remains LUKS encrypted, otherwise the root_key would leak!
+ExecStart=/usr/bin/seismic-enclave-server --ip 0.0.0.0 --port 7878 --data-dir /persistent/enclave
 
 Restart=always
 RestartSec=60
