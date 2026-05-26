@@ -6,7 +6,6 @@ Requires=persistent-luks-setup.service nginx-ssl-setup.service enclave.service r
 [Service]
 Type=simple
 User=summit
-Group=eth
 UMask=0002
 # TODO: RUST_LOG currently has no effect on summit. Its telemetry setup
 # calls tracing_subscriber::EnvFilter::new(level.to_string()) with the

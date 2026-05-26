@@ -27,7 +27,7 @@ build-inputs only. The image rootfs is the union of four channels:
 | [`mkosi.extra/`](mkosi.extra/)            | Copied wholesale at matching paths — see tree below.                                                                                                                                          |
 | `Packages=` in [`mkosi.conf`](mkosi.conf) | apt-installed Debian packages: `nginx`, `certbot`, `python3-certbot-nginx`, `cryptsetup`, `systemd-cryptsetup`, `tpm2-tools`, `libtss2-*`, `lz4`                                              |
 | [`mkosi.build`](mkosi.build)              | Compiled binaries written to `$DESTDIR`: `tdx-init`, `seismic-reth`, `seismic-enclave-server`, `summit` → `/usr/bin/`; reth dev genesis → `/usr/share/seismic-reth/genesis.json`              |
-| [`mkosi.postinst`](mkosi.postinst)        | Image-fs mutations: system users + `eth`/`tss` groups in `/etc/{passwd,group}`, services symlinked into `/etc/systemd/system/minimal.target.wants/`, `setup-*` helper scripts made executable |
+| [`mkosi.postinst`](mkosi.postinst)        | Image-fs mutations: system users + `engine-api`/`conf`/`tss` groups in `/etc/{passwd,group}`, services symlinked into `/etc/systemd/system/minimal.target.wants/`, `setup-*` helper scripts made executable |
 
 `mkosi.extra/` lays out exactly what its name suggests — the same paths
 relative to the image root:
@@ -156,8 +156,8 @@ A sentinel at `/persistent/conf/.tdx-init-done` is touched after the
 per-service write completes; on subsequent boots the unit is a no-op
 (sentinel present, binary exits immediately).
 
-Runs as the `tdx-init` system user (group `eth`). `ExecStartPre=+...`
-ensures `/persistent/conf` exists with `tdx-init:eth` ownership before
+Runs as the `tdx-init` system user (group `conf`). `ExecStartPre=+...`
+ensures `/persistent/conf` exists with `tdx-init:conf` ownership before
 the binary writes into it.
 
 `setup-nginx-ssl` sources `domain.env` for certbot. `enclave.service`
@@ -194,9 +194,10 @@ disk snapshots — worth adding a lock before production use.
 ### `enclave.service`
 
 Runs [`seismic-enclave-server`](https://github.com/SeismicSystems/enclave)
-on `:7878` as user `enclave` (group `eth`, supplementary group `tss` for
-TPM access). The enclave is the trust root of the node — holds the
-network encryption key, validator BLS keys, and derives per-purpose
+on `:7878` as user `enclave` (primary group `enclave`, supplementary `conf`
+for reading `/persistent/conf/enclave.env` and `tss` for vTPM access). The
+enclave is the trust root of the node — holds the network encryption key,
+validator BLS keys, and derives per-purpose
 secrets sealed to the TDX measurement. See the enclave repo for details
 on the RPC surface.
 
