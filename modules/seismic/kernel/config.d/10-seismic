@@ -40,3 +40,7 @@ CONFIG_CRYPTO_USER_API_HASH=y
 CONFIG_CRYPTO_USER_API_SKCIPHER=y
 CONFIG_CRYPTO_USER_API_RNG=y
 CONFIG_CRYPTO_USER_API_AEAD=y
+
+# We use dm-integrity in setup-persistent-luks's authenticated FDE setup:
+# cryptsetup luksFormat --integrity hmac-sha256 ...
+CONFIG_DM_INTEGRITY=y
