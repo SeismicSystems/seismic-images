@@ -5,13 +5,19 @@ set -euxo pipefail
 # They have to exist in the image's /etc/passwd and /etc/group at boot;
 # hence build-time creation here via mkosi-chroot, not at first boot. Each user is referenced 
 # by name in the corresponding service unit; deleting any of these breaks startup.
-mkosi-chroot groupadd -r eth
-mkosi-chroot groupadd -r tss || true  # tss group may already exist from libtss2 package
-mkosi-chroot useradd -r -s /bin/false -g tss -G eth tss 2>/dev/null || true  # tss user may already exist
-mkosi-chroot useradd -r -s /bin/false -G eth reth
-mkosi-chroot useradd -r -s /bin/false -G eth,tss enclave
-mkosi-chroot useradd -r -s /bin/false -G eth summit
-mkosi-chroot useradd -r -s /bin/false -G eth tdx-init
+# TODO(samlaf): consider switching to systemd-sysusers for declarative user/group creation.
+mkosi-chroot groupadd -r engine-api  # reth ↔ summit engine-API IPC socket at /run/reth-engine/api.ipc
+mkosi-chroot groupadd -r conf        # tdx-init writes /persistent/conf/*; readers join this group
+# tss: /dev/tpmrm0 access for the enclave's vTPM-based TDX attestation on Azure
+# (paravisor-mediated; /dev/tdx_guest is not exposed under Hyper-V isolation).
+# GCP uses /dev/tdx_guest directly — tss is unused there but harmless to include.
+mkosi-chroot groupadd -r tss || true  # may pre-exist from libtss2 package
+
+mkosi-chroot useradd -r -s /bin/false -g tss tss 2>/dev/null || true  # tss user may already exist
+mkosi-chroot useradd -r -s /bin/false -G engine-api,conf reth
+mkosi-chroot useradd -r -s /bin/false -G conf,tss enclave            # only conf (config reads) + tss (vTPM)
+mkosi-chroot useradd -r -s /bin/false -G engine-api,conf summit
+mkosi-chroot useradd -r -s /bin/false -G conf tdx-init               # only conf (writes config that others read)
 
 # Make scripts executable
 chmod +x "$BUILDROOT/usr/bin/setup-nginx-ssl"

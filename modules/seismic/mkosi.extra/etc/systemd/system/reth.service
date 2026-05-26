@@ -6,7 +6,10 @@ Requires=persistent-luks-setup.service nginx-ssl-setup.service enclave.service
 [Service]
 Type=simple
 User=reth
-Group=eth
+# Group= override is load-bearing here: the RuntimeDirectory= below creates
+# /run/reth-engine/ with the unit's primary group. Without engine-api here,
+# the dir would be reth:reth and summit couldn't open the IPC socket inside.
+Group=engine-api
 UMask=0002
 Environment=RUST_LOG=info
 
