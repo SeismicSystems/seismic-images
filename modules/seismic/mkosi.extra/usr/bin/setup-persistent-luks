@@ -227,8 +227,9 @@ provision_luks() {
     #   bundled because cryptsetup doesn't expose random-IV storage without
     #   the integrity layer in any kernel mode.
     # - --key-size 512 = two 256-bit halves for AES-XTS-256 (data + tweak).
-    #   --integrity-key-size 256 = separate HMAC-SHA256 key. cryptsetup
-    #   generates both from its CSPRNG, independent of our bootstrap keyfile.
+    #   --integrity hmac-sha256 → cryptsetup automatically allocates an
+    #   additional 256-bit key for HMAC-SHA256 alongside the XTS data key;
+    #   both come from cryptsetup's CSPRNG, independent of our bootstrap keyfile.
     # - --integrity-no-journal skips dm-integrity's 2× write-amplification
     #   crash journal. A crash mid-write leaves the affected sector reading
     #   as EILSEQ. We accept this risk; in the worst case the validator is
@@ -237,7 +238,6 @@ provision_luks() {
         --cipher aes-xts-random \
         --key-size 512 \
         --integrity hmac-sha256 \
-        --integrity-key-size 256 \
         --integrity-no-journal \
         --key-file "$tmp_unlock_key_file" "$device"
 
