@@ -38,6 +38,7 @@ mkosi.extra/
 │   ├── nginx/node-template.conf            → /etc/nginx/node-template.conf
 │   ├── security/limits.d/nofile.conf       → /etc/security/limits.d/nofile.conf
 │   ├── seismic/tmpfiles-persistent.conf    → /etc/seismic/tmpfiles-persistent.conf
+│   ├── tmpfiles.d/seismic-runtime.conf     → /etc/tmpfiles.d/seismic-runtime.conf
 │   ├── systemd/system/*.{service,timer}    → /etc/systemd/system/...
 │   └── udev/rules.d/60-tpm-permissions.rules → /etc/udev/rules.d/...
 └── usr/
@@ -146,19 +147,21 @@ binary; the binary now handles only HTTP config receipt. See
 
 ### `tdx-init.service`
 
-Runs `tdx-init wait-for-config`, which on first boot blocks until a
+Runs `tdx-init wait-for-config`, which on every boot blocks until a
 provisioner POSTs the node's configuration (TOML: `[domain]` name/email
 and optional `[enclave]` genesis_node/peers) via HTTP. On receipt
 tdx-init translates the payload into per-service config files under
-`/persistent/conf/`: `domain.env` (for `setup-nginx-ssl`) and
+`/run/seismic/conf/`: `domain.env` (for `setup-nginx-ssl`) and
 `enclave.env` (consumed by `enclave.service` via `EnvironmentFile=`).
-A sentinel at `/persistent/conf/.tdx-init-done` is touched after the
-per-service write completes; on subsequent boots the unit is a no-op
-(sentinel present, binary exits immediately).
+The drop-zone is tmpfs (declared in
+[`tmpfiles.d/seismic-runtime.conf`](mkosi.extra/etc/tmpfiles.d/seismic-runtime.conf)),
+so the sentinel `tdx-init-done` is wiped each boot and deploy tooling
+re-POSTs every time — matches the broader RAM-only design where
+`root_key` is also re-fetched per boot.
 
-Runs as the `tdx-init` system user (group `conf`). `ExecStartPre=+...`
-ensures `/persistent/conf` exists with `tdx-init:conf` ownership before
-the binary writes into it.
+Runs as the `tdx-init` system user (group `conf`). The runtime dir is
+materialized with `tdx-init:conf 2750` by systemd-tmpfiles at
+sysinit.target, before any service starts.
 
 `setup-nginx-ssl` sources `domain.env` for certbot. `enclave.service`
 loads `enclave.env` for `SEISMIC_ENCLAVE_GENESIS_NODE` /

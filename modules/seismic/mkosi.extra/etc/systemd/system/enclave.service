@@ -9,12 +9,12 @@ User=enclave
 
 Environment=RUST_BACKTRACE=full
 Environment=RUST_LOG=info
-# Operator-supplied SEISMIC_ENCLAVE_GENESIS_NODE / SEISMIC_ENCLAVE_PEERS,
-# written by tdx-init at deploy time. systemd refuses to start the
-# unit if this file is missing — its existence is an invariant of the
-# boot chain (tdx-init.service is a Requires= above and produces this
-# file before exiting successfully).
-EnvironmentFile=/persistent/conf/enclave.env
+# The dir is created by /etc/tmpfiles.d/seismic-runtime.conf, and
+# the file is written by tdx-init on every boot (after operator POSTs the config).
+# systemd refuses to start the unit if this file is missing; its existence is
+# an invariant of the boot chain (tdx-init.service is a Requires= above and produces
+# this file before exiting successfully).
+EnvironmentFile=/run/seismic/conf/enclave.env
 
 # --data-dir holds root_key on the LUKS-backed /persistent/ volume.
 # VERY IMPORTANT that this data-dir remains LUKS encrypted, otherwise the root_key would leak!
