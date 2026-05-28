@@ -1,7 +1,7 @@
 #!/bin/bash
 set -euo pipefail
 
-CONFIG_FILE="/persistent/conf/domain.env"
+CONFIG_FILE="/run/seismic/conf/domain.env"
 NODE_TEMPLATE="/etc/nginx/node-template.conf"
 NODE_NGINX_CONF="/persistent/conf/node-nginx.conf"
 NODE_NGINX_ENABLED="/etc/nginx/sites-enabled/node"
