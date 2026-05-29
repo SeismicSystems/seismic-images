@@ -7,6 +7,12 @@ Requires=persistent-luks-setup.service tdx-init.service nginx-ssl-setup.service
 Type=simple
 User=enclave
 
+# /run/seismic/enclave/ — drop-zone for the storage_key + header_mac_key
+# the enclave-server writes at startup for setup-persistent-luks to read.
+# tmpfs, recreated on every restart with enclave:enclave 0700.
+RuntimeDirectory=seismic/enclave
+RuntimeDirectoryMode=0700
+
 Environment=RUST_BACKTRACE=full
 Environment=RUST_LOG=info
 # The dir is created by /etc/tmpfiles.d/seismic-runtime.conf, and
@@ -16,9 +22,7 @@ Environment=RUST_LOG=info
 # this file before exiting successfully).
 EnvironmentFile=/run/seismic/conf/enclave.env
 
-# --data-dir holds root_key on the LUKS-backed /persistent/ volume.
-# VERY IMPORTANT that this data-dir remains LUKS encrypted, otherwise the root_key would leak!
-ExecStart=/usr/bin/seismic-enclave-server --ip 0.0.0.0 --port 7878 --data-dir /persistent/enclave
+ExecStart=/usr/bin/seismic-enclave-server --ip 0.0.0.0 --port 7878
 
 Restart=always
 RestartSec=60
