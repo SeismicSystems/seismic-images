@@ -1,11 +1,12 @@
 [Unit]
 Description=Provision and unlock the persistent LUKS volume, mount /persistent
+After=enclave.service
+Requires=enclave.service
 
 [Service]
 Type=oneshot
 RemainAfterExit=yes
 
-# Provision (first boot) or TPM-unseal (subsequent boots) the LUKS volume and mount /persistent.
 ExecStart=/usr/bin/setup-persistent-luks
 # Materialize per-service /persistent/<svc> ownership and mode now that /persistent is mounted.
 ExecStartPost=/usr/bin/systemd-tmpfiles --create /etc/seismic/tmpfiles-persistent.conf

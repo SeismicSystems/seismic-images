@@ -1,8 +1,7 @@
 [Unit]
 Description=TDX initialization (wait for node config via HTTP)
-After=network-online.target persistent-luks-setup.service
+After=network-online.target
 Wants=network-online.target
-Requires=persistent-luks-setup.service
 
 [Service]
 Type=oneshot

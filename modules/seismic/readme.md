@@ -25,9 +25,9 @@ build-inputs only. The image rootfs is the union of four channels:
 | Channel                                   | What it puts in the image                                                                                                                                                                     |
 | ----------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | [`mkosi.extra/`](mkosi.extra/)            | Copied wholesale at matching paths — see tree below.                                                                                                                                          |
-| `Packages=` in [`mkosi.conf`](mkosi.conf) | apt-installed Debian packages: `nginx`, `certbot`, `python3-certbot-nginx`, `cryptsetup`, `systemd-cryptsetup`, `tpm2-tools`, `libtss2-*`, `lz4`                                              |
+| `Packages=` in [`mkosi.conf`](mkosi.conf) | apt-installed Debian packages: `nginx`, `certbot`, `python3-certbot-nginx`, `cryptsetup`, `jq`, `libtss2-*`, `lz4`                                                                                |
 | [`mkosi.build`](mkosi.build)              | Compiled binaries written to `$DESTDIR`: `tdx-init`, `seismic-reth`, `seismic-enclave-server`, `summit` → `/usr/bin/`; reth dev genesis → `/usr/share/seismic-reth/genesis.json`              |
-| [`mkosi.postinst`](mkosi.postinst)        | Image-fs mutations: system users + `engine-api`/`conf`/`tss` groups in `/etc/{passwd,group}`, services symlinked into `/etc/systemd/system/minimal.target.wants/`, `setup-*` helper scripts made executable |
+| [`mkosi.postinst`](mkosi.postinst)        | Image-fs mutations: system users + `engine-api`/`conf` groups in `/etc/{passwd,group}`, services symlinked into `/etc/systemd/system/minimal.target.wants/`, `setup-*` helper scripts made executable |
 
 `mkosi.extra/` lays out exactly what its name suggests — the same paths
 relative to the image root:
@@ -60,10 +60,13 @@ enabled (added to `minimal.target.wants`) via the loop in
 **Boot chain (services ordered by when they're needed):**
 
 ```
-  persistent-luks-setup.service
+  tdx-init.service       (waits for operator config POST → /run/seismic/conf/)
           │
           ▼
-  tdx-init.service
+  enclave.service        (fetches root_key from peers, drops LUKS keys to /run/seismic/enclave/)
+          │
+          ▼
+  persistent-luks-setup.service  (reads LUKS keys, verifies header MAC, mounts /persistent)
           │
           ▼
   nginx-ssl-setup.service ──► certbot-renew.timer
@@ -71,9 +74,6 @@ enabled (added to `minimal.target.wants`) via the loop in
           │                     certbot-renew.service
           │                     monthly to renew the
           │                     Let's Encrypt cert)
-          ▼
-  enclave.service
-          │
           ▼
   reth.service
           │
@@ -100,50 +100,10 @@ perms are set the moment the kernel publishes the device, before any
 service starts. No ordering constraints; no `Requires=`/`After=`
 against any TPM-setup unit anywhere.
 
-`enclave.service` gains TPM access via the `tss` supplementary group
-(`mkosi.postinst` adds the user to that group). `reth`/`summit` don't
-talk to the TPM. The TPM2 user-space libraries the enclave links against
+`enclave.service` gains TPM access via the `enclave` group ownership
+on `/dev/tpmrm0` (set by the udev rule). `reth`/`summit` don't talk
+to the TPM. The TPM2 user-space libraries the enclave links against
 (`libtss2-esys-…`, `libtss2-tctildr0t64`) come from `mkosi.conf` Packages.
-
-### `persistent-luks-setup.service`
-
-Oneshot that runs
-[`setup-persistent-luks`](mkosi.extra/usr/bin/setup-persistent-luks),
-which provisions or unlocks the persistent LUKS volume and mounts it at
-`/persistent`. Idempotent across boots:
-
-- **First boot.** Generates a 32-byte CSPRNG key, `cryptsetup luksFormat`
-  with that key, `mkfs.ext4`, then `systemd-cryptenroll --tpm2-device=auto
-  --tpm2-pcrs=4+9+11` to seal an unlock key under a TPM2 PCR policy bound
-  to the TDX measurement, finally wipes the original CSPRNG keyslot. No
-  human ever knows the unlock material.
-- **Every subsequent boot.** `cryptsetup isLuks` is true; the script
-  invokes `systemd-cryptsetup attach … tpm2-device=auto`, which TPM2-
-  unseals the keyslot — fails closed if the PCRs differ from when the
-  slot was sealed (tampered image, different VM, etc.).
-
-`Restart=on-failure RestartSec=5` to ride out transient cases like the
-data disk not yet attached or the vTPM not yet ready; systemd gives up
-after a few cycles, surfacing a hard failure if the underlying issue is
-permanent. `/dev/tpm[rm]*` perms are set by udev (see "TPM device
-permissions" above), so no explicit ordering against any TPM-setup
-service is needed.
-
-`ExecStartPost=/usr/bin/systemd-tmpfiles --create /etc/seismic/tmpfiles-persistent.conf` 
-runs after the volume is mounted to materialize the per-service `/persistent/<svc>` subdirs 
-from the central tmpfiles config. Downstream services (reth, enclave, summit, tdx-init)
-used to do this work in their own `ExecStartPre` blocks;
-centralized here so there's one auditable file describing what each service expects on disk.
-
-The disk discovery defaults to `/dev/disk/by-path/*10` (Azure LUN 10).
-Override with one or more globs in `/etc/seismic-images/persistent-disk-glob`
-for other clouds (GCP exposes `/dev/disk/by-id/google-<diskname>`,
-no LUN concept). TODO: have deploy tooling write the override file at
-provisioning time.
-
-Replaces the LUKS provisioning that previously lived inside the `tdx-init`
-binary; the binary now handles only HTTP config receipt. See
-`tdx-init` commit `695a2f7` for the rationale.
 
 ### `tdx-init.service`
 
@@ -170,20 +130,56 @@ is set (no in-binary fallback — operator config is the only source of
 peer IPs). reth and summit take their args statically from the
 systemd unit files.
 
+### `enclave.service`
+
+Runs [`seismic-enclave-server`](https://github.com/SeismicSystems/enclave)
+on `:7878` as user `enclave` (primary group `enclave`, supplementary
+`conf` for reading `/run/seismic/conf/enclave.env`). The enclave is
+the trust root of the node — holds `root_key` (RAM-only, fetched from
+peers via attestation) and derives all per-purpose keys from it. See
+the enclave repo for details on the RPC surface.
+
+Runs *before* `persistent-luks-setup` (it derives the LUKS unlock
+key; see boot diagram above). Depends only on `tdx-init` for the
+operator-supplied bootstrap config (peer URLs, genesis flag). Access
+to `/dev/tpmrm0` for attestation-quote generation comes via the udev
+rule that sets `enclave` group ownership on the device node.
+
+`RestartSec=60` is unusually long — TDX quote generation can be slow on
+restart; tight loops would hammer the TPM.
+
+### `persistent-luks-setup.service`
+
+Oneshot that runs
+[`setup-persistent-luks`](mkosi.extra/usr/bin/setup-persistent-luks):
+waits for the LUKS keys from enclave-server, verifies the on-disk
+header, opens the LUKS volume, and mounts it at `/persistent`. See
+the script's header comment for the full design (key handoff, header
+MAC, detached-header open).
+
+`Restart=on-failure RestartSec=5` to ride out transient cases (disk
+not yet attached, enclave-server slow to bootstrap).
+
+`ExecStartPost=/usr/bin/systemd-tmpfiles --create /etc/seismic/tmpfiles-persistent.conf`
+materializes the per-service `/persistent/<svc>` subdirs after mount.
+
+The disk discovery defaults to `/dev/disk/by-path/*10` (Azure LUN 10).
+Override with globs in `/etc/seismic-images/persistent-disk-glob` for
+other clouds. TODO: have deploy tooling write the override file at
+provisioning time.
+
 ### `nginx-ssl-setup.service`
 
-Oneshot. Sources `/persistent/conf/domain.env` for domain+email, templates
-[`node-template.conf`](mkosi.extra/etc/nginx/node-template.conf) into a
-real nginx config, runs certbot to obtain a Let's Encrypt cert, and
-enables the renewal timer.
+Oneshot. Sources `/run/seismic/conf/domain.env` for domain+email,
+templates [`node-template.conf`](mkosi.extra/etc/nginx/node-template.conf)
+into a real nginx config, runs certbot to obtain a Let's Encrypt cert,
+and enables the renewal timer.
 
-Currently acts as a hard dependency for the whole node stack (see
-[`enclave.service`](mkosi.extra/etc/systemd/system/enclave.service),
-[`reth.service`](mkosi.extra/etc/systemd/system/reth.service),
-[`summit.service`](mkosi.extra/etc/systemd/system/summit.service)'s
-`Requires=`). Cert acquisition failure currently blocks node startup —
-this coupling is probably too tight (the enclave doesn't fundamentally
-need public HTTPS up to function), but it's the current behavior.
+Currently a hard dependency for `reth.service` + `summit.service`
+(see their `Requires=`). Cert acquisition failure blocks them from
+starting — coupling is probably too tight (an EL/CL doesn't
+fundamentally need public HTTPS up to function), but it's the
+current behavior.
 
 ### `certbot-renew.service` + `certbot-renew.timer`
 
@@ -193,24 +189,6 @@ Encrypt at the same minute.
 
 Known issue (flagged inline in the service file): potential race with
 disk snapshots — worth adding a lock before production use.
-
-### `enclave.service`
-
-Runs [`seismic-enclave-server`](https://github.com/SeismicSystems/enclave)
-on `:7878` as user `enclave` (primary group `enclave`, supplementary `conf`
-for reading `/persistent/conf/enclave.env` and `tss` for vTPM access). The
-enclave is the trust root of the node — holds the network encryption key,
-validator BLS keys, and derives per-purpose
-secrets sealed to the TDX measurement. See the enclave repo for details
-on the RPC surface.
-
-Depends on `persistent-luks-setup` (needs `/persistent` for sealed
-state) and `nginx-ssl-setup` (for the public HTTPS endpoint). Access to
-`/dev/tpmrm0` for attestation-quote generation comes via the udev
-rule that sets `tss` group ownership on the device node.
-
-`RestartSec=60` is unusually long — TDX quote generation can be slow on
-restart; tight loops would hammer the TPM.
 
 ### `reth.service`
 
