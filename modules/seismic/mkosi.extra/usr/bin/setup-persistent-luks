@@ -1,90 +1,33 @@
 #!/bin/bash
-# Provision (first boot) or unlock (subsequent boots) the persistent LUKS
-# disk and mount it at /persistent. Idempotent: on any boot, the script
-# inspects on-disk state and does only what's needed.
+# Provision (first boot) or unlock (subsequent boots) the persistent
+# LUKS disk and mount it at /persistent. Idempotent: inspects on-disk
+# state and does only what's needed.
 #
-# Threat model: operator-untrusted. No human knows the LUKS unlock material.
-# On first boot we generate a 32-byte CSPRNG key as bootstrap unlock material
-# for keyslot 0, format the disk (cryptsetup generates the actual master key
-# itself, independently — we never see it), enroll a TPM2-sealed keyslot
-# bound to the TDX measurement (PCRs 4/9/11), then wipe the bootstrap
-# keyslot. Every subsequent boot unlocks via TPM2 unseal — a tampered image
-# fails the PCR policy.
+# Threat model: operator-untrusted, cloud-untrusted. The unlock key
+# (storage_key) is derived inside enclave-server from a network-fetched
+# root_key and handed to this script via a tmpfs file dropped before
+# /persistent mounts. No human or cloud operator ever knows the unlock
+# material.
 #
-# End-state LUKS2 keyslot layout we're targeting:
+# Header-tampering defense (CVE-2025-59054 / CVE-2025-58356):
+# https://blog.trailofbits.com/2025/10/30/vulnerabilities-in-luks2-disk-encryption-for-confidential-vms/
+# An attacker with disk write access can flip segments[*].encryption to
+# cipher_null-ecb; cryptsetup's keyslot KDF still validates with our
+# storage_key, but dm-crypt is then configured with the null cipher →
+# all subsequent writes land plaintext on disk. We close this in
+# userspace per the writeup's recommended Option 1 (MAC the header):
 #
-#   ┌──────────────────────────────────────────────────────────────────┐
-#   │ Slot 0:  WIPED — first-boot bootstrap                            │
-#   │          Random 32B from /dev/urandom, used once as the unlock   │
-#   │          material for cryptsetup luksFormat. Killed via          │
-#   │          luksKillSlot 0 after slot 1 is enrolled; never re-used. │
-#   │          Random material lives only in tmpfs (TDX-protected RAM) │
-#   │          and is shredded immediately after the kill.             │
-#   ├──────────────────────────────────────────────────────────────────┤
-#   │ Slot 1:  TPM2-sealed — everyday unlock                           │
-#   │          tpm_unlock_secret sealed in a LUKS2 token by the local  │
-#   │          TPM under a PCR policy. Released only when the booting  │
-#   │          image's PCRs satisfy the policy → a tampered image      │
-#   │          fails to unseal → /persistent doesn't mount.            │
-#   ├──────────────────────────────────────────────────────────────────┤
-#   │ Slot 2:  TODO — Multisig-signed PCR policy — upgrade authority   │
-#   │          Same TPM2-sealed shape as slot 1, but the PCR policy is │
-#   │          PolicyAuthorize-bound to a multisig public key          │
-#   │          (validator-set threshold / DAO / operator council).     │
-#   │          The multisig signs predicted PCRs of each new image     │
-#   │          release offline; the signature ships in the image; the  │
-#   │          TPM verifies the signature against the enrolled multi-  │
-#   │          sig pubkey before unseal. Decouples "what image is      │
-#   │          allowed to unlock" from per-node enrollment — upgrades  │
-#   │          are authorized by the network, not by re-touching every │
-#   │          deployed node.                                          │
-#   └──────────────────────────────────────────────────────────────────┘
+#   - First boot: after luksFormat, compute
+#       mac = HMAC_SHA256(header_mac_key,
+#                        canonical_json({segments, keyslots, digests}))
+#     and store it as a custom LUKS2 token (type: seismic-header-mac).
+#   - Subsequent boots: recompute MAC over the same canonical subset,
+#     compare against the stored token, fail closed on mismatch.
 #
-# Current script implements slot 0 + slot 1 only (slot 1 with a literal-PCR
-# policy, not yet signed-policy). Slot 2 — and the migration path from
-# "today's single-signer slot 1" to "tomorrow's multisig-signed slot" — is
-# the BLOCKER tracked below.
-#
-# ============================================================================
-# 🔴 BLOCKER before any node ships outside the test bench
-# ============================================================================
-# This script enrolls TPM2 under *literal* PCR values
-# (`--tpm2-pcrs=4+9+11` in provision_luks), which means any image update
-# changes PCRs and breaks unlock — the node bricks on first boot of the
-# new image. Fine for the first deploy; catastrophic on the second.
-#
-# Fix shape: signed-PCR-policy enrollment. The systemd-cryptenroll call
-# in provision_luks becomes:
-#     systemd-cryptenroll \
-#         --tpm2-device=auto \
-#         --tpm2-public-key=/etc/seismic/release-pub.pem \
-#         --tpm2-public-key-pcrs="4+9+11" \
-#         --tpm2-pcrs="$HEADER_PCR" \
-#         "$device"
-# Release-signed PCRs (4+9+11, image-controlled) move to
-# --tpm2-public-key-pcrs. The per-VM PCR (HEADER_PCR=14, see
-# extend_header_pcr) stays in --tpm2-pcrs as a literal bound at
-# enrollment — it's not release-controlled and can't be predicted
-# or signed at release time.
-#
-# Per release, predicted PCRs are signed (via `systemd-measure sign`)
-# under the private key matching release-pub.pem, and the signature is
-# bundled in the image at /etc/systemd/tpm2-pcr-signature.json. At boot,
-# systemd-cryptsetup reads the signature, hands it + current PCRs to
-# the TPM, the TPM verifies the signature against the enrolled public
-# key, and releases the unlock key.
-#
-# The binding-style choice has to be made BEFORE first enroll — switching
-# later is chicken-and-egg (you'd need the literal-PCR unlock to migrate,
-# which v2 can't satisfy because its PCRs differ from v1's).
-#
-# TODO: figure out who is going to hold this key and sign:
-#   - validator-set?
-#   - on-chain governance vote? Produces an authorization, with a
-#     small relayer or attestation gadget that converts the on-chain
-#     decision into something the TPM accepts
-#   - operator-council M-of-N multisig?
-# ============================================================================
+# Tokens are excluded from the MAC scope so adding the token after
+# format doesn't invalidate the MAC. Detached-header mode on `open`
+# closes the TOCTOU window between MAC verify and dm-crypt setup —
+# both operations read from the same tmpfs copy of the header.
 
 set -euo pipefail
 
@@ -92,58 +35,74 @@ MAPPER_NAME="persistent"
 MAPPER_DEVICE="/dev/mapper/${MAPPER_NAME}"
 MOUNT_POINT="/persistent"
 
-# Default disk glob: Azure attaches the persistent data disk at LUN 10 by
-# convention (set in deploy/.../azure/api.py::attach_data_disk). Override
-# via /etc/seismic-images/persistent-disk-glob (one glob per line) for
-# other clouds — GCP uses /dev/disk/by-id/google-<diskname>, no LUN concept.
-# TODO: ship the override from the per-cloud mkosi profile, e.g.
-#   mkosi.profiles/gcp/mkosi.extra/etc/seismic-images/persistent-disk-glob
-# Until that lands, GCP-built images silently fall back to the Azure
-# default and fail to discover the data disk.
+# Drop-zone for the LUKS keys, written by enclave-server at startup:
+# 64 bytes total = storage_key (32B) || header_mac_key (32B).
+KEYFILE="/run/seismic/enclave/luks-keys"
+# Generous wait so that enclave-server has time to fetch root_key from
+# peers (slow if peers are still coming up). systemd Restart=on-failure
+# bounds the total wall time.
+# TODO(samlaf): consider swapping polling for systemd Type=notify on enclave.service.
+# enclave-server would sd_notify(READY=1) after writing the keyfile, and
+# this script could drop wait_for_keyfile entirely. Avoids the magic
+# timeout and gives clean failure propagation if enclave never readies.
+KEYFILE_TIMEOUT_SECS=300
+
+# Detached LUKS header lives here after MAC verification. cryptsetup
+# uses this copy for the actual open, closing TOCTOU between verify
+# and dm-crypt setup.
+HEADER_BACKUP="/run/seismic/luks-header.bin"
+
+# Custom LUKS2 token type that carries our header MAC.
+TOKEN_TYPE="seismic-header-mac"
+
+# Default disk glob: Azure attaches the persistent data disk at LUN 10
+# by convention (set in deploy/.../azure/api.py::attach_data_disk).
+# Override via /etc/seismic-images/persistent-disk-glob (one glob per
+# line) for other clouds — GCP uses /dev/disk/by-id/google-<diskname>,
+# no LUN concept. TODO: ship the override from the per-cloud mkosi
+# profile, e.g. mkosi.profiles/gcp/mkosi.extra/etc/seismic-images/...
 DEFAULT_DISK_GLOB="/dev/disk/by-path/*10"
 DISK_GLOB_OVERRIDE_FILE="/etc/seismic-images/persistent-disk-glob"
 
-# TPM2 PCRs reproducible across builds on Azure TDX:
-#   4  — UEFI Boot Manager Code & Boot Attempts
-#   9  — kernel + initrd loaded from the UKI's .linux / .initrd sections
-#   11 — UKI sections (.linux/.initrd/.cmdline) measured by systemd-stub
-#   14 — header-content binding, extended by extend_header_pcr below
-#        on every boot (per-VM, NOT release-controlled).
-# Other PCRs vary across hosts due to closed-source firmware measurements.
-# Reference: modules/flashbox/flashbox-l1/readme.md "Trusted Boot Process".
-HEADER_PCR="14"
-TPM2_PCRS="4+9+11+${HEADER_PCR}"
-
 log() { echo "[setup-persistent-luks] $*" >&2; }
 
-# Header-tampering defense — closes CVE-2025-59054 / CVE-2025-58356:
-# https://blog.trailofbits.com/2025/10/30/vulnerabilities-in-luks2-disk-encryption-for-confidential-vms/
-# An operator with disk write access can flip segments[*].encryption
-# to "cipher_null-ecb"; PCRs 4/9/11 cover the UKI, not the data disk,
-# so the TPM unseals anyway and any writes to /persistent after the
-# tampered boot land on disk in plaintext.
-#
-# Fix: hash the segments + digests JSON (the fields the attack
-# manipulates; both stable post-luksFormat) and extend PCR 14 with
-# it on every boot. Enrollment binds the seal to PCR 14, so a
-# tampered header hashes differently → unseal fails. We can't hash
-# the full header because keyslots/tokens mutate during enrollment.
-extend_header_pcr() {
-    local device=$1
-    local hash
-    hash=$(cryptsetup luksDump --dump-json-metadata "$device" \
-        | jq -cS '{segments, digests}' \
-        | sha256sum \
-        | awk '{print $1}')
-    log "extending PCR $HEADER_PCR with header-content hash $hash"
-    tpm2_pcrextend "${HEADER_PCR}:sha256=${hash}"
+# Block until enclave-server drops the keyfile. The enclave-server
+# unit runs in parallel with this script (via systemd Requires=); the
+# keyfile is the synchronization point.
+wait_for_keyfile() {
+    local elapsed=0
+    while [[ ! -f "$KEYFILE" ]]; do
+        if (( elapsed >= KEYFILE_TIMEOUT_SECS )); then
+            log "ERROR: $KEYFILE absent after ${KEYFILE_TIMEOUT_SECS}s — enclave-server up?"
+            return 1
+        fi
+        sleep 1
+        ((elapsed++))
+    done
 }
 
-# Locate the persistent data disk's block-device path. Walks a list of
-# glob patterns (one per line in $DISK_GLOB_OVERRIDE_FILE if present,
-# else just $DEFAULT_DISK_GLOB), takes the first pattern with at least
-# one match, resolves the symlink, and prints the absolute device path
-# to stdout. Returns non-zero if no pattern matches — caller must check.
+# Compute HMAC-SHA256(header_mac_key, canonical_json({segments, keyslots, digests}))
+# over the LUKS header in $1. Accepts either a block device or a header-backup file;
+# cryptsetup luksDump handles both forms transparently.
+compute_header_mac() {
+    local header_source=$1
+    local keyfile=$2
+    # Extract header_mac_key (last 32 bytes of the keyfile) and hex it.
+    # openssl HMAC's -macopt only accepts hexkey: on the cmdline, so a
+    # one-time hex'ing here is unavoidable.
+    local header_mac_key_hex
+    header_mac_key_hex=$(tail -c 32 "$keyfile" | xxd -p -c 32)
+    cryptsetup luksDump --dump-json-metadata "$header_source" \
+        | jq -cS '{segments, keyslots, digests}' \
+        | openssl dgst -sha256 -mac HMAC -macopt "hexkey:$header_mac_key_hex" \
+        | awk '{print $NF}'
+}
+
+# Locate the persistent data disk's block-device path. Walks the globs
+# from $DISK_GLOB_OVERRIDE_FILE (one per line) if present, else just
+# $DEFAULT_DISK_GLOB; takes the first pattern with a match, resolves
+# symlinks, prints the absolute device path on stdout. Non-zero exit
+# if nothing matched — caller must check.
 discover_disk() {
     local patterns=()
     if [[ -r "$DISK_GLOB_OVERRIDE_FILE" ]]; then
@@ -170,130 +129,100 @@ discover_disk() {
 }
 
 # First-boot LUKS provisioning. Runs only when the disk has no LUKS
-# header yet (caller checks with `cryptsetup isLuks`); on every boot
-# after that, unlock_via_tpm handles the unseal-and-open path.
+# header yet (caller checks with `cryptsetup isLuks`).
 #
-# Sequence:
-#   1. mktemp + 32 bytes of /dev/urandom → temporary keyfile holding the
-#      bootstrap unlock material. Lives only in tmpfs.
-#   2. cryptsetup luksFormat: writes the LUKS2 header, generates the
-#      AES-XTS master key AND the separate HMAC integrity key
-#      internally (cryptsetup's own CSPRNG, independent of our keyfile
-#      — we never see either). Stores Enc_KEK_0(XTS_key || HMAC_key)
-#      in keyslot 0, where KEK_0 = KDF(<our keyfile>, salt_0). cryptsetup
-#      runs the KDF even though our input is already maximum entropy —
-#      the stretching is wasted but harmless. With --integrity, this
-#      call ALSO performs a full-device wipe to initialize every
-#      sector's integrity tag (might take a while..).
-#   3. cryptsetup open: uses our keyfile as unlock material → KDF →
-#      KEK_0 → decrypts slot 0 → recovers master key into the kernel →
-#      attaches dm-crypt mapper at /dev/mapper/persistent.
-#   4. mkfs.ext4 on the mapper device.
-#   5. extend_header_pcr: hash H(segments+digests) into PCR 14 BEFORE
-#      enrollment so the seal policy captures this PCR 14 value.
-#      segments/digests are stable post-luksFormat, so this matches
-#      what every subsequent boot extends. See extend_header_pcr
-#      for the full rationale.
-#   6. systemd-cryptenroll:
-#      generates a fresh tpm_unlock_secret in memory, asks the TPM to
-#      seal it under a PCR policy (PCRs 4/9/11/14 — 4/9/11 are the
-#      reproducible Azure-TDX set, 14 is the header-content binding
-#      from step 5), stores the sealed blob as a LUKS2 token, and
-#      creates a *new* keyslot containing Enc_KEK_TPM(XTS_key || HMAC_key)
-#      where KEK_TPM = KDF(tpm_unlock_secret, salt_N). Then wipes the
-#      bootstrap keyslot 0 in the same call (`--wipe-slot=0`).
-#      tpm_unlock_secret is discarded from memory after enrollment.
-#      After this, the disk can ONLY be unlocked via TPM unseal under
-#      the enrolled PCR policy — no human ever knows the unlock material.
-#   7. shred -u on the temporary keyfile.
+# This step can be VERY slow on first boot: --integrity hmac-sha256
+# makes luksFormat initialize dm-integrity tag metadata for every
+# sector, which is effectively a full-device write at format time.
+# Multi-TB disks can take an hour+. Subsequent boots take the
+# verify_and_open path and skip this.
 #
-# After this returns, /dev/mapper/persistent is already open (from
-# step 3), so the caller can mount /persistent without a second unlock.
+# After this returns, /dev/mapper/persistent is already open (from the
+# luksFormat→open sequence below), so the caller can mount without a
+# second unlock call.
 provision_luks() {
     local device=$1
+    local keyfile=$2
     log "first-boot: provisioning LUKS2 on $device"
 
-    local tmp_unlock_key_file
-    tmp_unlock_key_file=$(mktemp)
-    chmod 0600 "$tmp_unlock_key_file"
-    head -c 32 /dev/urandom > "$tmp_unlock_key_file"
-
-    # aes-xts-random + hmac-sha256 via dm-integrity (no-journal):
-    # - aes-xts-random stores a fresh per-sector random IV in dm-integrity's
-    #   metadata area. Closes the equality-oracle attack class (snapshot-diff
-    #   watermarking + the disk analog of TEE.fail-class ciphertext side
-    #   channels that exploit deterministic XTS to extract keys via repeated
-    #   crypto ops). The random IV is the load-bearing piece; HMAC comes
-    #   bundled because cryptsetup doesn't expose random-IV storage without
-    #   the integrity layer in any kernel mode.
-    # - --key-size 512 = two 256-bit halves for AES-XTS-256 (data + tweak).
-    #   --integrity hmac-sha256 → cryptsetup automatically allocates an
-    #   additional 256-bit key for HMAC-SHA256 alongside the XTS data key;
-    #   both come from cryptsetup's CSPRNG, independent of our bootstrap keyfile.
-    # - --integrity-no-journal skips dm-integrity's 2× write-amplification
-    #   crash journal. A crash mid-write leaves the affected sector reading
-    #   as EILSEQ. We accept this risk; in the worst case the validator is
-    #   reprovisioned from scratch.
+# Cipher choice (aes-xts-random + dm-integrity hmac-sha256 no-journal):
+# - aes-xts-random stores a fresh per-sector random IV in dm-integrity's
+#   metadata area. Closes the equality-oracle attack class (snapshot-diff
+#   watermarking + ciphertext side-channels that exploit deterministic
+#   XTS). The random IV is the load-bearing piece; HMAC comes bundled
+#   because cryptsetup doesn't expose random-IV storage without the
+#   integrity layer in any kernel mode.
+# - --key-size 512 = two 256-bit halves for AES-XTS-256 (data + tweak).
+#   --integrity hmac-sha256 → cryptsetup auto-allocates a 256-bit HMAC
+#   key alongside the XTS data key; both come from cryptsetup's CSPRNG,
+#   independent of our storage_key (which is just the unlock material
+#   that decrypts keyslot 0 to recover the master key).
+# - --integrity-no-journal skips dm-integrity's 2× write-amplification
+#   crash journal. A crash mid-write leaves the affected sector reading
+#   as EILSEQ; in the worst case the validator needs to be reprovisioned.
+#
+# --key-file <(head -c 32 ...) routes the first 32 bytes of the keyfile
+# (storage_key) into cryptsetup via an in-kernel pipe.
     cryptsetup luksFormat --type luks2 --batch-mode \
         --cipher aes-xts-random \
         --key-size 512 \
         --integrity hmac-sha256 \
         --integrity-no-journal \
-        --key-file "$tmp_unlock_key_file" "$device"
+        --key-file <(head -c 32 "$keyfile") \
+        "$device"
 
-    cryptsetup open --key-file "$tmp_unlock_key_file" "$device" "$MAPPER_NAME"
+    cryptsetup open --key-file <(head -c 32 "$keyfile") "$device" "$MAPPER_NAME"
 
     log "creating ext4 filesystem on $MAPPER_DEVICE"
     mkfs.ext4 -q "$MAPPER_DEVICE"
 
-    extend_header_pcr "$device"
-
-    log "enrolling TPM2 keyslot (PCRs=$TPM2_PCRS) and wiping bootstrap slot 0"
-    systemd-cryptenroll --unlock-key-file="$tmp_unlock_key_file" --tpm2-device=auto --tpm2-pcrs="$TPM2_PCRS" --wipe-slot=0 "$device"
-
-    shred -u "$tmp_unlock_key_file"
+    log "computing + storing $TOKEN_TYPE token"
+    local mac
+    mac=$(compute_header_mac "$device" "$keyfile")
+    jq -cn --arg type "$TOKEN_TYPE" --arg mac "$mac" '{type:$type, keyslots:[], mac:$mac}' \
+        | cryptsetup token import "$device"
 }
 
-# Steady-state unlock path: every boot after first.
-#   1. extend_header_pcr: replay the enroll-time extend so PCR 14
-#      matches the value the seal policy was bound to. A tampered
-#      header (e.g. cipher_null injection per CVE-2025-59054) hashes
-#      differently → PCR 14 differs → step 3 below refuses to unseal.
-# Then systemd-cryptsetup does the full TPM-unseal-and-attach in one call:
-#   2. Reads the LUKS2 header on $device, finds the `systemd-tpm2` token.
-#   3. Hands the sealed blob in that token + the current PCR values to
-#      the local TPM. TPM verifies PCRs against the policy embedded at
-#      enroll time. Match → returns tpm_unlock_secret. Mismatch → refuses
-#      (this script then exits non-zero, systemd retries per Restart=).
-#   4. KDF(tpm_unlock_secret, salt_N) → KEK_TPM → decrypts the TPM-bound
-#      keyslot → recovers the master key.
-#   5. Hands the master key to the kernel's dm-crypt subsystem, which
-#      stores it in the per-mapper kernel struct and creates
-#      /dev/mapper/persistent. Master key lives in kernel memory only,
-#      never visible to userspace, wiped when the mapper is closed
-#      (or at reboot when memory clears).
-# After return, /dev/mapper/persistent is a usable block device — every
-# IO through it is transparently encrypted/decrypted by the kernel
-# using the held master key.
-#
-# The `-` argument to systemd-cryptsetup is the keyfile slot — bare
-# dash means "no static keyfile; use the configured TPM2 token instead."
-unlock_via_tpm() {
+# Steady-state unlock path: every boot after the first.
+#   1. Back the on-disk header up to tmpfs (snapshot at one point in time).
+#   2. Verify HMAC against the seismic-header-mac token in that snapshot.
+#   3. cryptsetup open with --header pointing at the snapshot, so
+#      dm-crypt is configured from the verified bytes regardless of
+#      what's on disk afterwards.
+verify_and_open() {
     local device=$1
-    # No-op if the mapper already exists (e.g. systemd is retrying this
-    # service after a transient failure later in main()).
-    if [[ -e "$MAPPER_DEVICE" ]]; then
-        log "$MAPPER_DEVICE already open"
-        return 0
+    local keyfile=$2
+
+    log "backing up LUKS header to tmpfs"
+    rm -f "$HEADER_BACKUP"
+    cryptsetup luksHeaderBackup "$device" --header-backup-file "$HEADER_BACKUP"
+
+    log "verifying $TOKEN_TYPE token against header content"
+    local stored_mac
+    stored_mac=$(cryptsetup luksDump --dump-json-metadata "$HEADER_BACKUP" \
+        | jq -r --arg type "$TOKEN_TYPE" \
+            '.tokens // {} | to_entries[] | select(.value.type == $type) | .value.mac' \
+        | head -n1)
+    if [[ -z "$stored_mac" ]]; then
+        log "ERROR: no $TOKEN_TYPE token on $device — header tampered or disk pre-dates this script"
+        return 1
     fi
-    extend_header_pcr "$device"
-    log "unlocking $device via TPM2"
-    /usr/lib/systemd/systemd-cryptsetup attach "$MAPPER_NAME" "$device" - tpm2-device=auto
+    local computed_mac
+    computed_mac=$(compute_header_mac "$HEADER_BACKUP" "$keyfile")
+    if [[ "$stored_mac" != "$computed_mac" ]]; then
+        log "ERROR: header MAC mismatch — header has been tampered with (CVE-2025-59054 class attack)"
+        log "  stored:   $stored_mac"
+        log "  computed: $computed_mac"
+        return 1
+    fi
+
+    log "opening $device via detached header"
+    cryptsetup open \
+        --header "$HEADER_BACKUP" \
+        --key-file <(head -c 32 "$keyfile") \
+        "$device" "$MAPPER_NAME"
 }
 
-# Mount the now-decrypted dm-crypt mapper device at /persistent. No-op
-# if /persistent is already a mountpoint (e.g. the script ran earlier
-# in the same boot and is being retried by systemd's Restart=on-failure).
 mount_persistent() {
     if mountpoint -q "$MOUNT_POINT"; then
         log "$MOUNT_POINT already mounted"
@@ -305,22 +234,36 @@ mount_persistent() {
 }
 
 main() {
-    # Ensure /dev/disk/by-* symlinks are populated; on early boot udev may
-    # still be settling.
+    # Ensure /dev/disk/by-* symlinks are populated; on early boot udev
+    # may still be settling.
     udevadm trigger --subsystem-match=block 2>/dev/null || true
     udevadm settle --timeout=30 2>/dev/null || true
+
+    wait_for_keyfile
+
+    # Sanity-check the keyfile shape; consumers below extract their
+    # 32-byte slices directly via head -c / tail -c.
+    local size
+    size=$(stat -c %s "$KEYFILE")
+    if (( size != 64 )); then
+        log "ERROR: $KEYFILE has wrong size ($size, expected 64)"
+        return 1
+    fi
 
     local device
     device=$(discover_disk)
     log "persistent disk: $device"
 
     if cryptsetup isLuks "$device"; then
-        unlock_via_tpm "$device"
+        verify_and_open "$device" "$KEYFILE"
     else
-        provision_luks "$device"
+        provision_luks "$device" "$KEYFILE"
     fi
 
     mount_persistent
+
+    # Done with the keyfile — shred so it doesn't linger past use.
+    shred -u "$KEYFILE" 2>/dev/null || rm -f "$KEYFILE"
 }
 
 main "$@"
