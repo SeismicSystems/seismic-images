@@ -1,7 +1,7 @@
 [Unit]
 Description=Seismic Enclave Server
-After=network.target persistent-luks-setup.service tdx-init.service nginx-ssl-setup.service
-Requires=persistent-luks-setup.service tdx-init.service nginx-ssl-setup.service
+After=network.target tdx-init.service
+Requires=tdx-init.service
 
 [Service]
 Type=simple
