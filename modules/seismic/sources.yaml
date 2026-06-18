@@ -2,7 +2,7 @@
 # using separate pins for each, but this is simpler for now, plus they will
 # likely need to be updated together in most cases since they will share libraries.
 enclave:
-  git_reference: d0c3ba9467964dee9862b0917a46979d90bd359f
+  git_reference: 51665417fde60122ce7dec5bc157768cfce861cc
 seismic_reth:
   git_reference: 4bbc6502ea566171decc97adc0c39106967e5ad9
 summit:
