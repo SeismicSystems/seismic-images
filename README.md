@@ -37,13 +37,13 @@ The two formats differ because Azure and GCP expose TDX quotes through different
 
 ## What's in the image
 
-| Component                | Purpose                                                           | Source                                                                        |
-| ------------------------ | ----------------------------------------------------------------- | ----------------------------------------------------------------------------- |
-| `tdx-init`               | First-boot LUKS provisioning; writes `/persistent/conf/node.json` | [SeismicSystems/tdx-init](https://github.com/SeismicSystems/tdx-init)         |
-| `seismic-enclave-server` | Shielded-tx decryption + key derivation; runs in-TEE              | [SeismicSystems/enclave](https://github.com/SeismicSystems/enclave)           |
-| `seismic-reth`           | Execution client                                                  | [SeismicSystems/seismic-reth](https://github.com/SeismicSystems/seismic-reth) |
-| `summit`                 | Consensus client                                                  | [SeismicSystems/summit](https://github.com/SeismicSystems/summit)             |
-| `nginx` + `certbot`      | HTTPS termination with Let's Encrypt for public RPC/WS/metrics    | Debian                                                                        |
+| Component                | Purpose                                                           | Source                                                                                                                       |
+| ------------------------ | ----------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| `tdx-init`               | First-boot LUKS provisioning; writes `/persistent/conf/node.json` | [SeismicSystems/enclave/crates/tdx-init](https://github.com/SeismicSystems/enclave/tree/seismic/crates/tdx-init)             |
+| `seismic-enclave-server` | Shielded-tx decryption + key derivation; runs in-TEE              | [SeismicSystems/enclave/crates/enclave-server](https://github.com/SeismicSystems/enclave/tree/seismic/crates/enclave-server) |
+| `seismic-reth`           | Execution client                                                  | [SeismicSystems/seismic-reth](https://github.com/SeismicSystems/seismic-reth)                                                |
+| `summit`                 | Consensus client                                                  | [SeismicSystems/summit](https://github.com/SeismicSystems/summit)                                                            |
+| `nginx` + `certbot`      | HTTPS termination with Let's Encrypt for public RPC/WS/metrics    | Debian                                                                                                                       |
 
 Source-built pins are in [`modules/seismic/mkosi.build`](modules/seismic/mkosi.build).
 

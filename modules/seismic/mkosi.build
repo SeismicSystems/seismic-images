@@ -7,7 +7,6 @@ source scripts/make_git_package.sh
 # machine-editable document (Renovate/Dependabot-friendly) rather than inline shell vars.
 SOURCES_YAML="$SRCDIR/modules/seismic/sources.yaml"
 
-TDX_INIT_COMMIT=$(mkosi-chroot yq -r '.tdx_init.git_reference' < "$SOURCES_YAML")
 ENCLAVE_COMMIT=$(mkosi-chroot yq -r '.enclave.git_reference' < "$SOURCES_YAML")
 RETH_COMMIT=$(mkosi-chroot yq -r '.seismic_reth.git_reference' < "$SOURCES_YAML")
 SUMMIT_COMMIT=$(mkosi-chroot yq -r '.summit.git_reference' < "$SOURCES_YAML")
@@ -38,17 +37,6 @@ mkosi-chroot rustup default "$RUST_VERSION"
 #     against state at a different path.
 export MAKE_GIT_PACKAGE_CACHE_KEY_EXTRA="rust-${RUST_VERSION}|cargo-home-${CARGO_HOME}|rustup-home-${RUSTUP_HOME}"
 
-# Build tdx-init (using Seismic fork with JSON config support)
-TDX_INIT_BUILD_CMD="
-    cargo build --release --target-dir ./build
-"
-make_git_package \
-    "tdx-init" \
-    "$TDX_INIT_COMMIT" \
-    "https://github.com/SeismicSystems/tdx-init" \
-    "$TDX_INIT_BUILD_CMD" \
-    "build/release/tdx-init:/usr/bin/tdx-init"
-
 # Build seismic-reth
 RETH_BUILD_CMD="
     git checkout $RETH_COMMIT
@@ -70,7 +58,8 @@ make_git_package \
     "target/release/seismic-reth:/usr/bin/seismic-reth" \
     "crates/seismic/chainspec/res/genesis/dev.json:/usr/share/seismic-reth/genesis.json"
 
-# Build enclave (seismic-enclave-server)
+# Build the enclave binaries in one cargo invocation: seismic-enclave-server + tdx-init
+# One pin covers both — see the coupling note in sources.yaml.
 ENCLAVE_BUILD_CMD="
     git checkout $ENCLAVE_COMMIT
     export RUSTFLAGS='-C target-cpu=generic -C link-arg=-Wl,--build-id=none -C symbol-mangling-version=v0'
@@ -81,14 +70,15 @@ ENCLAVE_BUILD_CMD="
     export CARGO_PROFILE_RELEASE_OPT_LEVEL='z'
 
     cargo fetch
-    cargo build --release --frozen --bin seismic-enclave-server
+    cargo build --release --frozen --bin seismic-enclave-server --bin tdx-init
 "
 make_git_package \
     "enclave" \
     "$ENCLAVE_COMMIT" \
     "https://github.com/SeismicSystems/enclave" \
     "$ENCLAVE_BUILD_CMD" \
-    "target/release/seismic-enclave-server:/usr/bin/seismic-enclave-server"
+    "target/release/seismic-enclave-server:/usr/bin/seismic-enclave-server" \
+    "target/release/tdx-init:/usr/bin/tdx-init"
 
 # Build summit (summit)
 SUMMIT_BUILD_CMD="
