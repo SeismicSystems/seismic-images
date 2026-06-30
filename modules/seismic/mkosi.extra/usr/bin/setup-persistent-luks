@@ -29,11 +29,22 @@
 # closes the TOCTOU window between MAC verify and dm-crypt setup —
 # both operations read from the same tmpfs copy of the header.
 
-set -euo pipefail
+# -E so the ERR trap below fires on failures inside functions too, letting us
+# publish an error status before the boot aborts.
+set -Eeuo pipefail
 
 MAPPER_NAME="persistent"
 MAPPER_DEVICE="/dev/mapper/${MAPPER_NAME}"
 MOUNT_POINT="/persistent"
+
+# First-boot LUKS-wipe progress file, served by enclave-server's
+# getLuksProvisioningStatus RPC for the operator CLI's progress bar. We only
+# report the *provisioning* wipe — the long (1h+), otherwise-silent phase —
+# and remove the file when done so the endpoint reports "idle" afterwards. The
+# JSON schema must match enclave-server's `LuksProvisioningStatus` (enclave
+# crate, api.rs); the dir comes from tmpfiles.d/seismic-runtime.conf. Writing
+# status is strictly best-effort: a hiccup here must never wedge the disk setup.
+STATUS_FILE="/run/seismic/status/luks.json"
 
 # Drop-zone for the LUKS keys, written by enclave-server at startup:
 # 64 bytes total = storage_key (32B) || header_mac_key (32B).
@@ -65,6 +76,74 @@ DEFAULT_DISK_GLOB="/dev/disk/by-path/*10"
 DISK_GLOB_OVERRIDE_FILE="/etc/seismic-images/persistent-disk-glob"
 
 log() { echo "[setup-persistent-luks] $*" >&2; }
+
+# --- LUKS-wipe progress producer (best-effort; never aborts the script) -----
+#
+# Reports only the first-boot provisioning wipe. All writers swallow their own
+# errors: progress telemetry must never be the reason a wipe/unlock fails. The
+# file is written atomically (tmp + rename) so the reader never sees a torn
+# JSON object. Schema is enclave-server's `LuksProvisioningStatus`:
+#   {"state":"provisioning","bytes_done":N,"bytes_total":M[,"eta_seconds":S]}
+#   {"state":"error","error":"..."}   (file removed on success → reader: idle)
+
+# Atomically write a JSON document (arg $1) to $STATUS_FILE. Silent no-op on
+# any failure (e.g. the status dir not yet present).
+write_status_json() {
+    local json=$1
+    [[ -n "$json" ]] || return 0
+    {
+        local tmp="${STATUS_FILE}.tmp.$$"
+        printf '%s\n' "$json" > "$tmp"
+        chmod 0644 "$tmp"          # world-readable: enclave-server reads it as a different user
+        mv -f "$tmp" "$STATUS_FILE"
+    } 2>/dev/null || true
+}
+
+# Publish a byte-progress tick. Guards against non-numeric input (a misparsed
+# line must not produce a malformed status). A bytes_total of 0 is reserved for
+# the "just starting, no measurement yet" marker written before the wipe.
+write_progress_status() {
+    local done_bytes=$1 total_bytes=$2 eta_ms=${3:-0}
+    [[ "$done_bytes" =~ ^[0-9]+$ && "$total_bytes" =~ ^[0-9]+$ && "$total_bytes" -gt 0 ]] || return 0
+    local eta_arg="null"
+    [[ "$eta_ms" =~ ^[0-9]+$ && "$eta_ms" -gt 0 ]] && eta_arg=$(( eta_ms / 1000 ))
+    write_status_json "$(jq -cn \
+        --argjson db "$done_bytes" --argjson tb "$total_bytes" --argjson eta "$eta_arg" \
+        '{state:"provisioning", bytes_done:$db, bytes_total:$tb}
+         + (if $eta == null then {} else {eta_seconds:$eta} end)' 2>/dev/null)"
+}
+
+# Demultiplex cryptsetup's merged stdout+stderr: turn --progress-json ticks
+# into status updates, and forward everything else (cryptsetup's own logging)
+# to stderr → journald. One parser fed the merged stream, so we depend neither
+# on which stream cryptsetup emits JSON on, nor flood journald with the ~1
+# line/5s of progress. NOTE: the .device_bytes/.device_size/.eta_ms field
+# names are cryptsetup's --progress-json schema (>= 2.4):
+# <https://man7.org/linux/man-pages/man8/cryptsetup-luksFormat.8.html>
+# If they ever drift, only the % is lost — provisioning still shows.
+split_progress_stream() {
+    local line parsed done_bytes total_bytes eta_ms
+    while IFS= read -r line; do
+        if parsed=$(printf '%s' "$line" | jq -er '
+                select(.device_bytes != null and .device_size != null)
+                | [.device_bytes, .device_size, (.eta_ms // 0)] | @tsv' 2>/dev/null); then
+            IFS=$'\t' read -r done_bytes total_bytes eta_ms <<<"$parsed"
+            write_progress_status "$done_bytes" "$total_bytes" "$eta_ms"
+        else
+            printf '%s\n' "$line" >&2
+        fi
+    done
+}
+
+# ERR trap: publish a terminal error status before the boot aborts (systemd
+# then retries per Restart=on-failure, overwriting this on the next attempt).
+on_error() {
+    local rc=$?
+    write_status_json "$(jq -cn --arg e "setup-persistent-luks failed (rc=$rc); see journalctl -u persistent-luks-setup.service" \
+        '{state:"error", error:$e}' 2>/dev/null)"
+    return "$rc"
+}
+trap on_error ERR
 
 # Block until enclave-server drops the keyfile. The enclave-server
 # unit runs in parallel with this script (via systemd Requires=); the
@@ -144,32 +223,41 @@ provision_luks() {
     local device=$1
     local keyfile=$2
     log "first-boot: provisioning LUKS2 on $device"
+    # Mark provisioning as started before the first cryptsetup tick (~5s away),
+    # so the endpoint never reads "idle" mid-wipe. bytes_total:0 = indeterminate
+    # until the first real progress tick arrives.
+    write_status_json '{"state":"provisioning","bytes_done":0,"bytes_total":0}'
 
-# Cipher choice (aes-xts-random + dm-integrity hmac-sha256 no-journal):
-# - aes-xts-random stores a fresh per-sector random IV in dm-integrity's
-#   metadata area. Closes the equality-oracle attack class (snapshot-diff
-#   watermarking + ciphertext side-channels that exploit deterministic
-#   XTS). The random IV is the load-bearing piece; HMAC comes bundled
-#   because cryptsetup doesn't expose random-IV storage without the
-#   integrity layer in any kernel mode.
-# - --key-size 512 = two 256-bit halves for AES-XTS-256 (data + tweak).
-#   --integrity hmac-sha256 → cryptsetup auto-allocates a 256-bit HMAC
-#   key alongside the XTS data key; both come from cryptsetup's CSPRNG,
-#   independent of our storage_key (which is just the unlock material
-#   that decrypts keyslot 0 to recover the master key).
-# - --integrity-no-journal skips dm-integrity's 2× write-amplification
-#   crash journal. A crash mid-write leaves the affected sector reading
-#   as EILSEQ; in the worst case the validator needs to be reprovisioned.
-#
-# --key-file <(head -c 32 ...) routes the first 32 bytes of the keyfile
-# (storage_key) into cryptsetup via an in-kernel pipe.
+    # Cipher choice (aes-xts-random + dm-integrity hmac-sha256 no-journal):
+    # - aes-xts-random stores a fresh per-sector random IV in dm-integrity's
+    #   metadata area. Closes the equality-oracle attack class (snapshot-diff
+    #   watermarking + ciphertext side-channels that exploit deterministic
+    #   XTS). The random IV is the load-bearing piece; HMAC comes bundled
+    #   because cryptsetup doesn't expose random-IV storage without the
+    #   integrity layer in any kernel mode.
+    # - --key-size 512 = two 256-bit halves for AES-XTS-256 (data + tweak).
+    # - --integrity hmac-sha256 → cryptsetup auto-allocates a 256-bit HMAC
+    #   key alongside the XTS data key; both come from cryptsetup's CSPRNG,
+    #   independent of our storage_key (which is just the unlock material
+    #   that decrypts keyslot 0 to recover the master key).
+    # - --integrity-no-journal skips dm-integrity's 2× write-amplification
+    #   crash journal. A crash mid-write leaves the affected sector reading
+    #   as EILSEQ; in the worst case the validator needs to be reprovisioned.
+    # - --key-file <(head -c 32 ...) routes the first 32 bytes of the keyfile
+    # (storage_key) into cryptsetup via an in-kernel pipe.
+    # - --progress-json streams machine-readable wipe progress; split_progress_stream
+    # turns each tick into the status file the operator CLI polls, and forwards
+    # cryptsetup's own logging (merged via 2>&1) on to journald. The crypto flags
+    # are unchanged — this only adds observability. pipefail (set above) keeps a
+    # luksFormat failure fatal despite the pipe.
     cryptsetup luksFormat --type luks2 --batch-mode \
         --cipher aes-xts-random \
         --key-size 512 \
         --integrity hmac-sha256 \
         --integrity-no-journal \
         --key-file <(head -c 32 "$keyfile") \
-        "$device"
+        --progress-json --progress-frequency 5 \
+        "$device" 2>&1 | split_progress_stream
 
     cryptsetup open --key-file <(head -c 32 "$keyfile") "$device" "$MAPPER_NAME"
 
@@ -261,6 +349,10 @@ main() {
     fi
 
     mount_persistent
+
+    # Provisioning (if it ran) is finished and /persistent is mounted — drop the
+    # progress file so getLuksProvisioningStatus reports idle from here on.
+    rm -f "$STATUS_FILE" 2>/dev/null || true
 
     # Done with the keyfile — shred so it doesn't linger past use.
     shred -u "$KEYFILE" 2>/dev/null || rm -f "$KEYFILE"
