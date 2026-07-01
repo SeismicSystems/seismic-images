@@ -1,6 +1,10 @@
-# The enclave is the only in-VM TPM consumer, hence we use Group=enclave
-# instead of the Debian-conventional `tss` group.
+# The enclave is the only in-VM TPM consumer, hence we grant the `enclave`
+# group (not the Debian-conventional `tss` group) access to the TPM.
 #
-# Only the resource-manager interface (/dev/tpmrm[0-9]*) is needed.
-# Raw /dev/tpm[0-9]* stays at kernel-default root:root 0600.
+# The attestation path reads the Azure vTPM through the `az-cvm-vtpm` crate
+# (tss-esapi), which opens the RAW device `/dev/tpm0` directly rather than the
+# kernel resource manager (/dev/tpmrm0). We still keep tpmrm0 too as a zero-cost
+# hedge — raw-device access already dominates it — in case tss-esapi picks the 
+# RM on a future version bump.
+KERNEL=="tpm[0-9]*",   GROUP="enclave", MODE="0660"
 KERNEL=="tpmrm[0-9]*", GROUP="enclave", MODE="0660"
