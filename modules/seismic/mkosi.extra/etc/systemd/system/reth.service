@@ -21,6 +21,11 @@ RuntimeDirectoryPreserve=restart
 
 # /persistent/reth is created by /etc/seismic/tmpfiles-persistent.conf via
 # persistent-luks-setup's ExecStartPost.
+#
+# RPC (8545) + WS (8546) bind to loopback: nginx terminates TLS on 443 and
+# reverse-proxies /rpc + /ws to them, so they must not be reachable off-box.
+# --http.api all would otherwise expose admin/debug/txpool in the clear; make
+# sure the NSG doesn't open these ports publicly either (defense in depth).
 ExecStart=/usr/bin/seismic-reth node \
     --http.corsdomain "*" \
     --ws.origins "*" \
@@ -29,11 +34,11 @@ ExecStart=/usr/bin/seismic-reth node \
     --chain /usr/share/seismic-reth/genesis.json \
     --datadir /persistent/reth \
     --http \
-    --http.addr 0.0.0.0 \
+    --http.addr 127.0.0.1 \
     --http.port 8545 \
     --http.api all \
     --ws \
-    --ws.addr 0.0.0.0 \
+    --ws.addr 127.0.0.1 \
     --ws.port 8546 \
     --ws.api all \
     --auth-ipc \

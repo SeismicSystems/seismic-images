@@ -26,6 +26,8 @@ Environment=RUST_LOG=info
 # persistent identity, generated once and kept for life).
 ExecStartPre=/usr/bin/summit keys generate -n --key-store-path /persistent/summit/keys
 
+# TODO: add `--rpc-ip 127.0.0.1` once https://github.com/SeismicSystems/summit/pull/434
+# is merged. Until then it binds 0.0.0.0 — make sure the NSG doesn't open :3030 publicly.
 ExecStart=/usr/bin/summit run \
     --engine-ipc-path /run/reth-engine/api.ipc \
     --genesis-path /persistent/summit/genesis.toml \
@@ -33,6 +35,7 @@ ExecStart=/usr/bin/summit run \
     --key-store-path /persistent/summit/keys \
     --port 18551 \
     --rpc-port 3030 \
+    --prom-ip 127.0.0.1 \
     --prom-port 9002 \
     --db-prefix quarts \
     --log-level info
