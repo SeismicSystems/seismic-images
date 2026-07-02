@@ -1,7 +1,14 @@
 #!/bin/bash
 # Provision (first boot) or unlock (subsequent boots) the persistent
-# LUKS disk and mount it at /persistent. Idempotent: inspects on-disk
-# state and does only what's needed.
+# LUKS disk and mount it at /persistent.
+#
+# Properties of this script:
+# - Idempotent: inspects on-disk state and does only what's needed.
+# - Prerequisites: The script waits unbounded for 2 things:
+#   1. the enclave-server keyfile (fetched from bootnode over the network)
+#   2. data-disk attach
+# - Exiting: non-zero is reserved for genuinely fatal states; we don't rely on
+# systemd to restart this script for transient failures.
 #
 # Threat model: operator-untrusted, cloud-untrusted. The unlock key
 # (storage_key) is derived inside enclave-server from a network-fetched
@@ -33,6 +40,16 @@
 # publish an error status before the boot aborts.
 set -Eeuo pipefail
 
+# ERR trap: publish a terminal error status before the boot aborts (systemd
+# then retries per Restart=on-failure, overwriting this on the next attempt).
+on_error() {
+    local rc=$?
+    write_status_json "$(jq -cn --arg e "setup-persistent-luks failed (rc=$rc); see journalctl -u persistent-luks-setup.service" \
+        '{state:"error", error:$e}' 2>/dev/null)"
+    return "$rc"
+}
+trap on_error ERR
+
 MAPPER_NAME="persistent"
 MAPPER_DEVICE="/dev/mapper/${MAPPER_NAME}"
 MOUNT_POINT="/persistent"
@@ -48,15 +65,11 @@ STATUS_FILE="/run/seismic/status/luks.json"
 
 # Drop-zone for the LUKS keys, written by enclave-server at startup:
 # 64 bytes total = storage_key (32B) || header_mac_key (32B).
-KEYFILE="/run/seismic/enclave/luks-keys"
-# Generous wait so that enclave-server has time to fetch root_key from
-# peers (slow if peers are still coming up). systemd Restart=on-failure
-# bounds the total wall time.
 # TODO(samlaf): consider swapping polling for systemd Type=notify on enclave.service.
 # enclave-server would sd_notify(READY=1) after writing the keyfile, and
-# this script could drop wait_for_keyfile entirely. Avoids the magic
-# timeout and gives clean failure propagation if enclave never readies.
-KEYFILE_TIMEOUT_SECS=300
+# this script could drop wait_for_keyfile entirely. Gives clean failure
+# propagation if enclave never readies.
+KEYFILE="/run/seismic/enclave/luks-keys"
 
 # Detached LUKS header lives here after MAC verification. cryptsetup
 # uses this copy for the actual open, closing TOCTOU between verify
@@ -135,46 +148,19 @@ split_progress_stream() {
     done
 }
 
-# ERR trap: publish a terminal error status before the boot aborts (systemd
-# then retries per Restart=on-failure, overwriting this on the next attempt).
-on_error() {
-    local rc=$?
-    write_status_json "$(jq -cn --arg e "setup-persistent-luks failed (rc=$rc); see journalctl -u persistent-luks-setup.service" \
-        '{state:"error", error:$e}' 2>/dev/null)"
-    return "$rc"
-}
-trap on_error ERR
-
 # Block until enclave-server drops the keyfile. The enclave-server
 # unit runs in parallel with this script (via systemd Requires=); the
-# keyfile is the synchronization point.
+# keyfile is the synchronization point. enclave-server renames the file
+# into place, so existence implies fully written.
 wait_for_keyfile() {
     local elapsed=0
     while [[ ! -f "$KEYFILE" ]]; do
-        if (( elapsed >= KEYFILE_TIMEOUT_SECS )); then
-            log "ERROR: $KEYFILE absent after ${KEYFILE_TIMEOUT_SECS}s — enclave-server up?"
-            return 1
+        if (( elapsed % 30 == 0 )); then
+            log "waiting for enclave-server to drop keyfile $KEYFILE (${elapsed}s elapsed)"
         fi
         sleep 1
-        ((elapsed++))
+        elapsed=$(( elapsed + 1 ))
     done
-}
-
-# Compute HMAC-SHA256(header_mac_key, canonical_json({segments, keyslots, digests}))
-# over the LUKS header in $1. Accepts either a block device or a header-backup file;
-# cryptsetup luksDump handles both forms transparently.
-compute_header_mac() {
-    local header_source=$1
-    local keyfile=$2
-    # Extract header_mac_key (last 32 bytes of the keyfile) and hex it.
-    # openssl HMAC's -macopt only accepts hexkey: on the cmdline, so a
-    # one-time hex'ing here is unavoidable.
-    local header_mac_key_hex
-    header_mac_key_hex=$(tail -c 32 "$keyfile" | xxd -p -c 32)
-    cryptsetup luksDump --dump-json-metadata "$header_source" \
-        | jq -cS '{segments, keyslots, digests}' \
-        | openssl dgst -sha256 -mac HMAC -macopt "hexkey:$header_mac_key_hex" \
-        | awk '{print $NF}'
 }
 
 # Locate the persistent data disk's block-device path. Walks the globs
@@ -203,8 +189,24 @@ discover_disk() {
         fi
     done
 
-    log "ERROR: no persistent disk found (tried: ${patterns[*]})"
+    log "no persistent disk yet (tried: ${patterns[*]})"
     return 1
+}
+
+# Block until the persistent data disk is discoverable; cloud disk
+# attach and udev symlink creation can lag early boot.
+wait_for_disk() {
+    local device
+    while true; do
+        # Re-trigger so /dev/disk/by-* symlinks appear for late-attached disks.
+        udevadm trigger --subsystem-match=block 2>/dev/null || true
+        udevadm settle --timeout=30 2>/dev/null || true
+        if device=$(discover_disk); then
+            printf '%s\n' "$device"
+            return 0
+        fi
+        sleep 5
+    done
 }
 
 # First-boot LUKS provisioning. Runs only when the disk has no LUKS
@@ -271,6 +273,23 @@ provision_luks() {
         | cryptsetup token import "$device"
 }
 
+# Compute HMAC-SHA256(header_mac_key, canonical_json({segments, keyslots, digests}))
+# over the LUKS header in $1. Accepts either a block device or a header-backup file;
+# cryptsetup luksDump handles both forms transparently.
+compute_header_mac() {
+    local header_source=$1
+    local keyfile=$2
+    # Extract header_mac_key (last 32 bytes of the keyfile) and hex it.
+    # openssl HMAC's -macopt only accepts hexkey: on the cmdline, so a
+    # one-time hex'ing here is unavoidable.
+    local header_mac_key_hex
+    header_mac_key_hex=$(tail -c 32 "$keyfile" | xxd -p -c 32)
+    cryptsetup luksDump --dump-json-metadata "$header_source" \
+        | jq -cS '{segments, keyslots, digests}' \
+        | openssl dgst -sha256 -mac HMAC -macopt "hexkey:$header_mac_key_hex" \
+        | awk '{print $NF}'
+}
+
 # Steady-state unlock path: every boot after the first.
 #   1. Back the on-disk header up to tmpfs (snapshot at one point in time).
 #   2. Verify HMAC against the seismic-header-mac token in that snapshot.
@@ -322,11 +341,6 @@ mount_persistent() {
 }
 
 main() {
-    # Ensure /dev/disk/by-* symlinks are populated; on early boot udev
-    # may still be settling.
-    udevadm trigger --subsystem-match=block 2>/dev/null || true
-    udevadm settle --timeout=30 2>/dev/null || true
-
     wait_for_keyfile
 
     # Sanity-check the keyfile shape; consumers below extract their
@@ -339,12 +353,13 @@ main() {
     fi
 
     local device
-    device=$(discover_disk)
+    device=$(wait_for_disk)
     log "persistent disk: $device"
 
     if cryptsetup isLuks "$device"; then
         verify_and_open "$device" "$KEYFILE"
     else
+        # first boot only
         provision_luks "$device" "$KEYFILE"
     fi
 
