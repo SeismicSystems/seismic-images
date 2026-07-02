@@ -55,8 +55,7 @@ make_git_package \
     "$RETH_COMMIT" \
     "https://github.com/SeismicSystems/seismic-reth" \
     "$RETH_BUILD_CMD" \
-    "target/release/seismic-reth:/usr/bin/seismic-reth" \
-    "crates/seismic/chainspec/res/genesis/dev.json:/usr/share/seismic-reth/genesis.json"
+    "target/release/seismic-reth:/usr/bin/seismic-reth"
 
 # Build the enclave binaries in one cargo invocation: seismic-enclave-server + tdx-init
 # One pin covers both — see the coupling note in sources.yaml.

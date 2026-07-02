@@ -26,7 +26,7 @@ build-inputs only. The image rootfs is the union of four channels:
 | ----------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | [`mkosi.extra/`](mkosi.extra/)            | Copied wholesale at matching paths — see tree below.                                                                                                                                          |
 | `Packages=` in [`mkosi.conf`](mkosi.conf) | apt-installed Debian packages: `nginx`, `certbot`, `python3-certbot-nginx`, `cryptsetup`, `jq`, `libtss2-*`, `lz4`                                                                                |
-| [`mkosi.build`](mkosi.build)              | Compiled binaries written to `$DESTDIR`: `tdx-init`, `seismic-reth`, `seismic-enclave-server`, `summit` → `/usr/bin/`; reth dev genesis → `/usr/share/seismic-reth/genesis.json`              |
+| [`mkosi.build`](mkosi.build)              | Compiled binaries written to `$DESTDIR`: `tdx-init`, `seismic-reth`, `seismic-enclave-server`, `summit` → `/usr/bin/`              |
 | [`mkosi.postinst`](mkosi.postinst)        | Image-fs mutations: system users + `engine-api`/`conf` groups in `/etc/{passwd,group}`, services symlinked into `/etc/systemd/system/minimal.target.wants/`, `setup-*` helper scripts made executable |
 
 `mkosi.extra/` lays out exactly what its name suggests — the same paths
@@ -108,11 +108,15 @@ to the TPM. The TPM2 user-space libraries the enclave links against
 ### `tdx-init.service`
 
 Runs `tdx-init wait-for-config`, which on every boot blocks until a
-provisioner POSTs the node's configuration (TOML: `[domain]` name/email
-and optional `[enclave]` genesis_node/peers) via HTTP. On receipt
+provisioner POSTs the node's configuration (TOML: `[domain]` name/email,
+optional `[enclave]` genesis_node/peers, and `[network]` with the
+base64 network manifest + reth genesis) via HTTP. On receipt
 tdx-init translates the payload into per-service config files under
-`/run/seismic/conf/`: `domain.env` (for `setup-nginx-ssl`) and
-`enclave.env` (consumed by `enclave.service` via `EnvironmentFile=`).
+`/run/seismic/conf/`: `domain.env` (for `setup-nginx-ssl`),
+`enclave.env` (consumed by `enclave.service` via `EnvironmentFile=`),
+`network-manifest.json` (hashed by enclave-server into `network_id`),
+and `reth-genesis.json` (the chain spec `reth.service` passes to
+`--chain`).
 The drop-zone is tmpfs (declared in
 [`tmpfiles.d/seismic-runtime.conf`](mkosi.extra/etc/tmpfiles.d/seismic-runtime.conf)),
 so the sentinel `tdx-init-done` is wiped each boot and deploy tooling
@@ -127,8 +131,9 @@ sysinit.target, before any service starts.
 loads `enclave.env` for `SEISMIC_ENCLAVE_GENESIS_NODE` /
 `SEISMIC_ENCLAVE_PEERS`; the enclave fails fast at startup if neither
 is set (no in-binary fallback — operator config is the only source of
-peer IPs). reth and summit take their args statically from the
-systemd unit files.
+peer IPs). reth reads its chain spec from
+`/run/seismic/conf/reth-genesis.json`; summit takes its args statically
+from the systemd unit file.
 
 ### `enclave.service`
 
