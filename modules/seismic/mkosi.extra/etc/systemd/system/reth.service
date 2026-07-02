@@ -22,6 +22,11 @@ RuntimeDirectoryPreserve=restart
 # /persistent/reth is created by /etc/seismic/tmpfiles-persistent.conf via
 # persistent-luks-setup's ExecStartPost.
 #
+# tdx-init writes /run/seismic/conf/reth-genesis.json from the operator's
+# config POST, re-delivered on every boot (/run is tmpfs). The Requires=
+# chain above (enclave.service -> tdx-init.service) guarantees it exists
+# before this unit starts.
+#
 # RPC (8545) + WS (8546) bind to loopback: nginx terminates TLS on 443 and
 # reverse-proxies /rpc + /ws to them, so they must not be reachable off-box.
 # --http.api all would otherwise expose admin/debug/txpool in the clear; make
@@ -31,7 +36,7 @@ ExecStart=/usr/bin/seismic-reth node \
     --ws.origins "*" \
     --enclave.endpoint-addr 0.0.0.0 \
     --enclave.endpoint-port 7878 \
-    --chain /usr/share/seismic-reth/genesis.json \
+    --chain /run/seismic/conf/reth-genesis.json \
     --datadir /persistent/reth \
     --http \
     --http.addr 127.0.0.1 \
