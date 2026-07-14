@@ -27,7 +27,7 @@ build-inputs only. The image rootfs is the union of four channels:
 | [`mkosi.extra/`](mkosi.extra/)            | Copied wholesale at matching paths — see tree below.                                                                                                                                          |
 | `Packages=` in [`mkosi.conf`](mkosi.conf) | apt-installed Debian packages: `nginx`, `certbot`, `python3-certbot-nginx`, `cryptsetup`, `jq`, `libtss2-*`, `lz4`                                                                                |
 | [`mkosi.build`](mkosi.build)              | Compiled binaries written to `$DESTDIR`: `tdx-init`, `seismic-reth`, `seismic-enclave-server`, `summit` → `/usr/bin/`              |
-| [`mkosi.postinst`](mkosi.postinst)        | Image-fs mutations: system users + `engine-api`/`conf` groups in `/etc/{passwd,group}`, services symlinked into `/etc/systemd/system/minimal.target.wants/`, `setup-*` helper scripts made executable |
+| [`mkosi.postinst`](mkosi.postinst)        | Image-fs mutations: system users + `engine-api`/`custodian-ipc`/`conf` groups in `/etc/{passwd,group}`, services symlinked into `/etc/systemd/system/minimal.target.wants/`, `setup-*` helper scripts made executable |
 
 `mkosi.extra/` lays out exactly what its name suggests — the same paths
 relative to the image root:
@@ -146,9 +146,12 @@ the enclave repo for details on the RPC surface.
 
 Runs *before* `persistent-luks-setup` (it derives the LUKS unlock
 key; see boot diagram above). Depends only on `tdx-init` for the
-operator-supplied bootstrap config (peer URLs, genesis flag). Access
-to `/dev/tpmrm0` for attestation-quote generation comes via the udev
-rule that sets `enclave` group ownership on the device node.
+operator-supplied bootstrap config (peer URLs, genesis flag). It also binds
+`/run/seismic/custodian/custodian.sock` inside an
+`enclave:custodian-ipc 2750` runtime directory. The setgid directory assigns
+new sockets to the `custodian-ipc` filesystem access group. Access to
+`/dev/tpmrm0` for attestation-quote generation comes via the udev rule that sets
+`enclave` group ownership on the device node.
 
 `RestartSec=60` is unusually long — TDX quote generation can be slow on
 restart; tight loops would hammer the TPM.
