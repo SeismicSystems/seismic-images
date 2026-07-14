@@ -59,6 +59,18 @@ make_git_package \
 
 # Build the enclave binaries in one cargo invocation: seismic-enclave-server + tdx-init
 # One pin covers both — see the coupling note in sources.yaml.
+#
+# TODO(key-custodian): when the standalone key-custodian binary lands, build
+# it in its OWN cargo invocation — do NOT append it to the batched line
+# below. A multi-`--bin` invocation unifies cargo features across all
+# targets, so batching would silently let seismic-enclave-server's `client`
+# feature pull tokio into the custodian's build graph. The stakes are
+# auditability and supply chain more than reachable code: the custodian's
+# security story includes "no async runtime in the key-holding process's
+# dependency graph" — a claim verified at build time (cargo tree on this
+# invocation) and falsified by a unified build, even though the linker
+# would strip the unreachable code from the binary. See the feature notes
+# in the enclave repo's crates/custodian-ipc/Cargo.toml.
 ENCLAVE_BUILD_CMD="
     git checkout $ENCLAVE_COMMIT
     export RUSTFLAGS='-C target-cpu=generic -C link-arg=-Wl,--build-id=none -C symbol-mangling-version=v0'
