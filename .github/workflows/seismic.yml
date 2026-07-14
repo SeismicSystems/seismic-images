@@ -1,0 +1,215 @@
+# Seismic-specific copy of build.yaml for now, kept separate so the upstream
+# workflow can remain untouched.
+name: Seismic image CI
+
+on:
+  push:
+    branches:
+      - seismic
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      reprotest:
+        description: Build twice and require bit-identical Seismic UKIs
+        required: false
+        default: true
+        type: boolean
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  static:
+    name: validate Seismic module
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install ShellCheck
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y shellcheck
+
+      - name: Check shell sources
+        run: |
+          bash -n \
+            modules/seismic/mkosi.build \
+            modules/seismic/mkosi.postinst \
+            modules/seismic/mkosi.extra/usr/bin/setup-nginx-ssl \
+            modules/seismic/mkosi.extra/usr/bin/setup-persistent-luks
+          shellcheck -x \
+            modules/seismic/mkosi.build \
+            modules/seismic/mkosi.postinst \
+            modules/seismic/mkosi.extra/usr/bin/setup-nginx-ssl \
+            modules/seismic/mkosi.extra/usr/bin/setup-persistent-luks
+
+      - name: Check source pins
+        shell: python3 {0}
+        run: |
+          import pathlib
+          import re
+
+          source = pathlib.Path("modules/seismic/sources.yaml").read_text()
+          pins = re.findall(r"^\s+git_reference:\s*([0-9a-f]+)\s*$", source, re.MULTILINE)
+          if len(pins) != 3 or any(len(pin) != 40 for pin in pins):
+              raise SystemExit("sources.yaml must contain three full 40-character git pins")
+
+  build:
+    name: build Seismic image
+    needs: static
+    runs-on: xl-github-runner-2
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cpio debian-archive-keyring zstd
+
+      - name: Install Nix
+        uses: cachix/install-nix-action@v27
+        with:
+          extra_nix_config: |
+            experimental-features = nix-command flakes
+
+      - name: Enable user namespaces
+        run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+
+      - name: Build Seismic image
+        run: |
+          umask 022
+          nix develop --command mkosi --force -I images/seismic.conf --image-id=seismic
+
+      - name: Fix artifact permissions
+        run: sudo chown -R "$(id -u):$(id -g)" build/
+
+      - name: Validate artifacts and image contents
+        run: |
+          for suffix in efi initrd manifest vhd; do
+            compgen -G "build/seismic_*.${suffix}" >/dev/null || {
+              echo "Missing Seismic .${suffix} artifact" >&2
+              exit 1
+            }
+          done
+
+          initrd=$(compgen -G 'build/seismic_*.initrd' | head -n1)
+          zstd -dc "$initrd" | cpio -it 2>/dev/null > build/seismic-initrd-files.txt
+          while read -r expected; do
+            grep -Fxq "$expected" build/seismic-initrd-files.txt || {
+              echo "Missing expected image file: $expected" >&2
+              exit 1
+            }
+          done <<'EOF'
+          etc/systemd/system/enclave.service
+          etc/systemd/system/persistent-luks-setup.service
+          etc/systemd/system/reth.service
+          etc/systemd/system/summit.service
+          etc/systemd/system/tdx-init.service
+          etc/systemd/system/minimal.target.wants/enclave.service
+          etc/systemd/system/minimal.target.wants/persistent-luks-setup.service
+          etc/systemd/system/minimal.target.wants/reth.service
+          etc/systemd/system/minimal.target.wants/summit.service
+          etc/systemd/system/minimal.target.wants/tdx-init.service
+          usr/bin/seismic-enclave-server
+          usr/bin/seismic-reth
+          usr/bin/setup-nginx-ssl
+          usr/bin/setup-persistent-luks
+          usr/bin/summit
+          usr/bin/tdx-init
+          EOF
+
+      - name: Show build artifacts
+        run: |
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo "📦 Image: seismic"
+          echo "🔖 Commit: ${{ github.sha }}"
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          find build -maxdepth 1 -type f -name 'seismic*' \
+            -printf '%f (%k KiB)\n'
+
+      - name: Generate EFI checksum
+        run: sha256sum build/seismic_*.efi | tee build/checksum.sha256
+
+      - name: Upload checksum for reproducibility comparison
+        if: >-
+          github.event_name == 'pull_request' ||
+          (github.event_name == 'workflow_dispatch' && inputs.reprotest)
+        uses: actions/upload-artifact@v4
+        with:
+          name: checksum-seismic-build-1
+          path: build/checksum.sha256
+          retention-days: 1
+
+  reprotest-build:
+    name: reproducibility build
+    if: >-
+      github.event_name == 'pull_request' ||
+      (github.event_name == 'workflow_dispatch' && inputs.reprotest)
+    needs: static
+    runs-on: xl-github-runner-2
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y debian-archive-keyring
+
+      - name: Install Nix
+        uses: cachix/install-nix-action@v27
+        with:
+          extra_nix_config: |
+            experimental-features = nix-command flakes
+
+      - name: Enable user namespaces
+        run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+
+      - name: Build Seismic image again
+        run: |
+          umask 022
+          nix develop --command mkosi --force -I images/seismic.conf --image-id=seismic
+          sudo chown -R "$(id -u):$(id -g)" build/
+
+      - name: Generate EFI checksum
+        run: sha256sum build/seismic_*.efi | tee build/checksum.sha256
+
+      - name: Upload checksum
+        uses: actions/upload-artifact@v4
+        with:
+          name: checksum-seismic-build-2
+          path: build/checksum.sha256
+          retention-days: 1
+
+  reprotest-compare:
+    name: compare reproducibility builds
+    if: >-
+      github.event_name == 'pull_request' ||
+      (github.event_name == 'workflow_dispatch' && inputs.reprotest)
+    needs:
+      - build
+      - reprotest-build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download checksums
+        uses: actions/download-artifact@v4
+        with:
+          pattern: checksum-seismic-build-*
+          path: checksums/
+
+      - name: Compare EFI hashes
+        run: |
+          hash1=$(awk '{print $1}' checksums/checksum-seismic-build-1/checksum.sha256)
+          hash2=$(awk '{print $1}' checksums/checksum-seismic-build-2/checksum.sha256)
+
+          echo "EFI hash build 1: $hash1"
+          echo "EFI hash build 2: $hash2"
+
+          if [ "$hash1" != "$hash2" ]; then
+            echo "Seismic UKIs are not reproducible" >&2
+            exit 1
+          fi
+          echo "Seismic UKIs are bit-for-bit reproducible"
