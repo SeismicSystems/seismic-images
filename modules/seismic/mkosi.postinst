@@ -6,14 +6,15 @@ set -euxo pipefail
 # hence build-time creation here via mkosi-chroot, not at first boot. Each user is referenced 
 # by name in the corresponding service unit; deleting any of these breaks startup.
 # TODO(samlaf): consider switching to systemd-sysusers for declarative user/group creation.
-mkosi-chroot groupadd -r engine-api  # reth ↔ summit engine-API IPC socket at /run/reth-engine/api.ipc
-mkosi-chroot groupadd -r conf        # tdx-init writes /persistent/conf/*; readers join this group
+mkosi-chroot groupadd -r engine-api    # reth ↔ summit engine-API IPC socket at /run/reth-engine/api.ipc
+mkosi-chroot groupadd -r custodian-ipc # local clients authorized to reach the key-custodian socket
+mkosi-chroot groupadd -r conf          # tdx-init writes /persistent/conf/*; readers join this group
 
 # All binaries are in the conf group to read their config that tdx-init writes.
 mkosi-chroot useradd -r -s /bin/false -G conf tdx-init
-mkosi-chroot useradd -r -s /bin/false -G conf enclave
-mkosi-chroot useradd -r -s /bin/false -G engine-api,conf reth
-mkosi-chroot useradd -r -s /bin/false -G engine-api,conf summit
+mkosi-chroot useradd -r -s /bin/false -G conf,custodian-ipc enclave
+mkosi-chroot useradd -r -s /bin/false -G conf,engine-api reth
+mkosi-chroot useradd -r -s /bin/false -G conf,engine-api summit
 
 # Make scripts executable
 chmod +x "$BUILDROOT/usr/bin/setup-nginx-ssl"
