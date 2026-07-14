@@ -61,7 +61,7 @@ jobs:
   build:
     name: build Seismic image
     needs: static
-    runs-on: warp-ubuntu-latest-x64-32x
+    runs-on: large-github-runner
     steps:
       - uses: actions/checkout@v5
 
@@ -150,7 +150,7 @@ jobs:
       github.event_name == 'pull_request' ||
       (github.event_name == 'workflow_dispatch' && inputs.reprotest)
     needs: static
-    runs-on: warp-ubuntu-latest-x64-32x
+    runs-on: large-github-runner
     steps:
       - uses: actions/checkout@v5
 
