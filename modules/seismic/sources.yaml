@@ -1,8 +1,9 @@
-# One pin builds BOTH seismic-enclave-server and tdx-init. We could consider
-# using separate pins for each, but this is simpler for now, plus they will
-# likely need to be updated together in most cases since they will share libraries.
+# One pin builds seismic-attestation-service, seismic-custodian-service, and
+# tdx-init. We could consider using separate pins for each, but this is simpler
+# for now, plus they will likely need to be updated together in most cases
+# since they share libraries.
 enclave:
-  git_reference: 6d1111eaa4760ea4018f57c6855b9948fa74dffe
+  git_reference: 8e6b8db99fd3861de8a8bdbc3d9072c847db5201
 seismic_reth:
   git_reference: 4bbc6502ea566171decc97adc0c39106967e5ad9
 summit:

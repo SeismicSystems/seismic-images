@@ -1,0 +1,39 @@
+[Unit]
+Description=Seismic Key Custodian
+After=tdx-init.service
+Requires=tdx-init.service
+
+[Service]
+Type=simple
+User=custodian
+
+Environment=RUST_BACKTRACE=full
+Environment=RUST_LOG=info
+# The dir is created by /etc/tmpfiles.d/seismic-runtime.conf, and the file is
+# written by tdx-init on every boot (after operator POSTs the config). It
+# carries SEISMIC_CUSTODIAN_GENESIS_NODE; systemd loads the file as root, so
+# the custodian user needs no `conf` membership.
+EnvironmentFile=/run/seismic/conf/custodian.env
+
+# The custodian owns root_key in process memory and serves key operations on
+# /run/seismic/custodian/custodian.sock only — no network listener. Callers
+# authenticate by UID (SO_PEERCRED); the socket dir's custodian-ipc group
+# gates who can connect at all, and the grants below gate what a connected
+# UID may call. The grants live here, next to the user definitions in
+# mkosi.postinst, so names and grants can't drift apart and the ACL is part
+# of the measured image.
+#
+# attestation's tx-io,rng,snapshot grants let the attestation service
+# serve reth's HTTP getPurposeKeys fetch; they retire once reth fetches its
+# keys from the custodian socket directly (the reth:tx-io,rng grant).
+ExecStart=/usr/bin/seismic-custodian-service \
+    --allow attestation:tx-io-public,create-root-key-bootstrap-attempt,wrap-root-key,install-root-key-from-verified-bootstrap-response,tx-io,rng,snapshot \
+    --allow reth:tx-io,rng
+
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=minimal.target

@@ -1,7 +1,7 @@
 [Unit]
 Description=Summit Consensus Server
-After=network.target persistent-luks-setup.service nginx-ssl-setup.service enclave.service reth.service
-Requires=persistent-luks-setup.service nginx-ssl-setup.service enclave.service reth.service
+After=network.target persistent-luks-setup.service nginx-ssl-setup.service attestation.service reth.service
+Requires=persistent-luks-setup.service nginx-ssl-setup.service attestation.service reth.service
 
 [Service]
 Type=simple
