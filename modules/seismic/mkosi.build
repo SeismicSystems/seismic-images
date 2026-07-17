@@ -57,20 +57,10 @@ make_git_package \
     "$RETH_BUILD_CMD" \
     "target/release/seismic-reth:/usr/bin/seismic-reth"
 
-# Build the enclave binaries in one cargo invocation: seismic-enclave-server + tdx-init
-# One pin covers both — see the coupling note in sources.yaml.
-#
-# TODO(key-custodian): when the standalone key-custodian binary lands, build
-# it in its OWN cargo invocation — do NOT append it to the batched line
-# below. A multi-`--bin` invocation unifies cargo features across all
-# targets, so batching would silently let seismic-enclave-server's `client`
-# feature pull tokio into the custodian's build graph. The stakes are
-# auditability and supply chain more than reachable code: the custodian's
-# security story includes "no async runtime in the key-holding process's
-# dependency graph" — a claim verified at build time (cargo tree on this
-# invocation) and falsified by a unified build, even though the linker
-# would strip the unreachable code from the binary. See the feature notes
-# in the enclave repo's crates/custodian-ipc/Cargo.toml.
+# Build the network-facing enclave binaries in one cargo invocation:
+# seismic-attestation-service + tdx-init. One pin covers the whole enclave
+# repo — see the coupling note in sources.yaml. The custodian deliberately
+# does NOT ride this line; see its own invocation below.
 ENCLAVE_BUILD_CMD="
     git checkout $ENCLAVE_COMMIT
     export RUSTFLAGS='-C target-cpu=generic -C link-arg=-Wl,--build-id=none -C symbol-mangling-version=v0'
@@ -81,15 +71,44 @@ ENCLAVE_BUILD_CMD="
     export CARGO_PROFILE_RELEASE_OPT_LEVEL='z'
 
     cargo fetch
-    cargo build --release --frozen --bin seismic-enclave-server --bin tdx-init
+    cargo build --release --frozen --bin seismic-attestation-service --bin tdx-init
 "
 make_git_package \
     "enclave" \
     "$ENCLAVE_COMMIT" \
     "https://github.com/SeismicSystems/enclave" \
     "$ENCLAVE_BUILD_CMD" \
-    "target/release/seismic-enclave-server:/usr/bin/seismic-enclave-server" \
+    "target/release/seismic-attestation-service:/usr/bin/seismic-attestation-service" \
     "target/release/tdx-init:/usr/bin/tdx-init"
+
+# Build the key custodian in its OWN cargo invocation, never appended to the
+# batched enclave line above. A multi-`--bin` invocation unifies cargo
+# features across all targets, so batching would let the attestation
+# service's `client` feature pull tokio into the custodian's build graph.
+# The custodian's security story includes "no async runtime in the
+# key-holding process's dependency graph"; the cargo-tree assertion in the
+# build command makes that claim hold at build time. See the feature notes
+# in the enclave repo's crates/custodian-ipc/Cargo.toml.
+CUSTODIAN_BUILD_CMD="
+    set -euo pipefail
+    git checkout $ENCLAVE_COMMIT
+    export RUSTFLAGS='-C target-cpu=generic -C link-arg=-Wl,--build-id=none -C symbol-mangling-version=v0'
+    export CARGO_PROFILE_RELEASE_LTO='off'
+    export CARGO_PROFILE_RELEASE_CODEGEN_UNITS='1'
+    export CARGO_PROFILE_RELEASE_PANIC='abort'
+    export CARGO_PROFILE_RELEASE_STRIP='none'
+    export CARGO_PROFILE_RELEASE_OPT_LEVEL='z'
+
+    cargo fetch
+    cargo build --release --frozen --bin seismic-custodian-service
+    cargo tree --frozen -e normal -p seismic-custodian-service | { ! grep tokio; }
+"
+make_git_package \
+    "enclave-custodian" \
+    "$ENCLAVE_COMMIT" \
+    "https://github.com/SeismicSystems/enclave" \
+    "$CUSTODIAN_BUILD_CMD" \
+    "target/release/seismic-custodian-service:/usr/bin/seismic-custodian-service"
 
 # Build summit (summit)
 SUMMIT_BUILD_CMD="

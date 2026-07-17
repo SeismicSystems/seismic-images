@@ -104,17 +104,20 @@ jobs:
               exit 1
             }
           done <<'EOF'
-          etc/systemd/system/enclave.service
+          etc/systemd/system/attestation.service
+          etc/systemd/system/custodian.service
           etc/systemd/system/persistent-luks-setup.service
           etc/systemd/system/reth.service
           etc/systemd/system/summit.service
           etc/systemd/system/tdx-init.service
-          etc/systemd/system/minimal.target.wants/enclave.service
+          etc/systemd/system/minimal.target.wants/attestation.service
+          etc/systemd/system/minimal.target.wants/custodian.service
           etc/systemd/system/minimal.target.wants/persistent-luks-setup.service
           etc/systemd/system/minimal.target.wants/reth.service
           etc/systemd/system/minimal.target.wants/summit.service
           etc/systemd/system/minimal.target.wants/tdx-init.service
-          usr/bin/seismic-enclave-server
+          usr/bin/seismic-attestation-service
+          usr/bin/seismic-custodian-service
           usr/bin/seismic-reth
           usr/bin/setup-nginx-ssl
           usr/bin/setup-persistent-luks

@@ -1,0 +1,33 @@
+[Unit]
+Description=Seismic Attestation Service
+After=network.target tdx-init.service custodian.service
+Requires=tdx-init.service custodian.service
+
+[Service]
+Type=simple
+User=attestation
+
+Environment=RUST_BACKTRACE=full
+Environment=RUST_LOG=info
+# The dir is created by /etc/tmpfiles.d/seismic-runtime.conf, and the file
+# (carrying SEISMIC_ROOT_KEY_PEERS) is written by tdx-init on every boot
+# (after operator POSTs the config). systemd refuses to start the unit if
+# this file is missing; its existence is an invariant of the boot chain
+# (tdx-init.service is a Requires= above and produces this file before
+# exiting successfully).
+EnvironmentFile=/run/seismic/conf/attestation.env
+
+# Holds no key material: every key operation goes through the custodian's
+# Unix socket (the attestation user is in the custodian-ipc group; the custodian's
+# --allow grants scope what it may call). The HTTP listener binds only once
+# the custodian holds the root key, so the open port doubles as the
+# readiness signal deploy tooling watches.
+ExecStart=/usr/bin/seismic-attestation-service --ip 0.0.0.0 --port 7878
+
+Restart=always
+RestartSec=60
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=minimal.target

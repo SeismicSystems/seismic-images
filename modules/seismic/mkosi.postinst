@@ -10,10 +10,16 @@ mkosi-chroot groupadd -r engine-api    # reth ↔ summit engine-API IPC socket a
 mkosi-chroot groupadd -r custodian-ipc # local clients authorized to reach the key-custodian socket
 mkosi-chroot groupadd -r conf          # tdx-init writes /persistent/conf/*; readers join this group
 
-# All binaries are in the conf group to read their config that tdx-init writes.
+# The conf group lets services read the config files tdx-init writes under
+# /run/seismic/conf. The custodian stays out of every shared group: its one
+# config input (custodian.env) is loaded by systemd as root via
+# EnvironmentFile=, so the key-holding process itself opens no conf file.
+# reth is in custodian-ipc so the image generation that ships the custodian's
+# --allow reth grant also lets a socket-consuming reth connect.
 mkosi-chroot useradd -r -s /bin/false -G conf tdx-init
-mkosi-chroot useradd -r -s /bin/false -G conf,custodian-ipc enclave
-mkosi-chroot useradd -r -s /bin/false -G conf,engine-api reth
+mkosi-chroot useradd -r -s /bin/false custodian
+mkosi-chroot useradd -r -s /bin/false -G conf,custodian-ipc attestation
+mkosi-chroot useradd -r -s /bin/false -G conf,engine-api,custodian-ipc reth
 mkosi-chroot useradd -r -s /bin/false -G conf,engine-api summit
 
 # Make scripts executable
@@ -27,7 +33,8 @@ for service in \
     tdx-init.service \
     nginx-ssl-setup.service \
     reth.service \
-    enclave.service \
+    custodian.service \
+    attestation.service \
     summit.service
 do
     mkosi-chroot systemctl enable "$service"

@@ -1,7 +1,7 @@
 [Unit]
 Description=Seismic Reth Node
-After=network.target persistent-luks-setup.service nginx-ssl-setup.service enclave.service
-Requires=persistent-luks-setup.service nginx-ssl-setup.service enclave.service
+After=network.target persistent-luks-setup.service nginx-ssl-setup.service attestation.service
+Requires=persistent-luks-setup.service nginx-ssl-setup.service attestation.service
 
 [Service]
 Type=simple
@@ -24,8 +24,8 @@ RuntimeDirectoryPreserve=restart
 #
 # tdx-init writes /run/seismic/conf/reth-genesis.json from the operator's
 # config POST, re-delivered on every boot (/run is tmpfs). The Requires=
-# chain above (enclave.service -> tdx-init.service) guarantees it exists
-# before this unit starts.
+# chain above (attestation.service -> tdx-init.service) guarantees
+# it exists before this unit starts.
 #
 # RPC (8545) + WS (8546) bind to loopback: nginx terminates TLS on 443 and
 # reverse-proxies /rpc + /ws to them, so they must not be reachable off-box.
