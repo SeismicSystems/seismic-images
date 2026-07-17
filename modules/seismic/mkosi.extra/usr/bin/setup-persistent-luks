@@ -5,13 +5,13 @@
 # Properties of this script:
 # - Idempotent: inspects on-disk state and does only what's needed.
 # - Prerequisites: The script waits unbounded for 2 things:
-#   1. the enclave-server keyfile (fetched from bootnode over the network)
+#   1. the custodian's keyfile (root key fetched from a bootnode over the network)
 #   2. data-disk attach
 # - Exiting: non-zero is reserved for genuinely fatal states; we don't rely on
 # systemd to restart this script for transient failures.
 #
 # Threat model: operator-untrusted, cloud-untrusted. The unlock key
-# (storage_key) is derived inside enclave-server from a network-fetched
+# (storage_key) is derived inside the key custodian from a network-fetched
 # root_key and handed to this script via a tmpfs file dropped before
 # /persistent mounts. No human or cloud operator ever knows the unlock
 # material.
@@ -54,22 +54,22 @@ MAPPER_NAME="persistent"
 MAPPER_DEVICE="/dev/mapper/${MAPPER_NAME}"
 MOUNT_POINT="/persistent"
 
-# First-boot LUKS-wipe progress file, served by enclave-server's
+# First-boot LUKS-wipe progress file, served by the attestation service's
 # getLuksProvisioningStatus RPC for the operator CLI's progress bar. We only
 # report the *provisioning* wipe — the long (1h+), otherwise-silent phase —
 # and remove the file when done so the endpoint reports "idle" afterwards. The
-# JSON schema must match enclave-server's `LuksProvisioningStatus` (enclave
-# crate, api.rs); the dir comes from tmpfiles.d/seismic-runtime.conf. Writing
+# JSON schema must match the attestation service's `LuksProvisioningStatus`
+# (enclave repo); the dir comes from tmpfiles.d/seismic-runtime.conf. Writing
 # status is strictly best-effort: a hiccup here must never wedge the disk setup.
 STATUS_FILE="/run/seismic/status/luks.json"
 
-# Drop-zone for the LUKS keys, written by enclave-server at startup:
-# 64 bytes total = storage_key (32B) || header_mac_key (32B).
-# TODO(samlaf): consider swapping polling for systemd Type=notify on enclave.service.
-# enclave-server would sd_notify(READY=1) after writing the keyfile, and
+# Drop-zone for the LUKS keys, written by the custodian as soon as it holds
+# the root key: 64 bytes total = storage_key (32B) || header_mac_key (32B).
+# TODO(samlaf): consider swapping polling for systemd Type=notify on custodian.service.
+# The custodian would sd_notify(READY=1) after writing the keyfile, and
 # this script could drop wait_for_keyfile entirely. Gives clean failure
-# propagation if enclave never readies.
-KEYFILE="/run/seismic/enclave/luks-keys"
+# propagation if the custodian never readies.
+KEYFILE="/run/seismic/custodian/luks-keys"
 
 # Detached LUKS header lives here after MAC verification. cryptsetup
 # uses this copy for the actual open, closing TOCTOU between verify
@@ -95,7 +95,7 @@ log() { echo "[setup-persistent-luks] $*" >&2; }
 # Reports only the first-boot provisioning wipe. All writers swallow their own
 # errors: progress telemetry must never be the reason a wipe/unlock fails. The
 # file is written atomically (tmp + rename) so the reader never sees a torn
-# JSON object. Schema is enclave-server's `LuksProvisioningStatus`:
+# JSON object. Schema is the attestation service's `LuksProvisioningStatus`:
 #   {"state":"provisioning","bytes_done":N,"bytes_total":M[,"eta_seconds":S]}
 #   {"state":"error","error":"..."}   (file removed on success → reader: idle)
 
@@ -107,7 +107,7 @@ write_status_json() {
     {
         local tmp="${STATUS_FILE}.tmp.$$"
         printf '%s\n' "$json" > "$tmp"
-        chmod 0644 "$tmp"          # world-readable: enclave-server reads it as a different user
+        chmod 0644 "$tmp"          # world-readable: the attestation service reads it as a different user
         mv -f "$tmp" "$STATUS_FILE"
     } 2>/dev/null || true
 }
@@ -148,15 +148,15 @@ split_progress_stream() {
     done
 }
 
-# Block until enclave-server drops the keyfile. The enclave-server
-# unit runs in parallel with this script (via systemd Requires=); the
-# keyfile is the synchronization point. enclave-server renames the file
-# into place, so existence implies fully written.
+# Block until the custodian drops the keyfile. The custodian unit runs in
+# parallel with this script (via systemd Requires=); the keyfile is the
+# synchronization point. The custodian renames the file into place, so
+# existence implies fully written.
 wait_for_keyfile() {
     local elapsed=0
     while [[ ! -f "$KEYFILE" ]]; do
         if (( elapsed % 30 == 0 )); then
-            log "waiting for enclave-server to drop keyfile $KEYFILE (${elapsed}s elapsed)"
+            log "waiting for the custodian to drop keyfile $KEYFILE (${elapsed}s elapsed)"
         fi
         sleep 1
         elapsed=$(( elapsed + 1 ))
