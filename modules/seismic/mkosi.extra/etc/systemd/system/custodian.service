@@ -23,11 +23,13 @@ EnvironmentFile=/run/seismic/conf/custodian.env
 # mkosi.postinst, so names and grants can't drift apart and the ACL is part
 # of the measured image.
 #
-# attestation's tx-io,rng,snapshot grants let the attestation service
-# serve reth's HTTP getPurposeKeys fetch; they retire once reth fetches its
-# keys from the custodian socket directly (the reth:tx-io,rng grant).
+# attestation's grants cover exactly the root-key bootstrap flow plus
+# public-only tx-io evidence minting (tx-io-public) — never a purpose that
+# exposes tx_io_sk to the network-facing process.
+# reth fetches its own keys from the socket (tx-io,rng). 
+# The snapshot purpose stays ungranted until snapshot-svc exists.
 ExecStart=/usr/bin/seismic-custodian-service \
-    --allow attestation:tx-io-public,create-root-key-bootstrap-attempt,wrap-root-key,install-root-key-from-verified-bootstrap-response,tx-io,rng,snapshot \
+    --allow attestation:tx-io-public,create-root-key-bootstrap-attempt,wrap-root-key,install-root-key-from-verified-bootstrap-response \
     --allow reth:tx-io,rng
 
 Restart=always

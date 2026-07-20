@@ -1,10 +1,13 @@
-# One pin builds seismic-attestation-service, seismic-custodian-service, and
-# tdx-init. We could consider using separate pins for each, but this is simpler
-# for now, plus they will likely need to be updated together in most cases
-# since they share libraries.
+# enclave and seismic_reth must move together: reth's CustodianClient and
+# the custodian binary share the custodian-ipc wire protocol.
+# TODO: we prob should add a CI check to ensure these pins stay in sync.
 enclave:
-  git_reference: 8e6b8db99fd3861de8a8bdbc3d9072c847db5201
+  # One pin builds seismic-attestation-service, seismic-custodian-service, and
+  # tdx-init. We could consider using separate pins for each, but this is simpler
+  # for now, plus they will likely need to be updated together in most cases
+  # since they share libraries.
+  git_reference: 8274f14cbbad76daadad3aaa1d6d0418b3eeffc0
 seismic_reth:
-  git_reference: 4bbc6502ea566171decc97adc0c39106967e5ad9
+  git_reference: ce2aa68bb232e999a1a9f2858d4c73714fdac2f3
 summit:
   git_reference: ed2c5c844e9ec40884ddc72fc16ece36b7d99a56
