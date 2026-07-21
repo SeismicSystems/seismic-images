@@ -34,7 +34,7 @@ RuntimeDirectoryPreserve=restart
 ExecStart=/usr/bin/seismic-reth node \
     --http.corsdomain "*" \
     --ws.origins "*" \
-    --enclave.custodian-socket /run/seismic/custodian/custodian.sock \
+    --seismic.custodian.socket /run/seismic/custodian/custodian.sock \
     --chain /run/seismic/conf/reth-genesis.json \
     --datadir /persistent/reth \
     --http \
