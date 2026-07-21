@@ -223,8 +223,9 @@ user `reth` (group `eth`). Execution client — HTTP RPC on `:8545`, WS on
 `:8546`, P2P on `:30303`, metrics on `:9001`. Fetches its purpose keys at
 startup and decrypts `TxSeismic` (type `0x74`) calldata in-process.
 
-Gated on `attestation.service` being up, since it'll immediately
-fetch its key material over HTTP `getPurposeKeys` at startup.
+Gated on `attestation.service` (and through it `custodian.service`),
+since it fetches its purpose keys from the custodian's Unix socket
+at startup.
 
 ### `summit.service`
 
