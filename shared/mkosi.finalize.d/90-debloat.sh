@@ -44,6 +44,10 @@ debloat_paths=(
     "/var/lib/ucf"
     "/etc/credstore"
     "/nix"
+    # Rosetta's JIT drops cache files here when building on Apple Silicon
+    # (lima + Rosetta), silently breaking local-vs-CI reproducibility.
+    # Cherry-picked from upstream: flashbots/flashbots-images#175.
+    "/.cache"
 )
 
 if [[ ! "${PROFILES:-}" == *"devtools"* ]]; then
