@@ -65,6 +65,13 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
+      # The runner pool mixes CPU types; host-sniffing build scripts (see
+      # issue #46) can make image content depend on the machine. Record the
+      # CPU (model + "Address sizes: .. bits virtual") so a reproducibility
+      # failure can be correlated with hardware.
+      - name: Show runner CPU
+        run: lscpu
+
       - name: Install tools
         run: |
           sudo apt-get update
@@ -137,14 +144,28 @@ jobs:
       - name: Generate EFI checksum
         run: sha256sum build/seismic_*.efi | tee build/checksum.sha256
 
-      - name: Upload checksum for reproducibility comparison
+      # Per-file hashes let reprotest-compare name the exact divergent files
+      # on a mismatch, instead of only reporting that the whole UKI differs.
+      - name: Hash initrd contents
+        run: |
+          initrd=$(compgen -G 'build/seismic_*.initrd' | head -n1)
+          mkdir "$RUNNER_TEMP/initrd-root"
+          zstd -dc "$initrd" | cpio -idm --quiet --no-absolute-filenames \
+            --no-preserve-owner -D "$RUNNER_TEMP/initrd-root"
+          (cd "$RUNNER_TEMP/initrd-root" \
+            && find . -type f -print0 | sort -z | xargs -0 sha256sum) \
+            > build/initrd-files.sha256
+
+      - name: Upload checksums for reproducibility comparison
         if: >-
           github.event_name == 'pull_request' ||
           (github.event_name == 'workflow_dispatch' && inputs.reprotest)
         uses: actions/upload-artifact@v4
         with:
           name: checksum-seismic-build-1
-          path: build/checksum.sha256
+          path: |
+            build/checksum.sha256
+            build/initrd-files.sha256
           retention-days: 1
 
   reprotest-build:
@@ -157,10 +178,14 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
+      # See the note on the build job's identical step.
+      - name: Show runner CPU
+        run: lscpu
+
       - name: Install tools
         run: |
           sudo apt-get update
-          sudo apt-get install -y debian-archive-keyring
+          sudo apt-get install -y cpio debian-archive-keyring zstd
 
       - name: Install Nix
         uses: cachix/install-nix-action@v27
@@ -180,11 +205,24 @@ jobs:
       - name: Generate EFI checksum
         run: sha256sum build/seismic_*.efi | tee build/checksum.sha256
 
-      - name: Upload checksum
+      # See the note on the build job's identical step.
+      - name: Hash initrd contents
+        run: |
+          initrd=$(compgen -G 'build/seismic_*.initrd' | head -n1)
+          mkdir "$RUNNER_TEMP/initrd-root"
+          zstd -dc "$initrd" | cpio -idm --quiet --no-absolute-filenames \
+            --no-preserve-owner -D "$RUNNER_TEMP/initrd-root"
+          (cd "$RUNNER_TEMP/initrd-root" \
+            && find . -type f -print0 | sort -z | xargs -0 sha256sum) \
+            > build/initrd-files.sha256
+
+      - name: Upload checksums
         uses: actions/upload-artifact@v4
         with:
           name: checksum-seismic-build-2
-          path: build/checksum.sha256
+          path: |
+            build/checksum.sha256
+            build/initrd-files.sha256
           retention-days: 1
 
   reprotest-compare:
@@ -213,6 +251,12 @@ jobs:
 
           if [ "$hash1" != "$hash2" ]; then
             echo "Seismic UKIs are not reproducible" >&2
+            echo "Divergent initrd files (< build 1, > build 2):"
+            if diff checksums/checksum-seismic-build-1/initrd-files.sha256 \
+                    checksums/checksum-seismic-build-2/initrd-files.sha256; then
+              echo "initrd contents are identical: the divergence is in the" \
+                   "kernel, cmdline, or UKI wrapping"
+            fi
             exit 1
           fi
           echo "Seismic UKIs are bit-for-bit reproducible"
