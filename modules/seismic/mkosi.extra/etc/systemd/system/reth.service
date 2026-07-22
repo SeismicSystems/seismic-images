@@ -19,18 +19,37 @@ RuntimeDirectoryMode=0750
 # Keeps the dir across reth restarts so summit doesn't see it disappear briefly.
 RuntimeDirectoryPreserve=restart
 
-# /persistent/reth is created by /etc/seismic/tmpfiles-persistent.conf via
-# persistent-luks-setup's ExecStartPost.
-#
-# tdx-init writes /run/seismic/conf/reth-genesis.json from the operator's
-# config POST, re-delivered on every boot (/run is tmpfs). The Requires=
-# chain above (attestation.service -> tdx-init.service) guarantees
-# it exists before this unit starts.
-#
-# RPC (8545) + WS (8546) bind to loopback: nginx terminates TLS on 443 and
-# reverse-proxies /rpc + /ws to them, so they must not be reachable off-box.
-# --http.api all would otherwise expose admin/debug/txpool in the clear; make
-# sure the NSG doesn't open these ports publicly either (defense in depth).
+# Argument partition: flags fixed for this image are hardcoded below -- even
+# ones pointing at a fixed path whose *contents* tdx-init fills from the
+# operator's config POST (--chain reth-genesis.json is a constant path). Flags
+# whose very presence or value is conditional on that POST (bootnodes, NAT
+# extip) can't be hardcoded, so tdx-init emits them as flag fragments in
+# reth-p2p.env, spliced in via $RETH_*_FLAG.
+
+# reth-p2p.env: tdx-init writes RETH_BOOTNODES_FLAG (--bootnodes <csv>; empty
+# on the genesis node) and RETH_NAT_FLAG (--nat extip:<ip>; always set --
+# external_ip is a required config field) each boot. Required
+# (no `-`): the Requires= chain (attestation -> tdx-init) guarantees it exists,
+# so a missing file is a real boot failure, not something to tolerate.
+EnvironmentFile=/run/seismic/conf/reth-p2p.env
+
+# --chain reth-genesis.json: tdx-init writes it each boot (/run is tmpfs); the
+#   Requires= chain (attestation -> tdx-init) guarantees it exists first.
+# --datadir /persistent/reth: created by tmpfiles-persistent.conf via
+#   persistent-luks-setup's ExecStartPost.
+# --http.api/--ws.api eth,net,web3 (not `all`): nginx proxies /rpc+/ws wholesale,
+#   so this allowlist is what keeps admin/debug/txpool off the public surface. The
+#   seismic namespace and eth_ overrides register regardless;
+# --ipcdisable: reth's general IPC-RPC server is on by default at /tmp/reth.ipc
+#   and exposes ALL namespaces (admin/debug/txpool); disable it so the allowlist
+#   above can't be bypassed over that local socket. --auth-ipc is a separate
+#   server (engine API) and stays enabled for summit;
+# --http.corsdomain/--ws.origins "*": deliberate — /rpc+/ws are browser-facing;
+#   the boundary is the namespace allowlist, not CORS.
+# devp2p: discv5-only (discv4+DNS off) on 30303, the only port the NSG opens.
+#   --discovery.v5.port 30303 is load-bearing (reth defaults discv5 to 9200). No
+#   --p2p-secret-key: reth persists node identity under --datadir.
+# $RETH_*_FLAG unquoted so systemd word-splits: empty vars drop out entirely.
 ExecStart=/usr/bin/seismic-reth node \
     --http.corsdomain "*" \
     --ws.origins "*" \
@@ -40,16 +59,23 @@ ExecStart=/usr/bin/seismic-reth node \
     --http \
     --http.addr 127.0.0.1 \
     --http.port 8545 \
-    --http.api all \
+    --http.api eth,net,web3 \
     --ws \
     --ws.addr 127.0.0.1 \
     --ws.port 8546 \
-    --ws.api all \
+    --ws.api eth,net,web3 \
+    --ipcdisable \
     --auth-ipc \
     --auth-ipc.path /run/reth-engine/api.ipc \
+    --port 30303 \
+    --disable-discv4-discovery \
+    --disable-dns-discovery \
+    --enable-discv5-discovery \
+    --discovery.v5.port 30303 \
     --log.stdout.format json \
     --log.file.max-files 0 \
-    --metrics 127.0.0.1:9001
+    --metrics 127.0.0.1:9001 \
+    $RETH_BOOTNODES_FLAG $RETH_NAT_FLAG
 
 Restart=on-failure
 RestartSec=10
