@@ -37,10 +37,24 @@ mkosi-chroot rustup default "$RUST_VERSION"
 #     against state at a different path.
 export MAKE_GIT_PACKAGE_CACHE_KEY_EXTRA="rust-${RUST_VERSION}|cargo-home-${CARGO_HOME}|rustup-home-${RUSTUP_HOME}"
 
+# Host-independence: `-C target-cpu=generic` in RUSTFLAGS below is load-bearing
+# beyond rustc codegen. blst's build.rs (dep of reth and summit) sniffs the BUILD
+# machine's CPU for ADX (is_x86_feature_detected!) and compiles different assembly
+# accordingly -- it only skips that when target-cpu= is present in RUSTFLAGS.
+# Removing the flag makes the binaries depend on which CI runner built them.
+#
+# rustc flags can't reach C-library configure scripts, though: jemalloc (via
+# tikv-jemalloc-sys, reth's allocator) probes the build host's virtual-address
+# width (48 vs 57-bit/LA57, varies across the runner pool) and bakes it into
+# LG_VADDR, yielding two possible seismic-reth binaries. Pin 48: Linux never
+# returns mappings above 48-bit VA unless explicitly hinted (reth doesn't), and
+# 48 is jemalloc's compact-rtree fast path. See issue #46.
+
 # Build seismic-reth
 RETH_BUILD_CMD="
     git checkout $RETH_COMMIT
     export RUSTFLAGS='-C target-cpu=generic -C link-arg=-Wl,--build-id=none -C symbol-mangling-version=v0'
+    export JEMALLOC_SYS_WITH_LG_VADDR=48
     export CARGO_PROFILE_RELEASE_LTO='thin'
     export CARGO_PROFILE_RELEASE_CODEGEN_UNITS='1'
     export CARGO_PROFILE_RELEASE_PANIC='abort'
