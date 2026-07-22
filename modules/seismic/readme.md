@@ -220,7 +220,8 @@ disk snapshots — worth adding a lock before production use.
 
 Runs [`seismic-reth`](https://github.com/SeismicSystems/seismic-reth) as
 user `reth` (group `eth`). Execution client — HTTP RPC on `:8545`, WS on
-`:8546`, P2P on `:30303`, metrics on `:9001`. Fetches its purpose keys at
+`:8546`, devp2p on `:30303` (TCP+UDP; discv5-only discovery, discv4 and DNS
+discovery disabled), metrics on `:9001`. Fetches its purpose keys at
 startup and decrypts `TxSeismic` (type `0x74`) calldata in-process.
 
 Gated on `attestation.service` (and through it `custodian.service`),
