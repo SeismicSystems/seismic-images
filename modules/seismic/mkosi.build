@@ -72,9 +72,10 @@ make_git_package \
     "target/release/seismic-reth:/usr/bin/seismic-reth"
 
 # Build the network-facing enclave binaries in one cargo invocation:
-# seismic-attestation-service + tdx-init. One pin covers the whole enclave
-# repo — see the coupling note in sources.yaml. The custodian deliberately
-# does NOT ride this line; see its own invocation below.
+# seismic-attestation-service + tdx-init + summit-key-holder. One pin covers
+# the whole enclave repo — see the coupling note in sources.yaml. The
+# custodian deliberately does NOT ride this line; see its own invocation
+# below.
 ENCLAVE_BUILD_CMD="
     git checkout $ENCLAVE_COMMIT
     export RUSTFLAGS='-C target-cpu=generic -C link-arg=-Wl,--build-id=none -C symbol-mangling-version=v0'
@@ -85,7 +86,7 @@ ENCLAVE_BUILD_CMD="
     export CARGO_PROFILE_RELEASE_OPT_LEVEL='z'
 
     cargo fetch
-    cargo build --release --frozen --bin seismic-attestation-service --bin tdx-init
+    cargo build --release --frozen --bin seismic-attestation-service --bin tdx-init --bin summit-key-holder
 "
 make_git_package \
     "enclave" \
@@ -93,7 +94,8 @@ make_git_package \
     "https://github.com/SeismicSystems/enclave" \
     "$ENCLAVE_BUILD_CMD" \
     "target/release/seismic-attestation-service:/usr/bin/seismic-attestation-service" \
-    "target/release/tdx-init:/usr/bin/tdx-init"
+    "target/release/tdx-init:/usr/bin/tdx-init" \
+    "target/release/summit-key-holder:/usr/bin/summit-key-holder"
 
 # Build the key custodian in its OWN cargo invocation, never appended to the
 # batched enclave line above. A multi-`--bin` invocation unifies cargo

@@ -2,11 +2,11 @@
 # the custodian binary share the custodian-ipc wire protocol.
 # TODO: we prob should add a CI check to ensure these pins stay in sync.
 enclave:
-  # One pin builds seismic-attestation-service, seismic-custodian-service, and
-  # tdx-init. We could consider using separate pins for each, but this is simpler
-  # for now, plus they will likely need to be updated together in most cases
-  # since they share libraries.
-  git_reference: c9e95435f73880c7a056679935c5ea4235bb0d5c
+  # One pin builds seismic-attestation-service, seismic-custodian-service,
+  # tdx-init, and summit-key-holder. We could consider using separate pins for
+  # each, but this is simpler for now, plus they will likely need to be updated
+  # together in most cases since they share libraries.
+  git_reference: e5e2a66d37d211a2689afa9cb9aa5352f991e6c6
 seismic_reth:
   git_reference: e4b3d5a323a09cab5140dc53e653fe213079b0ce
 summit:

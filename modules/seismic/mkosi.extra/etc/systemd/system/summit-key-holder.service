@@ -1,0 +1,40 @@
+[Unit]
+Description=Summit Key Holder (pre-manifest custody of summit consensus keys)
+# Starts as early as networking allows — parallel to tdx-init's
+# wait-for-config, before any operator POST — and depends on nothing
+# tdx-init produces. network-online is for the IMDS round-trip in the
+# quote path only.
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=summit
+
+# Private runtime dir for the persist control socket. Deliberately not in
+# tmpfiles.d/seismic-runtime.conf: that file declares cross-user access
+# grants, and this dir carries none — both socket ends (the holder here,
+# and persist-wait from summit.service's ExecStartPre) run as the summit
+# user.
+RuntimeDirectory=summit-key-holder
+RuntimeDirectoryMode=0700
+
+Environment=RUST_BACKTRACE=full
+Environment=RUST_LOG=info
+
+# Quote serving stops once tdx-init drops the network manifest, but the
+# conf dir is tmpfs so the window re-opens on every boot — :7879 must be
+# reachable only from the operator CIDR (node NSG), permanently.
+ExecStart=/usr/bin/summit-key-holder serve \
+    --listen 0.0.0.0:7879 \
+    --keystore-dir /persistent/summit/keys \
+    --control-socket /run/summit-key-holder/control.sock \
+    --network-manifest /run/seismic/conf/network-manifest.json
+
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=minimal.target
