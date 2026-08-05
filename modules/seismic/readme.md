@@ -10,7 +10,7 @@ Top-level files at a glance:
 | File                                   | Role                                                                                            |
 | -------------------------------------- | ----------------------------------------------------------------------------------------------- |
 | [`mkosi.conf`](mkosi.conf)             | Debian packages (`nginx`, `certbot`, `cryptsetup`, …) + build packages                          |
-| [`mkosi.build`](mkosi.build)           | Source-builds: pinned commits of `tdx-init`, `seismic-reth`, `seismic-attestation-service`, `seismic-custodian-service`, `summit` |
+| [`mkosi.build`](mkosi.build)           | Source-builds: pinned commits of `tdx-init`, `seismic-reth`, `seismic-attestation-service`, `seismic-custodian-service`, `summit-key-holder`, `summit` |
 | [`sources.yaml`](sources.yaml)         | Pinned git refs read by `mkosi.build` (structured manifest, Renovate/Dependabot-friendly)       |
 | [`mkosi.postinst`](mkosi.postinst)     | Creates users/groups, enables systemd services                                                  |
 | [`kernel/config.d/`](kernel/config.d/) | Seismic-specific kernel config snippets                                                         |
@@ -26,8 +26,8 @@ build-inputs only. The image rootfs is the union of four channels:
 | ----------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | [`mkosi.extra/`](mkosi.extra/)            | Copied wholesale at matching paths — see tree below.                                                                                                                                          |
 | `Packages=` in [`mkosi.conf`](mkosi.conf) | apt-installed Debian packages: `nginx`, `certbot`, `python3-certbot-nginx`, `cryptsetup`, `jq`, `libtss2-*`, `lz4`                                                                                |
-| [`mkosi.build`](mkosi.build)              | Compiled binaries written to `$DESTDIR`: `tdx-init`, `seismic-reth`, `seismic-attestation-service`, `seismic-custodian-service`, `summit` → `/usr/bin/`              |
-| [`mkosi.postinst`](mkosi.postinst)        | Image-fs mutations: system users + `engine-api`/`custodian-ipc`/`conf` groups in `/etc/{passwd,group}`, services symlinked into `/etc/systemd/system/minimal.target.wants/`, `setup-*` helper scripts made executable |
+| [`mkosi.build`](mkosi.build)              | Compiled binaries written to `$DESTDIR`: `tdx-init`, `seismic-reth`, `seismic-attestation-service`, `seismic-custodian-service`, `summit-key-holder`, `summit` → `/usr/bin/`              |
+| [`mkosi.postinst`](mkosi.postinst)        | Image-fs mutations: system users + `engine-api`/`custodian-ipc`/`conf`/`tpm` groups in `/etc/{passwd,group}`, services symlinked into `/etc/systemd/system/minimal.target.wants/`, `setup-*` helper scripts made executable |
 
 `mkosi.extra/` lays out exactly what its name suggests — the same paths
 relative to the image root:
@@ -60,6 +60,11 @@ enabled (added to `minimal.target.wants`) via the loop in
 **Boot chain (services ordered by when they're needed):**
 
 ```
+  summit-key-holder.service   (parallel to the whole chain, from network-online:
+                               summit keys in RAM, {pubkeys, quote} on :7879 for
+                               the founding harvest; summit.service's
+                               persist-wait ExecStartPre blocks on its persist op)
+
   tdx-init.service       (waits for operator config POST → /run/seismic/conf/)
           │
           ▼
@@ -103,11 +108,14 @@ perms are set the moment the kernel publishes the device, before any
 service starts. No ordering constraints; no `Requires=`/`After=`
 against any TPM-setup unit anywhere.
 
-`attestation.service` gains TPM access via the `attestation`
-group ownership on `/dev/tpmrm0` (set by the udev rule). The custodian,
-`reth`, and `summit` don't talk to the TPM. The TPM2 user-space libraries
-the attestation service links against (`libtss2-esys-…`,
-`libtss2-tctildr0t64`) come from `mkosi.conf` Packages.
+The udev rule sets the dedicated `tpm` group on the device nodes; the
+in-VM TPM consumers' users join it as a supplementary group in
+`mkosi.postinst`: `attestation` (quote minting/verification in
+`attestation.service`) and `summit` (the founding-harvest quote in
+`summit-key-holder.service`). The custodian and `reth` don't talk to
+the TPM. The TPM2 user-space libraries the quote path links against
+(`libtss2-esys-…`, `libtss2-tctildr0t64`) come from `mkosi.conf`
+Packages.
 
 ### `tdx-init.service`
 
@@ -120,8 +128,11 @@ tdx-init translates the payload into per-service config files under
 `custodian.env` (consumed by `custodian.service` via `EnvironmentFile=`),
 `attestation.env` (likewise by `attestation.service`),
 `network-manifest.json` (hashed by the attestation service into
-`network_id`), and `reth-genesis.json` (the chain spec `reth.service`
-passes to `--chain`).
+`network_id`; its appearance also closes `summit-key-holder.service`'s
+quote window for the boot), `reth-genesis.json` (the chain spec
+`reth.service` passes to `--chain`), and `summit-genesis.toml` (the
+summit genesis `summit.service` passes to `--genesis-path`, decoded
+verbatim from the POST's `summit_genesis_base64`).
 The drop-zone is tmpfs (declared in
 [`tmpfiles.d/seismic-runtime.conf`](mkosi.extra/etc/tmpfiles.d/seismic-runtime.conf)),
 so the sentinel `tdx-init-done` is wiped each boot and deploy tooling
@@ -138,8 +149,33 @@ reads `SEISMIC_CUSTODIAN_GENESIS_NODE` from `custodian.env` and
 `attestation.env`; the attestation service fails fast at startup if the
 custodian holds no root key and no peers are set (no in-binary fallback —
 operator config is the only source of peer IPs). reth reads its chain spec from
-`/run/seismic/conf/reth-genesis.json`; summit takes its args statically
-from the systemd unit file.
+`/run/seismic/conf/reth-genesis.json`; summit reads its genesis from
+`/run/seismic/conf/summit-genesis.toml`.
+
+### `summit-key-holder.service`
+
+Runs [`summit-key-holder`](https://github.com/SeismicSystems/enclave/tree/seismic/bin/summit-key-holder)
+`serve` as user `summit`. Generates this node's summit keys (ed25519
+node + BLS consensus) in RAM at boot and serves `{pubkeys, quote}` over
+plain HTTP on `:7879`, so deploy's founding harvest can pin the keys
+into the network manifest before the node has any identity. Starts at
+`network-online.target`, parallel to `tdx-init.service` — before any
+operator POST (network is only for the IMDS round-trip in the quote
+path). Quote serving returns `410 Gone` once tdx-init drops the network
+manifest; the conf dir is tmpfs, so that window re-opens every boot —
+`:7879` must stay operator-CIDR-only in the NSG permanently. Pubkey
+serving continues for life (from the keystore once it exists) and feeds
+the launch-time pubkey-continuity assertion.
+
+The persist control socket at `/run/summit-key-holder/control.sock`
+(a `RuntimeDirectory=` of the unit — a service-private dir, not one of
+the cross-user grants in `tmpfiles.d/seismic-runtime.conf`, since both
+ends run as the `summit` user) carries the single `persist` op:
+`summit.service`'s
+`ExecStartPre=summit-key-holder persist-wait` blocks on it, after which
+the keystore under `/persistent/summit/keys` is written (first boot) or
+confirmed (reboot) and the RAM keys are discarded. TPM access for quote
+minting comes via the `tpm` group, shared with the attestation service.
 
 ### `custodian.service`
 
@@ -167,9 +203,9 @@ network-facing half of the process split: it verifies and mints
 attestation evidence and answers peer bootstrap, but holds no key
 material — every key operation goes through the custodian socket. On a
 joining node it fetches the wrapped `root_key` from the configured peers
-and installs it into the local custodian. Access to `/dev/tpmrm0` for
-attestation-quote generation comes via the udev rule that sets
-`attestation` group ownership on the device node.
+and installs it into the local custodian. Access to `/dev/tpm0` for
+attestation-quote generation comes via the udev rule that sets `tpm`
+group ownership on the device node (the `attestation` user is a member).
 
 `RestartSec=60` is unusually long — TDX quote generation can be slow on
 restart; tight loops would hammer the TPM.
@@ -232,10 +268,16 @@ at startup.
 
 Runs [`summit`](https://github.com/SeismicSystems/summit) as user
 `summit` (group `eth`). Consensus client — REST API on `:3030` (reached
-via nginx `/summit`), P2P on `:18551`, metrics on `:9002`.
+via nginx `/summit`), P2P on `:18551`, metrics on `:9002`. Reads its
+genesis from `/run/seismic/conf/summit-genesis.toml` (written by
+tdx-init each boot) and its keys from `/persistent/summit/keys`,
+provisioned solely by `summit-key-holder.service` — the
+`persist-wait` `ExecStartPre` blocks until the holder has written or
+confirmed the keystore, so summit never starts on keys the network
+manifest never pinned.
 
 Gated on both `attestation.service` and `reth.service`
-(EL ↔ CL via Engine API).
+(EL ↔ CL via Engine API), plus `summit-key-holder.service`.
 
 Doc gap
 ---
