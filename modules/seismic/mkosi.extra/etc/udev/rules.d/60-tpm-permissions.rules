@@ -1,12 +1,13 @@
-# The attestation service is the only in-VM TPM consumer (it mints and
-# verifies quotes; the key custodian does no attestation), hence we grant
-# the `attestation` group (not the Debian-conventional `tss` group)
-# access to the TPM.
+# The in-VM TPM consumers are:
+# - the attestation service (mints and verifies quotes)
+# - summit-key-holder (mints the founding-harvest quote over its RAM summit keys)
+# Access goes through the dedicated `tpm` group (not the Debian-conventional `tss`),
+# which attestation and summit join as a supplementary group in mkosi.postinst.
 #
-# The attestation path reads the Azure vTPM through the `az-cvm-vtpm` crate
+# The quote path reads the Azure vTPM through the `az-cvm-vtpm` crate
 # (tss-esapi), which opens the RAW device `/dev/tpm0` directly rather than the
 # kernel resource manager (/dev/tpmrm0). We still keep tpmrm0 too as a zero-cost
 # hedge — raw-device access already dominates it — in case tss-esapi picks the
 # RM on a future version bump.
-KERNEL=="tpm[0-9]*",   GROUP="attestation", MODE="0660"
-KERNEL=="tpmrm[0-9]*", GROUP="attestation", MODE="0660"
+KERNEL=="tpm[0-9]*",   GROUP="tpm", MODE="0660"
+KERNEL=="tpmrm[0-9]*", GROUP="tpm", MODE="0660"

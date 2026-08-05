@@ -9,6 +9,7 @@ set -euxo pipefail
 mkosi-chroot groupadd -r engine-api    # reth ↔ summit engine-API IPC socket at /run/reth-engine/api.ipc
 mkosi-chroot groupadd -r custodian-ipc # local clients authorized to reach the key-custodian socket
 mkosi-chroot groupadd -r conf          # tdx-init writes /persistent/conf/*; readers join this group
+mkosi-chroot groupadd -r tpm           # /dev/tpm* access for quote minting (60-tpm-permissions.rules)
 
 # The conf group lets services read the config files tdx-init writes under
 # /run/seismic/conf. The custodian stays out of every shared group: its one
@@ -16,11 +17,13 @@ mkosi-chroot groupadd -r conf          # tdx-init writes /persistent/conf/*; rea
 # EnvironmentFile=, so the key-holding process itself opens no conf file.
 # reth is in custodian-ipc so the image generation that ships the custodian's
 # --allow reth grant also lets a socket-consuming reth connect.
+# tpm membership lists the in-VM TPM consumers: attestation for its quote
+# RPCs, summit for summit-key-holder's founding-harvest quote.
 mkosi-chroot useradd -r -s /bin/false -G conf tdx-init
 mkosi-chroot useradd -r -s /bin/false custodian
-mkosi-chroot useradd -r -s /bin/false -G conf,custodian-ipc attestation
+mkosi-chroot useradd -r -s /bin/false -G conf,custodian-ipc,tpm attestation
 mkosi-chroot useradd -r -s /bin/false -G conf,engine-api,custodian-ipc reth
-mkosi-chroot useradd -r -s /bin/false -G conf,engine-api summit
+mkosi-chroot useradd -r -s /bin/false -G conf,engine-api,tpm summit
 
 # Make scripts executable
 chmod +x "$BUILDROOT/usr/bin/setup-nginx-ssl"
@@ -31,6 +34,7 @@ mkdir -p "$BUILDROOT/etc/systemd/system/minimal.target.wants"
 for service in \
     persistent-luks-setup.service \
     tdx-init.service \
+    summit-key-holder.service \
     nginx-ssl-setup.service \
     reth.service \
     custodian.service \
