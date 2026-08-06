@@ -94,9 +94,15 @@ push-azure-releases: ## Upload latest .vhd to releases/ (long-term)
 
 ##@ Utilities
 
+# The stamped measurement_id is the versioned VHD filename the PCRs
+# measure, so anything consuming the measurements reads which image they
+# bind to from the file itself instead of being told out-of-band.
 measure: ## Export TDX measurements for the built EFI file
 	@$(WRAPPER) measured-boot $(FILE) build/measurements.json --direct-uki
-	echo "Measurements exported to build/measurements.json"
+	@MEASUREMENT_ID="$$(basename "$$(realpath $(FILE))" .efi).vhd"; \
+	$(WRAPPER) jq --arg id "$$MEASUREMENT_ID" '. + {measurement_id: $$id}' build/measurements.json > build/measurements.json.tmp && \
+	mv build/measurements.json.tmp build/measurements.json; \
+	echo "Measurements exported to build/measurements.json (measurement_id: $$MEASUREMENT_ID)"
 
 measure-gcp: ## Export TDX measurements for GCP
 	@$(WRAPPER) dstack-mr -uki $(FILE) > build/gcp_measurements.json
