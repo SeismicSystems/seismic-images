@@ -35,6 +35,8 @@ make measure-gcp   # GCP-style measurements   -> build/gcp_measurements.json
 
 The two formats differ because Azure and GCP expose TDX quotes through different mechanisms — Azure via `tpm2-tools` + the Microsoft attestation service, GCP via the [`dstack`](https://github.com/Dstack-TEE/dstack) toolchain. The deploy tooling (and the Seismic enclave's attestation path) consume these files to verify that deployed nodes match a known-good image.
 
+`make measure` also stamps a `measurement_id` into the file: the versioned artifact filename (`seismic_{VERSION}.vhd`) these PCRs measure — the same name `make push-azure` uploads as the blob. Consumers of the measurements read which image they bind to from the file itself, with no out-of-band identifier to pass around (or get wrong).
+
 ## What's in the image
 
 | Component                | Purpose                                                           | Source                                                                                                                       |
