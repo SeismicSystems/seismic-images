@@ -100,8 +100,7 @@ push-azure-releases: ## Upload latest .vhd to releases/ (long-term)
 measure: ## Export TDX measurements for the built EFI file
 	@$(WRAPPER) measured-boot $(FILE) build/measurements.json --direct-uki
 	@MEASUREMENT_ID="$$(basename "$$(realpath $(FILE))" .efi).vhd"; \
-	$(WRAPPER) jq --arg id "$$MEASUREMENT_ID" '. + {measurement_id: $$id}' build/measurements.json > build/measurements.json.tmp && \
-	mv build/measurements.json.tmp build/measurements.json; \
+	$(WRAPPER) bash -c "STAMPED=\$$(jq --arg id '$$MEASUREMENT_ID' '. + {measurement_id: \$$id}' build/measurements.json) && printf '%s\\n' \"\$$STAMPED\" > build/measurements.json" && \
 	echo "Measurements exported to build/measurements.json (measurement_id: $$MEASUREMENT_ID)"
 
 measure-gcp: ## Export TDX measurements for GCP
