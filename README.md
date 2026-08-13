@@ -78,6 +78,7 @@ You can track [diff with upstream](https://github.com/SeismicSystems/seismic-ima
 ## Where to look next
 
 - [**DEVELOPMENT.md**](DEVELOPMENT.md) — generic mkosi module/kernel-config/reproducibility guidance (from upstream)
+- [`docs/azure-measurements.md`](docs/azure-measurements.md) — what a node's boot measures on Azure TDX: the register inventory, what each PCR covers, and the `(pcr4, pcr9, pcr11)` guest identity admission uses
 - [`modules/seismic/mkosi.conf`](modules/seismic/mkosi.conf) — Debian packages in the image
 - [`modules/seismic/mkosi.build`](modules/seismic/mkosi.build) — pinned commits for `reth` / `enclave` / `summit` / `tdx-init`
 - [`modules/seismic/mkosi.postinst`](modules/seismic/mkosi.postinst) — systemd services enabled on boot
