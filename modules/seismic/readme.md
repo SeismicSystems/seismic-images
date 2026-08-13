@@ -16,6 +16,10 @@ Top-level files at a glance:
 | [`kernel/config.d/`](kernel/config.d/) | Seismic-specific kernel config snippets                                                         |
 | [`mkosi.extra/`](mkosi.extra/)         | Filesystem overlay — systemd units, nginx config, helper scripts                                |
 
+What the resulting boot measures into the vTPM on Azure — the register
+inventory, and the `(pcr4, pcr9, pcr11)` guest identity admission binds — is
+in [`docs/azure-measurements.md`](../../docs/azure-measurements.md).
+
 What ends up in the image
 ---
 
@@ -47,7 +51,8 @@ mkosi.extra/
 
 Module-root files that are **not** in the image: `mkosi.conf`,
 `mkosi.build`, `mkosi.postinst`, `sources.yaml`, `kernel/config.d/`.
-They're read at build time and never copied to `$DESTDIR`.
+They're read at build time and never copied to `$DESTDIR`. This readme is
+documentation only — neither read at build time nor shipped.
 
 Services
 ---
