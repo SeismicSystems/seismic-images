@@ -19,7 +19,7 @@ SUMMIT_COMMIT=$(mkosi-chroot yq -r '.summit.git_reference' < "$SOURCES_YAML")
 export CARGO_HOME="/cargo"
 export RUSTUP_HOME="/rustup"
 export PATH="$CARGO_HOME/bin:$PATH"
-RUST_VERSION="1.91.1"
+RUST_VERSION="1.95.0"
 mkosi-chroot rustup toolchain install "$RUST_VERSION" --profile minimal
 mkosi-chroot rustup default "$RUST_VERSION"
 
