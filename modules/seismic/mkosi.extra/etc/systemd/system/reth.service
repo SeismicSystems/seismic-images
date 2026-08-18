@@ -47,6 +47,12 @@ EnvironmentFile=/run/seismic/conf/reth-p2p.env
 # devp2p: discv5-only (discv4+DNS off) on 30303, the only port the NSG opens.
 #   --discovery.v5.port 30303 is load-bearing (reth defaults discv5 to 9200). No
 #   --p2p-secret-key: reth persists node identity under --datadir.
+# --tx-propagation-mode all: every peer gets full transaction bodies. Under
+#   reth's sqrt default only sqrt(peers) get bodies while the rest get hash
+#   announcements they have to request, a round-trip that adds latency and can
+#   be dropped. The Seismic validator set is small, so broadcasting everything 
+#   to everyone keeps txs off that path at a bandwidth cost that stays negligible 
+#   at this scale.
 # $RETH_*_FLAG unquoted so systemd word-splits: empty vars drop out entirely.
 #   $RETH_BOOTNODES_FLAG (--bootnodes): seeds discv5 with the founding cohort;
 #   one live bootnode is enough for the DHT to flood the rest. Bootstrap is
@@ -82,6 +88,7 @@ ExecStart=/usr/bin/seismic-reth node \
     --disable-dns-discovery \
     --enable-discv5-discovery \
     --discovery.v5.port 30303 \
+    --tx-propagation-mode all \
     --log.stdout.format json \
     --log.file.max-files 0 \
     --metrics 127.0.0.1:9001 \
