@@ -22,15 +22,13 @@ RuntimeDirectoryPreserve=restart
 # Argument partition: flags fixed for this image are hardcoded below -- even
 # ones pointing at a fixed path whose *contents* tdx-init fills from the
 # operator's config POST (--chain reth-genesis.json is a constant path). Flags
-# whose very presence or value is conditional on that POST (bootnodes, NAT
-# extip) can't be hardcoded, so tdx-init emits them as flag fragments in
-# reth-p2p.env, spliced in via $RETH_*_FLAG.
+# whose very presence or value is conditional on that POST (bootnodes, trusted
+# peers, NAT extip) can't be hardcoded, so tdx-init emits them as flag
+# fragments in reth-p2p.env, spliced in via $RETH_*_FLAG.
 
-# reth-p2p.env: tdx-init writes RETH_BOOTNODES_FLAG (--bootnodes <csv>; empty
-# on the genesis node) and RETH_NAT_FLAG (--nat extip:<ip>; always set --
-# external_ip is a required config field) each boot. Required
-# (no `-`): the Requires= chain (attestation -> tdx-init) guarantees it exists,
-# so a missing file is a real boot failure, not something to tolerate.
+# Required (no `-`): the Requires= chain (attestation -> tdx-init) guarantees
+# reth-p2p.env exists, so a missing file is a real boot failure, not something
+# to tolerate.
 EnvironmentFile=/run/seismic/conf/reth-p2p.env
 
 # --chain reth-genesis.json: tdx-init writes it each boot (/run is tmpfs); the
@@ -50,6 +48,18 @@ EnvironmentFile=/run/seismic/conf/reth-p2p.env
 #   --discovery.v5.port 30303 is load-bearing (reth defaults discv5 to 9200). No
 #   --p2p-secret-key: reth persists node identity under --datadir.
 # $RETH_*_FLAG unquoted so systemd word-splits: empty vars drop out entirely.
+#   $RETH_BOOTNODES_FLAG (--bootnodes): seeds discv5 with the founding cohort;
+#   one live bootnode is enough for the DHT to flood the rest. Bootstrap is
+#   one-shot per boot: a bare enode:// is resolved with a live UDP round-trip at
+#   startup, and a lost one is never retried.
+#   $RETH_TRUSTED_PEERS_FLAG (--trusted-peers): the same cohort, dialed directly
+#   over RLPx with retry and exempt from reputation slashing -- the path that
+#   does not depend on that round-trip landing, so a dropped packet costs
+#   latency rather than a seat in the tx-gossip mesh:
+#   https://github.com/SeismicSystems/enclave/blob/seismic/bin/tdx-init/src/peers.rs
+#   $RETH_NAT_FLAG (--nat extip): the address reth advertises to peers. Azure
+#   NICs hold private addresses, so autodetection would publish an unroutable
+#   one.
 ExecStart=/usr/bin/seismic-reth node \
     --http.corsdomain "*" \
     --ws.origins "*" \
@@ -75,7 +85,7 @@ ExecStart=/usr/bin/seismic-reth node \
     --log.stdout.format json \
     --log.file.max-files 0 \
     --metrics 127.0.0.1:9001 \
-    $RETH_BOOTNODES_FLAG $RETH_NAT_FLAG
+    $RETH_BOOTNODES_FLAG $RETH_TRUSTED_PEERS_FLAG $RETH_NAT_FLAG
 
 Restart=on-failure
 RestartSec=10
