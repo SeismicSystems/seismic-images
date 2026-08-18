@@ -10,4 +10,4 @@ enclave:
 seismic_reth:
   git_reference: e4b3d5a323a09cab5140dc53e653fe213079b0ce
 summit:
-  git_reference: ed2c5c844e9ec40884ddc72fc16ece36b7d99a56
+  git_reference: 633fc2efdbfca47024e36b858baa1e9fc55e2cf0

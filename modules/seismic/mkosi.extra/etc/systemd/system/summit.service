@@ -34,11 +34,10 @@ ExecStartPre=/usr/bin/summit-key-holder persist-wait
 # tolerate.
 EnvironmentFile=/run/seismic/conf/summit.env
 
-# TODO: add `--rpc-ip 127.0.0.1` once sources.yaml's summit pin carries it
-# (https://github.com/SeismicSystems/summit/pull/434 — merged upstream, but the
-# pinned summit predates it and rejects the flag at startup). Until then it binds
-# 0.0.0.0 — make sure the NSG doesn't open :3030 publicly.
-#
+# --rpc-ip 127.0.0.1: nginx fronts the public RPC at /summit
+# (proxy_pass http://localhost:3030), so the listener itself never needs to be
+# reachable off-box. Binding loopback makes that structural instead of resting
+# on the NSG leaving :3030 closed.
 # --genesis-path: written verbatim by tdx-init on every boot from the
 # operator POST's summit_genesis_base64 (readable via summit's `conf`
 # supplementary group). The network manifest pins its config_digest, so a
@@ -61,6 +60,7 @@ ExecStart=/usr/bin/summit run \
     --key-store-path /persistent/summit/keys \
     --ip ${SUMMIT_ADVERTISED_ADDR} \
     --port 18551 \
+    --rpc-ip 127.0.0.1 \
     --rpc-port 3030 \
     --prom-ip 127.0.0.1 \
     --prom-port 9002 \
