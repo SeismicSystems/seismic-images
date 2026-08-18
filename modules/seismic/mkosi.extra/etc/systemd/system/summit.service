@@ -29,18 +29,37 @@ Environment=RUST_LOG=info
 # creates /persistent/summit{,/db,/keys} via its ExecStartPost).
 ExecStartPre=/usr/bin/summit-key-holder persist-wait
 
-# TODO: add `--rpc-ip 127.0.0.1` once https://github.com/SeismicSystems/summit/pull/434
-# is merged. Until then it binds 0.0.0.0 — make sure the NSG doesn't open :3030 publicly.
+# Required (no `-`): the Requires= chain (attestation -> tdx-init) guarantees
+# summit.env exists, so a missing file is a real boot failure, not something to
+# tolerate.
+EnvironmentFile=/run/seismic/conf/summit.env
+
+# TODO: add `--rpc-ip 127.0.0.1` once sources.yaml's summit pin carries it
+# (https://github.com/SeismicSystems/summit/pull/434 — merged upstream, but the
+# pinned summit predates it and rejects the flag at startup). Until then it binds
+# 0.0.0.0 — make sure the NSG doesn't open :3030 publicly.
 #
 # --genesis-path: written verbatim by tdx-init on every boot from the
 # operator POST's summit_genesis_base64 (readable via summit's `conf`
 # supplementary group). The network manifest pins its config_digest, so a
 # divergent genesis cannot handshake with the cohort.
+# --ip ${SUMMIT_ADVERTISED_ADDR}: the consensus address this node signs and
+# gossips, which is what the rest of the cohort dials it on. tdx-init composes
+# it from the operator's POSTed external_ip, the same address reth advertises via
+# --nat extip, so the two planes agree on where this machine is. Without it
+# summit takes the address from its own genesis entry, which only a founding node
+# has, and a joiner would fall back to asking public IP-echo services:
+# https://github.com/SeismicSystems/enclave/blob/seismic/bin/tdx-init/src/peers.rs
+# Quoted expansion (${...}, not $...) so the address stays one argument, and
+# because it is always populated there is no empty-var case to drop. Its port
+# must stay equal to --port below: the address is what peers dial, --port is what
+# the node listens on.
 ExecStart=/usr/bin/summit run \
     --engine-ipc-path /run/reth-engine/api.ipc \
     --genesis-path /run/seismic/conf/summit-genesis.toml \
     --store-path /persistent/summit/db \
     --key-store-path /persistent/summit/keys \
+    --ip ${SUMMIT_ADVERTISED_ADDR} \
     --port 18551 \
     --rpc-port 3030 \
     --prom-ip 127.0.0.1 \
