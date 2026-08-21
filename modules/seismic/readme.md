@@ -125,12 +125,13 @@ Packages.
 ### `tdx-init.service`
 
 Runs `tdx-init wait-for-config`, which on every boot blocks until a
-provisioner POSTs the node's configuration (TOML: `[domain]` name/email,
-optional `[root_key]` genesis_node/peers, and `[network]` with the
-base64 network manifest + reth genesis) via HTTP. On receipt
-tdx-init translates the payload into per-service config files under
-`/run/seismic/conf/`: `domain.env` (for `setup-nginx-ssl`),
-`custodian.env` (consumed by `custodian.service` via `EnvironmentFile=`),
+provisioner POSTs the node's configuration (TOML: `[network]` with the
+base64 network manifest + reth/summit geneses + bootnodes, and `[node]`
+with external_ip, genesis_node, and the domain name/email) via HTTP. On
+receipt tdx-init translates the payload into per-service config files
+under `/run/seismic/conf/`: `domain.env` (for `setup-nginx-ssl`),
+`custodian.env` (consumed by `custodian.service` via `EnvironmentFile=`,
+and read by `setup-persistent-luks` for the genesis-mode guard),
 `attestation.env` (likewise by `attestation.service`),
 `network-manifest.json` (hashed by the attestation service into
 `network_id`; its appearance also closes `summit-key-holder.service`'s
@@ -220,9 +221,11 @@ restart; tight loops would hammer the TPM.
 Oneshot that runs
 [`setup-persistent-luks`](mkosi.extra/usr/bin/setup-persistent-luks):
 waits for the LUKS keys from the custodian, verifies the on-disk
-header, opens the LUKS volume, and mounts it at `/persistent`. See
-the script's header comment for the full design (key handoff, header
-MAC, detached-header open).
+header, opens the LUKS volume, and mounts it at `/persistent`. In
+genesis mode it refuses to start over an already-provisioned volume
+(the freshly minted `root_key` could never open it — a stale genesis
+flag or the wrong disk). See the script's header comment for the full
+design (key handoff, header MAC, detached-header open).
 
 `Restart=on-failure RestartSec=5` to ride out transient cases (disk
 not yet attached, root-key bootstrap slow to complete).

@@ -63,6 +63,13 @@ MOUNT_POINT="/persistent"
 # status is strictly best-effort: a hiccup here must never wedge the disk setup.
 STATUS_FILE="/run/seismic/status/luks.json"
 
+# Launch-mode flag, written by tdx-init:
+# https://github.com/SeismicSystems/enclave/blob/057b9af826e110ebe12bf3ee729d60d542de2b8e/bin/tdx-init/src/writer.rs#L103
+# and also consumed by custodian.service via EnvironmentFile=. Genesis mode
+# mints a fresh root_key; the guard in main() refuses to pair that with an
+# already-provisioned disk.
+CUSTODIAN_ENV="/run/seismic/conf/custodian.env"
+
 # Drop-zone for the LUKS keys, written by the custodian as soon as it holds
 # the root key: 64 bytes total = storage_key (32B) || header_mac_key (32B).
 # TODO(samlaf): consider swapping polling for systemd Type=notify on custodian.service.
@@ -89,6 +96,14 @@ DEFAULT_DISK_GLOB="/dev/disk/by-path/*10"
 DISK_GLOB_OVERRIDE_FILE="/etc/seismic-images/persistent-disk-glob"
 
 log() { echo "[setup-persistent-luks] $*" >&2; }
+
+# True iff this boot runs in genesis launch mode (the custodian minted a
+# fresh root_key locally instead of fetching one from a peer). Missing file
+# or flag reads as join mode, the safe default: join never formats a disk
+# that already holds data.
+is_genesis_node() {
+    grep -qx 'SEISMIC_CUSTODIAN_GENESIS_NODE=true' "$CUSTODIAN_ENV" 2>/dev/null
+}
 
 # --- LUKS-wipe progress producer (best-effort; never aborts the script) -----
 #
@@ -357,6 +372,20 @@ main() {
     log "persistent disk: $device"
 
     if cryptsetup isLuks "$device"; then
+        # Genesis is a launch mode for blank disks only: the custodian just
+        # minted a fresh root_key, so the derived keys can never open a volume
+        # provisioned under an earlier one. Refuse here, with the real cause,
+        # rather than let verify_and_open report the inevitable MAC mismatch
+        # as header tampering. A provisioned volume means one of:
+        # - the genesis flag is stale (this network already ran genesis) —
+        #   re-POST the node config in join mode
+        # - the wrong disk is attached
+        # - re-founding on a used disk — wipe it explicitly first
+        if is_genesis_node; then
+            log "ERROR: genesis mode, but $device already holds a LUKS volume"
+            log "  stale genesis flag, wrong disk, or a used disk that needs an explicit wipe"
+            return 1
+        fi
         verify_and_open "$device" "$KEYFILE"
     else
         # first boot only
