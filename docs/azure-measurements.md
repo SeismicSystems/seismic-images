@@ -230,3 +230,19 @@ that allowed it to load.
    halves would cover it: a wider `measured-boot` bank for the nine constant
    registers, needing no node at all, and a live capture for the eight
    platform registers, which cannot be predicted.
+6. **A guest-extended register for the boot config.** The tuple identifies
+   the image; nothing in the quote identifies the configuration the image
+   booted with — the network manifest and the reth genesis file arrive in the
+   config POST, after every measured stage. `tdx-init` could extend one of
+   the all-zero registers with a digest of those verbatim bytes before it
+   fans them out, the way CCF hashes its security policy into `host_data`,
+   so a quote taken at steady state also attests the config. pcr14 is the
+   leading candidate: all-zero, unasserted by `make measure`, and not pcr16,
+   which is resettable. Such a register can never join the tuple — its
+   value is per network and per config, while the tuple is per image, and
+   the policy document's own hash is one of the bytes it would digest — so
+   it would be verified by recomputation from the network's artifacts, not
+   allowlisted. It needs a `tpm` permission grant for `tdx-init` and
+   sequencing against the machine-wide TPM serialization gate, and it only
+   pays off once post-boot quotes are recorded somewhere a later reader can
+   find them; harvest quotes predate the config POST and would carry zero.
