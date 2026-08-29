@@ -29,7 +29,8 @@ def get_source_package(binary_name):
                 source = line[8:].split(' ')[0].strip()
                 return source
         return binary_name
-    except:
+    except OSError:
+        # If apt-cache is unavailable, retain the binary package name as a safe fallback.
         return binary_name
 
 def verify_package(pkg, work_dir, cache_dir):
