@@ -103,9 +103,9 @@ measure: ## Export TDX measurements for the built EFI file
 	$(WRAPPER) bash -c "STAMPED=\$$(jq --arg id '$$MEASUREMENT_ID' '. + {measurement_id: \$$id}' build/measurements.json) && printf '%s\\n' \"\$$STAMPED\" > build/measurements.json" && \
 	echo "Measurements exported to build/measurements.json (measurement_id: $$MEASUREMENT_ID)"
 
-measure-gcp: ## Export TDX measurements for GCP
-	@$(WRAPPER) dstack-mr -uki $(FILE) > build/gcp_measurements.json
-	echo "GCP Measurements exported to build/gcp_measurements.json"
+measure-gcp: ## Predict RTMR1 for a GCP TDX boot of the built UKI
+	@python3 scripts/predict_gcp_rtmr1.py --efi $(FILE) --out build/gcp_measurements.json && \
+	echo "GCP measurements exported to build/gcp_measurements.json"
 
 # Clean build artifacts
 clean: ## Remove cache and build artifacts
