@@ -1,0 +1,13 @@
+[Unit]
+Description=Grant the tpm group access to the TDX quote interfaces
+After=sys-kernel-config.mount systemd-tmpfiles-setup.service
+Before=summit-key-holder.service attestation.service
+ConditionPathExists=/sys/kernel/config/tsm
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/bin/setup-gcp-quote-access
+
+[Install]
+WantedBy=minimal.target
