@@ -4,3 +4,8 @@ set -euxo pipefail
 
 # Remove automatically generated nvme data
 rm -rf "$BUILDROOT/etc/nvme/hostid" "$BUILDROOT/etc/nvme/hostnqn"
+
+# Enable the quote-access oneshot; the seismic module enables its own units.
+mkdir -p "$BUILDROOT/etc/systemd/system/minimal.target.wants"
+ln -sf ../gcp-quote-access.service "$BUILDROOT/etc/systemd/system/minimal.target.wants/gcp-quote-access.service"
+chmod 0755 "$BUILDROOT/usr/bin/setup-gcp-quote-access"
