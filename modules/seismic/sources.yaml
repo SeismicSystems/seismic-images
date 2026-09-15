@@ -6,7 +6,7 @@ enclave:
   # tdx-init, and summit-key-holder. We could consider using separate pins for
   # each, but this is simpler for now, plus they will likely need to be updated
   # together in most cases since they share libraries.
-  git_reference: 6c131bf73b7cb451e170d12d3cf15ab00eb3f58a
+  git_reference: 0a39b8a381eb9436f5279b926eb8140e626f4c0b
 seismic_reth:
   git_reference: 39d04d158da383324b12c2e3397b0b28f3c3ee36
 summit:
