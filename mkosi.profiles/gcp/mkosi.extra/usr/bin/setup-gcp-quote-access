@@ -1,0 +1,22 @@
+#!/bin/bash
+# Hand the TDX quote interfaces to the tpm group, the way the udev rule hands
+# /dev/tpm0 to it on Azure: configfs-tsm creates report attributes root:root
+# 0600 and the ACPI CCEL table is root 0400, and the services quote as their
+# own users.
+set -euo pipefail
+
+ccel=/sys/firmware/acpi/tables/data/CCEL
+if [ -e "$ccel" ]; then
+    chgrp tpm "$ccel"
+    chmod 0440 "$ccel"
+fi
+
+base=/sys/kernel/config/tsm/report
+[ -d "$base" ] || exit 0
+for service in summit-key-holder attestation; do
+    dir="$base/seismic-$service"
+    mkdir -p "$dir"
+    chgrp tpm "$dir"/inblob "$dir"/outblob "$dir"/generation "$dir"/provider
+    chmod 0660 "$dir"/inblob
+    chmod 0440 "$dir"/outblob "$dir"/generation "$dir"/provider
+done
