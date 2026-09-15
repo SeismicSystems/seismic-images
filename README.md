@@ -29,13 +29,28 @@ Produces in `build/`:
 Generate expected measurement values (RTMRs, MRTD) for the built UKI so a verifier can attest that a running node booted from exactly this image:
 
 ```sh
-make measure       # Azure-style measurements -> build/measurements.json
-make measure-gcp   # GCP-style measurements   -> build/gcp_measurements.json
+make measure       # Azure TDX measurements -> build/measurements.azure-tdx.json
+make measure-gcp   # GCP TDX measurements   -> build/measurements.gcp-tdx.json
 ```
 
 The two formats differ because Azure and GCP expose TDX quotes through different mechanisms — Azure via `tpm2-tools` + the Microsoft attestation service, GCP via the [`dstack`](https://github.com/Dstack-TEE/dstack) toolchain. The deploy tooling (and the Seismic enclave's attestation path) consume these files to verify that deployed nodes match a known-good image.
 
 `make measure` also stamps a `measurement_id` into the file: the versioned artifact filename (`seismic_{VERSION}.vhd`) these PCRs measure — the same name `make push-azure` uploads as the blob. Consumers of the measurements read which image they bind to from the file itself, with no out-of-band identifier to pass around (or get wrong).
+
+The files are named for the attestation type whose registers they hold (the admission pipeline keys policy records on `attestation_type`), so an image published for both clouds carries one of each under one release.
+
+## Published images
+
+Every push to `seismic` publishes the image it builds, in two places that share one name:
+
+- **The VHD** goes to the `dev` container of the `seismicimages` storage account, as `seismic_{VERSION}.vhd`. That blob URL is the `vhd_blob_url` a deployment boots from; Azure's managed-disk import can only read from blob storage, so the bytes live there.
+- **The measurements** go to a GitHub prerelease tagged `seismic_{VERSION}`, as `measurements.azure-tdx.json`, beside a `SHA256SUMS` over the `.efi`, the UKI that is the whole image identity (the VHD only wraps it). The tag is the image basename, which is also the `measurement_id` stamped inside the file and the short commit of this repo that built it, so every consumer derives the URL from a name it already has:
+
+  ```
+  https://github.com/SeismicSystems/seismic-images/releases/download/seismic_{VERSION}/measurements.azure-tdx.json
+  ```
+
+  Anything that needs an image's measurements fetches that URL. The publish job asserts the stamp equals `<tag>.vhd` before it creates the release, so name, blob and file agree by construction.
 
 ## What's in the image
 

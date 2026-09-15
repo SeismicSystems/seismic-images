@@ -1,5 +1,42 @@
 # Seismic-specific copy of build.yaml for now, kept separate so the upstream
 # workflow can remain untouched.
+#
+# Every run builds the image, validates its contents, and measures its UKI.
+# Pull requests and dispatches build it twice and require the two UKIs to be
+# bit-identical. A push to `seismic` (or a dispatch on it) also publishes the
+# image, under one name in two places — see README.md "Published images":
+#
+#   the VHD              → the `dev` container of the seismicimages storage
+#                          account, as seismic_<version>.vhd (Azure's disk
+#                          import reads only blob storage)
+#   the measurements     → a GitHub prerelease tagged seismic_<version>, as
+#                          measurements.azure-tdx.json + SHA256SUMS
+#
+# One-time setup for publishing. Three repo secrets — AZURE_CLIENT_ID (the
+# service principal's application ID), AZURE_TENANT_ID, AZURE_SUBSCRIPTION_ID.
+# No Azure credential is stored: azure/login exchanges GitHub's OIDC token for
+# an Azure one at run time, which the federated credential below permits; the
+# release itself needs only the job's GITHUB_TOKEN. The principal may write
+# blobs in the `dev` container and nothing else, and trusts one subject, this
+# repo's `seismic` branch:
+#
+#   SUBSCRIPTION_ID=214887ea-51a7-4ca7-9cec-29b3cf3d311c
+#   az account set --subscription "$SUBSCRIPTION_ID"
+#   APP_ID=$(az ad app create --display-name seismic-images-publish --query appId -o tsv)
+#   az ad sp create --id "$APP_ID"
+#   SP_ID=$(az ad sp show --id "$APP_ID" --query id -o tsv)
+#   az ad app federated-credential create --id "$APP_ID" --parameters '{
+#     "name": "seismic-images-seismic",
+#     "issuer": "https://token.actions.githubusercontent.com",
+#     "subject": "repo:SeismicSystems/seismic-images:ref:refs/heads/seismic",
+#     "audiences": ["api://AzureADTokenExchange"]
+#   }'
+#   az role assignment create --assignee-object-id "$SP_ID" --assignee-principal-type ServicePrincipal \
+#       --role "Storage Blob Data Contributor" \
+#       --scope "/subscriptions/$SUBSCRIPTION_ID/resourceGroups/seismic-images/providers/Microsoft.Storage/storageAccounts/seismicimages/blobServices/default/containers/dev"
+#
+# `az storage blob … --auth-mode login --account-name …` goes straight to the
+# data plane, so the principal needs no management-plane role on the account.
 name: Seismic image CI
 
 on:
@@ -135,6 +172,25 @@ jobs:
           usr/bin/tdx-init
           EOF
 
+      # The measured-boot prediction for this UKI, stamped with the VHD name
+      # it binds to (`make measure`; the Makefile owns the stamping). The
+      # wrapper would otherwise reach for Lima; `.bypass-lima` (gitignored, so
+      # mkosi.version still sees a clean tree) tells it to run in nix here.
+      # Deterministic given the UKI, so a reprotest-clean build measures the
+      # same on any runner. The stamp must name the VHD this build produced:
+      # that equality is what lets a consumer resolve the file to its blob
+      # and its release from the name alone.
+      - name: Measure the UKI
+        run: |
+          touch .bypass-lima
+          make measure FILE="$(compgen -G 'build/seismic_*.efi')"
+          stamped=$(jq -r .measurement_id build/measurements.azure-tdx.json)
+          vhd=$(basename "$(compgen -G 'build/seismic_*.vhd')")
+          [ "$stamped" = "$vhd" ] || {
+            echo "measurement_id $stamped does not name the built VHD $vhd" >&2
+            exit 1
+          }
+
       - name: Show build artifacts
         run: |
           echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
@@ -146,6 +202,14 @@ jobs:
 
       - name: Generate EFI checksum
         run: sha256sum build/seismic_*.efi | tee build/checksum.sha256
+
+      # What the release ships beside the measurements. The UKI alone: it is
+      # the whole image identity (the VHD only wraps it on a FAT partition,
+      # and that wrapping is not reproducible, so its hash would be a record
+      # no rebuilder could confirm). Bare filename, so `sha256sum -c
+      # SHA256SUMS` works from wherever the file was downloaded to.
+      - name: Generate release checksums
+        run: (cd build && sha256sum seismic_*.efi) | tee build/SHA256SUMS
 
       # Per-file hashes let reprotest-compare name the exact divergent files
       # on a mismatch, instead of only reporting that the whole UKI differs.
@@ -170,6 +234,117 @@ jobs:
             build/checksum.sha256
             build/initrd-files.sha256
           retention-days: 1
+
+      # Hand-off to the publish job, which runs with the write permissions
+      # this job does not have. A day is plenty: the release and the blob are
+      # the durable copies.
+      - name: Upload the image for publishing
+        if: >-
+          github.ref == 'refs/heads/seismic' &&
+          (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+        uses: actions/upload-artifact@v4
+        with:
+          name: image-seismic
+          path: |
+            build/seismic_*.vhd
+            build/measurements.azure-tdx.json
+            build/SHA256SUMS
+          retention-days: 1
+          if-no-files-found: error
+
+  # Publishing is its own job so that only it holds `contents: write` and the
+  # OIDC token, and the build — which runs the image's build scripts — keeps
+  # the workflow's read-only default. Both halves are idempotent: a blob is
+  # never overwritten, and an existing release has its assets replaced, so a
+  # run that died halfway is re-run, not repaired by hand.
+  publish:
+    name: publish Seismic image
+    if: >-
+      github.ref == 'refs/heads/seismic' &&
+      (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      id-token: write
+    env:
+      AZURE_STORAGE_ACCOUNT: seismicimages
+      AZURE_CONTAINER: dev
+    steps:
+      # For the Makefile: `make push-azure` is the one definition of the
+      # upload and the blob URL, for CI and for a human alike.
+      - uses: actions/checkout@v5
+
+      - name: Download the image
+        uses: actions/download-artifact@v4
+        with:
+          name: image-seismic
+          path: build
+
+      # The image's name is the one the build stamped into the measurements;
+      # the release tag, the blob and the title all derive from it.
+      - name: Name the image
+        id: image
+        run: |
+          stamped=$(jq -r .measurement_id build/measurements.azure-tdx.json)
+          image=${stamped%.vhd}
+          [ -f "build/$image.vhd" ] || {
+            echo "the measurements name $stamped, which is not among the built artifacts" >&2
+            exit 1
+          }
+          echo "image=$image" >> "$GITHUB_OUTPUT"
+
+      - uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Mirror the VHD to blob storage
+        run: >-
+          make push-azure
+          AZURE_STORAGE_ACCOUNT="$AZURE_STORAGE_ACCOUNT"
+          AZURE_CONTAINER="$AZURE_CONTAINER"
+          VHD="build/${{ steps.image.outputs.image }}.vhd"
+
+      # The release notes: the one place the blob URL and the measurements
+      # URL are written down together, for a human reading the release.
+      - name: Write the release notes
+        env:
+          IMAGE: ${{ steps.image.outputs.image }}
+        run: |
+          vhd_blob_url="https://$AZURE_STORAGE_ACCOUNT.blob.core.windows.net/$AZURE_CONTAINER/$IMAGE.vhd"
+          cat > "$RUNNER_TEMP/notes.md" <<EOF
+          Seismic node image \`$IMAGE\`, built by this repository at $GITHUB_SHA.
+
+          | | |
+          |---|---|
+          | \`vhd_blob_url\` | \`$vhd_blob_url\` |
+          | measurements | [\`measurements.azure-tdx.json\`](https://github.com/$GITHUB_REPOSITORY/releases/download/$IMAGE/measurements.azure-tdx.json) |
+          | checksums | \`SHA256SUMS\` over the \`.efi\` (the UKI the VHD wraps) |
+
+          Boot nodes from the \`vhd_blob_url\` above; the measurements are what a verifier expects those nodes to attest.
+          EOF
+
+      # A prerelease: CI builds of the branch are what the `dev` container
+      # holds, not an operator release. The tag is created at the commit that
+      # built the image. The action updates a release that already exists for
+      # the tag and replaces same-named assets, which is what makes a re-run
+      # complete a release an earlier run left half-made. Pinned to the
+      # commit behind v2.2.2 — the version seismic-reth and seismic-foundry
+      # release with — rather than the tag: this step holds `contents: write`.
+      - name: Publish the release
+        uses: softprops/action-gh-release@da05d552573ad5aba039eaac05058a918a7bf631 # v2.2.2
+        with:
+          tag_name: ${{ steps.image.outputs.image }}
+          name: ${{ steps.image.outputs.image }}
+          target_commitish: ${{ github.sha }}
+          prerelease: true
+          body_path: ${{ runner.temp }}/notes.md
+          fail_on_unmatched_files: true
+          files: |
+            build/measurements.azure-tdx.json
+            build/SHA256SUMS
 
   reprotest-build:
     name: reproducibility build
