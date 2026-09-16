@@ -63,49 +63,76 @@ AZURE_STORAGE_ACCOUNT ?= seismicimages
 AZURE_CONTAINER ?= dev
 AZURE_AUTH_MODE ?= login
 
+# The VHD to upload. Defaults to the latest.vhd symlink the build wrapper
+# leaves behind; CI, which runs mkosi without the wrapper, names the file.
+VHD ?= build/latest.vhd
+
+# A blob is never overwritten: its name carries the commit that built it and
+# a node may already be booting those bytes. `--overwrite false` is the
+# guarantee (spelled out rather than left to the CLI's default, which has
+# flipped before); the exists check ahead of it is what makes pushing an
+# image that is already there a no-op that prints the same URL instead of a
+# failure — a re-run of the CI publish depends on that.
 .PHONY: push-azure push-azure-dev push-azure-releases
-push-azure: ## Upload latest built .vhd to Azure blob storage (uses AZURE_CONTAINER)
+push-azure: ## Upload the built .vhd to Azure blob storage (uses AZURE_CONTAINER, VHD)
 	@case "$(AZURE_CONTAINER)" in \
 		dev|releases) ;; \
 		*) echo "Error: AZURE_CONTAINER='$(AZURE_CONTAINER)' must be one of: dev, releases" >&2; exit 1 ;; \
 	esac; \
-	if [ ! -L build/latest.vhd ]; then \
-		echo "Error: build/latest.vhd not found. Run 'make build' or 'make build-dev' first." >&2; \
+	if [ ! -e "$(VHD)" ]; then \
+		echo "Error: $(VHD) not found. Run 'make build' or 'make build-dev' first, or pass VHD=<path>." >&2; \
 		exit 1; \
 	fi; \
-	VHD_PATH=build/latest.vhd; \
-	BLOB_NAME=$$(basename $$(realpath $$VHD_PATH)); \
-	echo "Uploading $$BLOB_NAME → $(AZURE_STORAGE_ACCOUNT)/$(AZURE_CONTAINER)/ ..."; \
-	az storage blob upload \
-		--account-name $(AZURE_STORAGE_ACCOUNT) \
-		--container-name $(AZURE_CONTAINER) \
-		--name $$BLOB_NAME \
-		--file $$VHD_PATH \
-		--auth-mode $(AZURE_AUTH_MODE); \
+	BLOB_NAME=$$(basename $$(realpath $(VHD))); \
+	if [ "$$(az storage blob exists \
+			--account-name $(AZURE_STORAGE_ACCOUNT) \
+			--container-name $(AZURE_CONTAINER) \
+			--name $$BLOB_NAME \
+			--auth-mode $(AZURE_AUTH_MODE) \
+			--query exists -o tsv)" = "true" ]; then \
+		echo "$$BLOB_NAME is already in $(AZURE_STORAGE_ACCOUNT)/$(AZURE_CONTAINER)/; not overwriting."; \
+	else \
+		echo "Uploading $$BLOB_NAME → $(AZURE_STORAGE_ACCOUNT)/$(AZURE_CONTAINER)/ ..."; \
+		az storage blob upload \
+			--account-name $(AZURE_STORAGE_ACCOUNT) \
+			--container-name $(AZURE_CONTAINER) \
+			--name $$BLOB_NAME \
+			--file $(VHD) \
+			--overwrite false \
+			--auth-mode $(AZURE_AUTH_MODE); \
+	fi; \
 	echo ""; \
-	echo "Done. Here is the vhd_blob_url:"; \
+	echo "Here is the vhd_blob_url:"; \
 	echo "  https://$(AZURE_STORAGE_ACCOUNT).blob.core.windows.net/$(AZURE_CONTAINER)/$$BLOB_NAME"
 
-push-azure-dev: ## Upload latest .vhd to dev/ (ephemeral — default)
+push-azure-dev: ## Upload the .vhd to dev/ (ephemeral — default)
 	@$(MAKE) push-azure AZURE_CONTAINER=dev
 
-push-azure-releases: ## Upload latest .vhd to releases/ (long-term)
+push-azure-releases: ## Upload the .vhd to releases/ (long-term)
 	@$(MAKE) push-azure AZURE_CONTAINER=releases
 
 ##@ Utilities
 
+# One measurements file per attestation type, named for it: the admission
+# pipeline keys a policy record on `attestation_type`, and an image published
+# for more than one cloud carries one file per type under one release, so
+# the name says which registers are inside before anyone opens it. The GCP
+# type string is provisional until its admission schema exists.
+MEASUREMENTS_AZURE := build/measurements.azure-tdx.json
+MEASUREMENTS_GCP := build/measurements.gcp-tdx.json
+
 # The stamped measurement_id is the versioned VHD filename the PCRs
 # measure, so anything consuming the measurements reads which image they
 # bind to from the file itself instead of being told out-of-band.
-measure: ## Export TDX measurements for the built EFI file
-	@$(WRAPPER) measured-boot $(FILE) build/measurements.json --direct-uki
+measure: ## Export Azure TDX measurements for the built EFI file
+	@$(WRAPPER) measured-boot $(FILE) $(MEASUREMENTS_AZURE) --direct-uki
 	@MEASUREMENT_ID="$$(basename "$$(realpath $(FILE))" .efi).vhd"; \
-	$(WRAPPER) bash -c "STAMPED=\$$(jq --arg id '$$MEASUREMENT_ID' '. + {measurement_id: \$$id}' build/measurements.json) && printf '%s\\n' \"\$$STAMPED\" > build/measurements.json" && \
-	echo "Measurements exported to build/measurements.json (measurement_id: $$MEASUREMENT_ID)"
+	$(WRAPPER) bash -c "STAMPED=\$$(jq --arg id '$$MEASUREMENT_ID' '. + {measurement_id: \$$id}' $(MEASUREMENTS_AZURE)) && printf '%s\\n' \"\$$STAMPED\" > $(MEASUREMENTS_AZURE)" && \
+	echo "Measurements exported to $(MEASUREMENTS_AZURE) (measurement_id: $$MEASUREMENT_ID)"
 
-measure-gcp: ## Export TDX measurements for GCP
-	@$(WRAPPER) dstack-mr -uki $(FILE) > build/gcp_measurements.json
-	echo "GCP Measurements exported to build/gcp_measurements.json"
+measure-gcp: ## Export GCP TDX measurements for the built EFI file
+	@$(WRAPPER) dstack-mr -uki $(FILE) > $(MEASUREMENTS_GCP)
+	echo "GCP Measurements exported to $(MEASUREMENTS_GCP)"
 
 # Clean build artifacts
 clean: ## Remove cache and build artifacts
