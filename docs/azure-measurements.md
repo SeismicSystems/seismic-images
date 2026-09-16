@@ -55,7 +55,7 @@ flowchart TD
     UKI["the built UKI<br/>build/*.efi"]
 
     UKI -->|"make measure — static, image never booted"| MB["measured-boot --direct-uki"]
-    MB --> PRED["build/measurements.json<br/>pcr4, pcr9, pcr11 computed<br/>pcr8, 12, 13, 15 asserted zero"]
+    MB --> PRED["build/measurements.azure-tdx.json<br/>pcr4, pcr9, pcr11 computed<br/>pcr8, 12, 13, 15 asserted zero"]
 
     UKI -->|"boot on Azure TDX"| NODE["live node"]
     NODE --> EV["vTPM quote over PCRs 0-23<br/>= attestation evidence"]
@@ -75,7 +75,7 @@ The prediction covers 7 because that is what the tool implements today, not
 because 7 is the limit. [`measured-boot`](https://github.com/flashbots/measured-boot)
 (pinned to v1.2.0 in [`flake.nix`](../flake.nix)) has simulators for pcr4,
 pcr9, and pcr11, and seeds a bank of seven slots — 4, 8, 9, 11, 12, 13, 15 —
-so `measurements.json` carries three computed values plus four that assert
+so `measurements.azure-tdx.json` carries three computed values plus four that assert
 nothing extended those slots. The tool prints only six to stderr; pcr8 is in
 the JSON but never printed.
 
@@ -92,7 +92,7 @@ live quote" to "checked at build time". Nothing does that today.
 
 ```bash
 # predicted, from this repo's root
-make measure FILE=build/<image>.efi        # -> build/measurements.json
+make measure FILE=build/<image>.efi        # -> build/measurements.azure-tdx.json
 
 # observed, from anywhere that can reach the node (no shell required)
 cargo run -p seismic-attestation-service --example capture_measurements -- \
@@ -100,7 +100,7 @@ cargo run -p seismic-attestation-service --example capture_measurements -- \
   --network-id 0x$(sha256sum network-manifest.json | cut -d' ' -f1) \
   --out-policy /tmp/observed.json
 
-diff <(jq -S . /tmp/observed.json) <(jq -S . build/measurements.json)
+diff <(jq -S . /tmp/observed.json) <(jq -S . build/measurements.azure-tdx.json)
 ```
 
 `capture_measurements` reaches the node over its attestation RPC, which needs
