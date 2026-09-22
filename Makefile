@@ -112,7 +112,7 @@ push-azure-dev: ## Upload the .vhd to dev/ (ephemeral — default)
 push-azure-releases: ## Upload the .vhd to releases/ (long-term)
 	@$(MAKE) push-azure AZURE_CONTAINER=releases
 
-##@ Utilities
+##@ Release assets
 
 # One measurements file per attestation type, named for it: the admission
 # pipeline keys a policy record on `attestation_type`, and an image published
@@ -148,7 +148,31 @@ measure-gcp: ## Export GCP TDX measurements for the built EFI file
 # them and the UKI. See the readme's "Founding inputs".
 .PHONY: founding-inputs
 founding-inputs: ## Gather the founding inputs into build/ and write SHA256SUMS (uses INITRD, FILE)
-	@$(WRAPPER) scripts/founding_inputs.sh $(INITRD) $(FILE)
+	@$(WRAPPER) scripts/seismic/founding_inputs.sh $(INITRD) $(FILE)
+
+# Everything a release carries that a rebuild can reproduce, from one FILE
+# and INITRD: the measurements and the founding inputs with their
+# SHA256SUMS. The one asset not here is image.json, below — it records where
+# the bytes were put, which a build does not know.
+.PHONY: release-assets
+release-assets: measure founding-inputs ## Measure the UKI and gather the founding inputs (uses FILE, INITRD)
+
+# Where the image's bytes are and what they are, for consumers to read
+# rather than reconstruct; see the readme's "image.json". Made after the VHD
+# is pushed, by the publish job or by whoever pushed: the storage account's
+# ARM ID is asked of `az` (an `az login` that can read the account), or
+# passed as AZURE_STORAGE_ACCOUNT_ID. Not through the wrapper: it needs the
+# host's `az` and `jq`, nothing from the build environment. Refuses a
+# measurements file and a SHA256SUMS made from different builds.
+SUMS ?= build/SHA256SUMS
+COMMIT ?= $(shell git rev-parse HEAD)
+.PHONY: image-json
+image-json: ## Write build/image.json and add it to SHA256SUMS (uses AZURE_STORAGE_ACCOUNT, AZURE_CONTAINER, AZURE_STORAGE_ACCOUNT_ID, COMMIT)
+	@AZURE_STORAGE_ACCOUNT=$(AZURE_STORAGE_ACCOUNT) AZURE_CONTAINER=$(AZURE_CONTAINER) \
+		AZURE_STORAGE_ACCOUNT_ID=$(AZURE_STORAGE_ACCOUNT_ID) \
+		scripts/seismic/image_json.sh $(MEASUREMENTS_AZURE) $(SUMS) $(COMMIT)
+
+##@ Utilities
 
 # Clean build artifacts
 clean: ## Remove cache and build artifacts
