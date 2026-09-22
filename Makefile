@@ -5,6 +5,7 @@ SHELL := /usr/bin/env bash
 WRAPPER := scripts/env_wrapper.sh
 
 FILE ?= build/latest.efi
+INITRD ?= build/latest.initrd
 
 ##@ Help
 
@@ -141,6 +142,13 @@ measure-portable-gcp: measure-portable ## Export a portable GCP-only attestation
 measure-gcp: ## Export GCP TDX measurements for the built EFI file
 	@$(WRAPPER) dstack-mr -uki $(FILE) > $(MEASUREMENTS_GCP)
 	echo "GCP Measurements exported to $(MEASUREMENTS_GCP)"
+
+# The release's founding inputs, from the built image: the seismic-reth and
+# summit binaries out of the initrd, both genesis files, and SHA256SUMS over
+# them and the UKI. See the readme's "Founding inputs".
+.PHONY: founding-inputs
+founding-inputs: ## Gather the founding inputs into build/ and write SHA256SUMS (uses INITRD, FILE)
+	@$(WRAPPER) scripts/founding_inputs.sh $(INITRD) $(FILE)
 
 # Clean build artifacts
 clean: ## Remove cache and build artifacts

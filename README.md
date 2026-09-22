@@ -44,13 +44,27 @@ The files are named for the attestation type whose registers they hold (the admi
 Every push to `seismic` publishes the image it builds, in two places that share one name:
 
 - **The VHD** goes to the `dev` container of the `seismicimages` storage account, as `seismic_{VERSION}.vhd`. That blob URL is the `vhd_blob_url` a deployment boots from; Azure's managed-disk import can only read from blob storage, so the bytes live there.
-- **The measurements** go to a GitHub prerelease tagged `seismic_{VERSION}`, as `measurements.azure-tdx.json`, beside a `SHA256SUMS` over the `.efi`, the UKI that is the whole image identity (the VHD only wraps it). The tag is the image basename, which is also the `measurement_id` stamped inside the file and the short commit of this repo that built it, so every consumer derives the URL from a name it already has:
+- **The measurements and the founding inputs** go to a GitHub prerelease tagged `seismic_{VERSION}`, as `measurements.azure-tdx.json` and the four files below, beside a `SHA256SUMS` over all of them and over the `.efi`, the UKI that is the whole image identity (the VHD only wraps it). The tag is the image basename, which is also the `measurement_id` stamped inside the measurements and the short commit of this repo that built it, so every consumer derives the URL from a name it already has:
 
   ```
   https://github.com/SeismicSystems/seismic-images/releases/download/seismic_{VERSION}/measurements.azure-tdx.json
   ```
 
   Anything that needs an image's measurements fetches that URL. The publish job asserts the stamp equals `<tag>.vhd` before it creates the release, so name, blob and file agree by construction.
+
+### Founding inputs
+
+A network founded on an image has genesis artifacts that only that image's own code can compute — the execution-layer genesis hash comes out of `seismic-reth`, the consensus config digest out of `summit`, and each is chain identity to the nodes that derive it — and genesis files that have to match the schemas those binaries speak. So the release carries them, as this image has them:
+
+| Asset | What it is |
+| ----- | ---------- |
+| `seismic-reth`, `summit` | lifted out of this image's initrd, so they are byte for byte the binaries the nodes run: a hash in `SHA256SUMS` names a file inside the image, not a same-rev rebuild (the build pins LTO, `panic=abort`, codegen-units and jemalloc's `LG_VADDR`, so the same source builds to different bytes under other flags). x86-64 Linux, dynamically linked against glibc and OpenSSL 3 as Debian trixie has them |
+| `reth-genesis.json` | the execution-layer genesis, read from the `seismic_reth` commit compiled into this image rather than from a branch |
+| [`summit-genesis-starter.toml`](summit-genesis-starter.toml) | the consensus parameters this image's `summit` reads, defaults included, every value a per-network choice to review. The parameter set is summit's, so the build checks this file against the `summit` it just lifted out of the image: a parameter added, removed or renamed between pins fails the build rather than shipping a starter no node in the image can load. Summit owns that schema and is the file's long-term home; until it moves there it sits at this repo's root, beside nothing the image build reads |
+
+Both genesis files are inputs to a founding, never a founded network: every value in the starter, and the chain id and allocations in `reth-genesis.json`, is a per-network choice, made before anything is derived from them.
+
+`make founding-inputs` gathers the same files from a local build into `build/`, with the same `SHA256SUMS`, so a rebuild is compared to a release with `sha256sum -c --ignore-missing SHA256SUMS`. The release notes name the three source commits the image was built from; the commit of this repository is the tag itself, and [`sources.yaml`](modules/seismic/sources.yaml) at that commit is the record a rebuild starts from.
 
 ## What's in the image
 
