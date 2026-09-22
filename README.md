@@ -44,7 +44,7 @@ The files are named for the attestation type whose registers they hold (the admi
 Every push to `seismic` publishes the image it builds, in two places that share one name:
 
 - **The VHD** goes to the `dev` container of the `seismicimages` storage account, as `seismic_{VERSION}.vhd`. That blob URL is the `vhd_blob_url` a deployment boots from; Azure's managed-disk import can only read from blob storage, so the bytes live there.
-- **The measurements and the founding inputs** go to a GitHub prerelease tagged `seismic_{VERSION}`, as `measurements.azure-tdx.json` and the four files below, beside a `SHA256SUMS` over all of them and over the `.efi`, the UKI that is the whole image identity (the VHD only wraps it). The tag is the image basename, which is also the `measurement_id` stamped inside the measurements and the short commit of this repo that built it, so every consumer derives the URL from a name it already has:
+- **The measurements, the founding inputs and `image.json`** go to a GitHub prerelease tagged `seismic_{VERSION}`, as `measurements.azure-tdx.json`, the four founding inputs below and the record below them, beside a `SHA256SUMS` over all of them and over the `.efi`, the UKI that is the whole image identity (the VHD only wraps it). The tag is the image basename, which is also the `measurement_id` stamped inside the measurements and the short commit of this repo that built it, so every consumer derives the URL from a name it already has:
 
   ```
   https://github.com/SeismicSystems/seismic-images/releases/download/seismic_{VERSION}/measurements.azure-tdx.json
@@ -64,7 +64,29 @@ A network founded on an image has genesis artifacts that only that image's own c
 
 Both genesis files are inputs to a founding, never a founded network: every value in the starter, and the chain id and allocations in `reth-genesis.json`, is a per-network choice, made before anything is derived from them.
 
-`make founding-inputs` gathers the same files from a local build into `build/`, with the same `SHA256SUMS`, so a rebuild is compared to a release with `sha256sum -c --ignore-missing SHA256SUMS`. The release notes name the three source commits the image was built from; the commit of this repository is the tag itself, and [`sources.yaml`](modules/seismic/sources.yaml) at that commit is the record a rebuild starts from.
+`make release-assets` (the measurements, then `make founding-inputs`) gathers the same files from a local build into `build/`, with the same `SHA256SUMS`, so a rebuild is compared to a release with `sha256sum -c --ignore-missing SHA256SUMS`. The release notes name the three source commits the image was built from; the commit of this repository is the tag itself, and [`sources.yaml`](modules/seismic/sources.yaml) at that commit is the record a rebuild starts from.
+
+### `image.json`
+
+Where the image's bytes are and what they are, in one machine-readable file, so a consumer reads these facts instead of spelling them by convention:
+
+```json
+{
+  "image": "seismic_2026-09-22.2ee71c",
+  "commit": "<the commit of this repository that built it>",
+  "sources": {"seismic_reth": "<sha>", "summit": "<sha>", "enclave": "<sha>"},
+  "targets": {
+    "azure-tdx": {
+      "vhd_blob_url": "https://seismicimages.blob.core.windows.net/dev/seismic_2026-09-22.2ee71c.vhd",
+      "storage_account_id": "/subscriptions/<id>/resourceGroups/<group>/providers/Microsoft.Storage/storageAccounts/seismicimages",
+      "measurements": "measurements.azure-tdx.json",
+      "efi_sha256": "<sha256 of the .efi>"
+    }
+  }
+}
+```
+
+`targets` is keyed by attestation type, one entry per cloud the image is published for — Azure only today; a GCP image adds an entry, not a schema. Per target: the artifact the nodes boot from, the storage account's ARM ID (Azure's managed-disk import refuses to read a blob from another subscription or resource group without it, and the URL names the account but neither of those; a SAS URL would avoid the requirement but expires, so it has no place in a release), the measurements asset for that target, and the sha256 of the artifact where it is reproducible — the `.efi`, since the VHD's wrapping is not. Once per file: the image name (the tag, and the stem of `measurement_id`), this repository's commit, and the three source pins from `sources.yaml`. The publish job writes it (`make image-json`, [`scripts/seismic/image_json.sh`](scripts/seismic/image_json.sh)) after the VHD is pushed, asking Azure for the account's ID rather than carrying it in this repo, and renders the release notes from it. It refuses a measurements file and a `SHA256SUMS` that name different UKIs, so the two halves of a release cannot come from different builds. It is the one asset `make release-assets` does not produce, since the ID is a fact about where the bytes were put, not about the build.
 
 ## What's in the image
 

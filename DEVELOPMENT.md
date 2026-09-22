@@ -41,6 +41,7 @@ flashboxes/
 │   └── tdx-dummy.conf
 ├── buildernet/                      # BuilderNet
 ├── scripts/                         # Build helper scripts
+│   ├── seismic/                     # Release assets of a Seismic image (founding inputs, image.json)
 │   └── verification/                # Image verification tools
 ├── services/                        # Shared systemd services
 └── mkosi.profiles/                  # Build profiles (devtools, azure)

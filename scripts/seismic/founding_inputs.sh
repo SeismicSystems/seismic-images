@@ -12,7 +12,7 @@ initrd=${1:?usage: founding_inputs.sh <initrd> <efi>}
 efi=${2:?usage: founding_inputs.sh <initrd> <efi>}
 # zstd ignores a symlink, and the build leaves `latest.initrd` as one.
 initrd=$(realpath "$initrd")
-cd "$(dirname "${BASH_SOURCE[0]}")/.."
+cd "$(dirname "${BASH_SOURCE[0]}")/../.."
 sources=modules/seismic/sources.yaml
 starter=summit-genesis-starter.toml
 
