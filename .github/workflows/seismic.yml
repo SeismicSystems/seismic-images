@@ -62,9 +62,9 @@ concurrency:
 jobs:
   static:
     name: validate Seismic module
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
 
       - name: Install ShellCheck
         run: |
@@ -100,7 +100,7 @@ jobs:
     needs: static
     runs-on: xl-github-runner-2
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
 
       # The runner pool mixes CPU types; host-sniffing build scripts (see
       # issue #46) can make image content depend on the machine. Record the
@@ -227,7 +227,7 @@ jobs:
         if: >-
           github.event_name == 'pull_request' ||
           (github.event_name == 'workflow_dispatch' && inputs.reprotest)
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: checksum-seismic-build-1
           path: |
@@ -242,7 +242,7 @@ jobs:
         if: >-
           github.ref == 'refs/heads/seismic' &&
           (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: image-seismic
           path: |
@@ -263,7 +263,7 @@ jobs:
       github.ref == 'refs/heads/seismic' &&
       (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
     needs: build
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions:
       contents: write
       id-token: write
@@ -273,10 +273,10 @@ jobs:
     steps:
       # For the Makefile: `make push-azure` is the one definition of the
       # upload and the blob URL, for CI and for a human alike.
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
 
       - name: Download the image
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: image-seismic
           path: build
@@ -294,7 +294,7 @@ jobs:
           }
           echo "image=$image" >> "$GITHUB_OUTPUT"
 
-      - uses: azure/login@v2
+      - uses: azure/login@v3
         with:
           client-id: ${{ secrets.AZURE_CLIENT_ID }}
           tenant-id: ${{ secrets.AZURE_TENANT_ID }}
@@ -331,10 +331,10 @@ jobs:
       # built the image. The action updates a release that already exists for
       # the tag and replaces same-named assets, which is what makes a re-run
       # complete a release an earlier run left half-made. Pinned to the
-      # commit behind v2.2.2 — the version seismic-reth and seismic-foundry
-      # release with — rather than the tag: this step holds `contents: write`.
+      # commit behind v3.0.3 rather than the tag: this step holds
+      # `contents: write`.
       - name: Publish the release
-        uses: softprops/action-gh-release@da05d552573ad5aba039eaac05058a918a7bf631 # v2.2.2
+        uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3.0.3
         with:
           tag_name: ${{ steps.image.outputs.image }}
           name: ${{ steps.image.outputs.image }}
@@ -354,7 +354,7 @@ jobs:
     needs: static
     runs-on: xl-github-runner-2
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
 
       # See the note on the build job's identical step.
       - name: Show runner CPU
@@ -395,7 +395,7 @@ jobs:
             > build/initrd-files.sha256
 
       - name: Upload checksums
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: checksum-seismic-build-2
           path: |
@@ -411,10 +411,10 @@ jobs:
     needs:
       - build
       - reprotest-build
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - name: Download checksums
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           pattern: checksum-seismic-build-*
           path: checksums/
