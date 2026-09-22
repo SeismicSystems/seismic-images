@@ -137,17 +137,17 @@ measure-gcp: ## Export GCP TDX measurements for the built EFI file
 
 # The release's founding inputs, from the built image: the seismic-reth and
 # summit binaries out of the initrd, both genesis files, and SHA256SUMS over
-# them and the UKI. See the readme's "Founding inputs".
+# them, the measurements and the UKI. See the readme's "Founding inputs".
 .PHONY: founding-inputs
-founding-inputs: ## Gather the founding inputs into build/ and write SHA256SUMS (uses INITRD, FILE)
-	@$(WRAPPER) scripts/seismic/founding_inputs.sh $(INITRD) $(FILE)
+founding-inputs: measure ## Gather the founding inputs into build/ and write SHA256SUMS (uses INITRD, FILE)
+	@$(WRAPPER) scripts/seismic/founding_inputs.sh $(INITRD) $(FILE) $(MEASUREMENTS_AZURE)
 
 # Everything a release carries that a rebuild can reproduce, from one FILE
 # and INITRD: the measurements and the founding inputs with their
 # SHA256SUMS. The one asset not here is image.json, below — it records where
 # the bytes were put, which a build does not know.
 .PHONY: release-assets
-release-assets: measure founding-inputs ## Measure the UKI and gather the founding inputs (uses FILE, INITRD)
+release-assets: founding-inputs ## Measure the UKI and gather the founding inputs (uses FILE, INITRD)
 
 # Where the image's bytes are and what they are, for consumers to read
 # rather than reconstruct; see the readme's "image.json". Made after the VHD
