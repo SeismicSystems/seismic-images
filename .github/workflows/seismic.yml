@@ -15,6 +15,10 @@
 #                          binaries taken back out of the built initrd and
 #                          the two genesis files a network founded on this
 #                          image starts from
+#   image.json           → the same release: where the bytes are (the blob
+#                          URL and the storage account's ARM ID) and what
+#                          they are (measurements, UKI hash, source commits),
+#                          per cloud target
 #
 # One-time setup for publishing. Three repo secrets — AZURE_CLIENT_ID (the
 # service principal's application ID), AZURE_TENANT_ID, AZURE_SUBSCRIPTION_ID.
@@ -38,9 +42,15 @@
 #   az role assignment create --assignee-object-id "$SP_ID" --assignee-principal-type ServicePrincipal \
 #       --role "Storage Blob Data Contributor" \
 #       --scope "/subscriptions/$SUBSCRIPTION_ID/resourceGroups/seismic-images/providers/Microsoft.Storage/storageAccounts/seismicimages/blobServices/default/containers/dev"
+#   az role assignment create --assignee-object-id "$SP_ID" --assignee-principal-type ServicePrincipal \
+#       --role Reader \
+#       --scope "/subscriptions/$SUBSCRIPTION_ID/resourceGroups/seismic-images/providers/Microsoft.Storage/storageAccounts/seismicimages"
 #
 # `az storage blob … --auth-mode login --account-name …` goes straight to the
-# data plane, so the principal needs no management-plane role on the account.
+# data plane, so the upload needs no management-plane role on the account.
+# The second grant is for image.json alone: `az storage account show` reads
+# the account's ARM ID from the management plane, and the blob role does not
+# include that read. Reader on the one account is the narrowest form.
 name: Seismic image CI
 
 on:
@@ -82,13 +92,15 @@ jobs:
             modules/seismic/mkosi.postinst \
             modules/seismic/mkosi.extra/usr/bin/setup-nginx-ssl \
             modules/seismic/mkosi.extra/usr/bin/setup-persistent-luks \
-            scripts/founding_inputs.sh
+            scripts/seismic/founding_inputs.sh \
+            scripts/seismic/image_json.sh
           shellcheck -x \
             modules/seismic/mkosi.build \
             modules/seismic/mkosi.postinst \
             modules/seismic/mkosi.extra/usr/bin/setup-nginx-ssl \
             modules/seismic/mkosi.extra/usr/bin/setup-persistent-luks \
-            scripts/founding_inputs.sh
+            scripts/seismic/founding_inputs.sh \
+            scripts/seismic/image_json.sh
 
       - name: Check source pins
         shell: python3 {0}
@@ -186,10 +198,20 @@ jobs:
       # same on any runner. The stamp must name the VHD this build produced:
       # that equality is what lets a consumer resolve the file to its blob
       # and its release from the name alone.
-      - name: Measure the UKI
+      #
+      # `release-assets` is the measurements plus the founding inputs — what
+      # it takes to found a network on this image, published with it
+      # (scripts/seismic/founding_inputs.sh owns the how and the why),
+      # including the check that the genesis starter is the parameter set of
+      # the summit inside this image, which fails the build rather than the
+      # founding. One target, one FILE and INITRD, so the two cannot come
+      # from different builds.
+      - name: Measure the UKI and gather the founding inputs
         run: |
           touch .bypass-lima
-          make measure FILE="$(compgen -G 'build/seismic_*.efi')"
+          make release-assets \
+            FILE="$(compgen -G 'build/seismic_*.efi')" \
+            INITRD="$(compgen -G 'build/seismic_*.initrd')"
           stamped=$(jq -r .measurement_id build/measurements.azure-tdx.json)
           vhd=$(basename "$(compgen -G 'build/seismic_*.vhd')")
           [ "$stamped" = "$vhd" ] || {
@@ -220,16 +242,6 @@ jobs:
           (cd "$RUNNER_TEMP/initrd-root" \
             && find . -type f -print0 | sort -z | xargs -0 sha256sum) \
             > build/initrd-files.sha256
-
-      # What it takes to found a network on this image, published with it
-      # (`make founding-inputs`; the script owns the how and the why). Also
-      # the check that the genesis starter is the parameter set of the summit
-      # inside this image, which fails the build rather than the founding.
-      - name: Gather the founding inputs
-        run: |
-          make founding-inputs \
-            INITRD="$(compgen -G 'build/seismic_*.initrd')" \
-            FILE="$(compgen -G 'build/seismic_*.efi')"
 
       - name: Upload checksums for reproducibility comparison
         if: >-
@@ -319,19 +331,28 @@ jobs:
           AZURE_CONTAINER="$AZURE_CONTAINER"
           VHD="build/${{ steps.image.outputs.image }}.vhd"
 
-      # The release notes: the one place the blob URL and the measurements
-      # URL are written down together, for a human reading the release, the
-      # one description of what each founding input is, and where the three
-      # source commits are spelled out (this repository's own commit is the
-      # tag; the pins live in sources.yaml at that commit, so no asset
-      # repeats them).
+      # The machine-readable record of this release: the blob URL just
+      # pushed to and the account's ARM ID (asked of Azure here, where the
+      # job is logged in, rather than written down anywhere), the
+      # measurements asset, the UKI's hash and the source commits. Written
+      # after the push so it describes bytes that exist, and before the
+      # notes, which are rendered from it so the two cannot disagree. The
+      # script owns the shape.
+      - name: Write image.json
+        run: make image-json COMMIT="$GITHUB_SHA"
+
+      # The release notes: the same facts as image.json, for a human reading
+      # the release — the blob URL and the measurements URL together, what
+      # each founding input is, and the three source commits (this
+      # repository's own commit is the tag; the pins live in sources.yaml at
+      # that commit, so no asset repeats them beyond image.json).
       - name: Write the release notes
         env:
           IMAGE: ${{ steps.image.outputs.image }}
         run: |
-          vhd_blob_url="https://$AZURE_STORAGE_ACCOUNT.blob.core.windows.net/$AZURE_CONTAINER/$IMAGE.vhd"
-          pin() { awk -v key="$1" '$0 ~ "^" key ":" {f=1} f && /git_reference:/ {print $2; exit}' modules/seismic/sources.yaml; }
-          reth=$(pin seismic_reth); summit=$(pin summit); enclave=$(pin enclave)
+          fact() { jq -r "$1" build/image.json; }
+          vhd_blob_url=$(fact '.targets["azure-tdx"].vhd_blob_url')
+          reth=$(fact .sources.seismic_reth); summit=$(fact .sources.summit); enclave=$(fact .sources.enclave)
           cat > "$RUNNER_TEMP/notes.md" <<EOF
           Seismic node image \`$IMAGE\`, built by this repository at $GITHUB_SHA.
 
@@ -339,7 +360,8 @@ jobs:
           |---|---|
           | \`vhd_blob_url\` | \`$vhd_blob_url\` |
           | measurements | [\`measurements.azure-tdx.json\`](https://github.com/$GITHUB_REPOSITORY/releases/download/$IMAGE/measurements.azure-tdx.json) |
-          | checksums | \`SHA256SUMS\` over the \`.efi\` (the UKI the VHD wraps) and over every founding input below |
+          | \`image.json\` | where the bytes are and what they are, machine-readably: the blob URL and its storage account's ARM ID, the measurements asset, the UKI's sha256 and the source commits, per cloud target |
+          | checksums | \`SHA256SUMS\` over the \`.efi\` (the UKI the VHD wraps), \`image.json\` and every founding input below |
 
           Boot nodes from the \`vhd_blob_url\` above; the measurements are what a verifier expects those nodes to attest.
 
@@ -385,6 +407,7 @@ jobs:
             build/summit
             build/reth-genesis.json
             build/summit-genesis-starter.toml
+            build/image.json
 
   reprotest-build:
     name: reproducibility build
