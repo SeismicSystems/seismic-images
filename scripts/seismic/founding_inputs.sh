@@ -1,15 +1,18 @@
 #!/usr/bin/env bash
 # Gather what a network founded on the built image is founded from, into
-# build/, and write SHA256SUMS over it and the UKI. These are the release's
-# assets beside the measurements, made the same way by CI and by hand, so a
-# local build is checked against a release with
+# build/, and write SHA256SUMS over it, the measurements and the UKI. These
+# are the release's assets, made the same way by CI and by hand, so a local
+# build is checked against a release with
 # `sha256sum -c --ignore-missing SHA256SUMS`.
 #
-# Usage: founding_inputs.sh <initrd> <efi>   (the Makefile's INITRD and FILE)
+# Usage: founding_inputs.sh <initrd> <efi> <measurements>
+#        (the Makefile's INITRD, FILE and MEASUREMENTS_AZURE)
 set -euo pipefail
 
-initrd=${1:?usage: founding_inputs.sh <initrd> <efi>}
-efi=${2:?usage: founding_inputs.sh <initrd> <efi>}
+usage='usage: founding_inputs.sh <initrd> <efi> <measurements>'
+initrd=${1:?$usage}
+efi=${2:?$usage}
+measurements=${3:?$usage}
 # zstd ignores a symlink, and the build leaves `latest.initrd` as one.
 initrd=$(realpath "$initrd")
 cd "$(dirname "${BASH_SOURCE[0]}")/../.."
@@ -85,14 +88,29 @@ else
   echo "not checking $starter against the image's summit: it is x86-64 and this machine is not (kernel $arch, rosetta $rosetta); CI checks it" >&2
 fi
 
+uki=$(basename "$(realpath "$efi")")
+
+# The measurements are made against one UKI by a target of their own, and
+# only the stamp ties them to this one: hashing an earlier build's file into
+# this SHA256SUMS would certify PCRs no node in this image reports. The stamp
+# is the VHD name, which is the UKI's stem.
+vhd=${uki%.efi}.vhd
+stamped=$(jq -r '.measurement_id // empty' "$measurements")
+[ "$stamped" = "$vhd" ] || {
+  echo "$measurements measures ${stamped:-no named image}, not $vhd — it is another build's" >&2
+  exit 1
+}
+
 # One SHA256SUMS over everything the release carries: the UKI — the whole
 # image identity, since the VHD only wraps it on a FAT partition, and that
 # wrapping is not reproducible, so its hash would be a record no rebuilder
-# could confirm — and the founding inputs above. Bare filenames, so
-# `sha256sum -c SHA256SUMS` works from wherever the files were downloaded
-# to, and `--ignore-missing` checks whichever subset was taken.
-uki=$(basename "$(realpath "$efi")")
+# could confirm — the founding inputs above, and the measurements, which are
+# the admission policy a founder scaffolds into a network and so the last
+# asset that should arrive unchecked. Bare filenames, so `sha256sum -c
+# SHA256SUMS` works from wherever the files were downloaded to, and
+# `--ignore-missing` checks whichever subset was taken.
 (cd build && sha256sum \
-  "$uki" seismic-reth summit reth-genesis.json summit-genesis-starter.toml) \
+  "$uki" seismic-reth summit reth-genesis.json summit-genesis-starter.toml \
+  "$(basename "$measurements")") \
   > build/SHA256SUMS
 cat build/SHA256SUMS
