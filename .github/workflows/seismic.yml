@@ -11,6 +11,10 @@
 #                          import reads only blob storage)
 #   the measurements     → a GitHub prerelease tagged seismic_<version>, as
 #                          measurements.azure-tdx.json + SHA256SUMS
+#   the founding inputs  → the same release: the seismic-reth and summit
+#                          binaries taken back out of the built initrd and
+#                          the two genesis files a network founded on this
+#                          image starts from
 #
 # One-time setup for publishing. Three repo secrets — AZURE_CLIENT_ID (the
 # service principal's application ID), AZURE_TENANT_ID, AZURE_SUBSCRIPTION_ID.
@@ -77,12 +81,14 @@ jobs:
             modules/seismic/mkosi.build \
             modules/seismic/mkosi.postinst \
             modules/seismic/mkosi.extra/usr/bin/setup-nginx-ssl \
-            modules/seismic/mkosi.extra/usr/bin/setup-persistent-luks
+            modules/seismic/mkosi.extra/usr/bin/setup-persistent-luks \
+            scripts/founding_inputs.sh
           shellcheck -x \
             modules/seismic/mkosi.build \
             modules/seismic/mkosi.postinst \
             modules/seismic/mkosi.extra/usr/bin/setup-nginx-ssl \
-            modules/seismic/mkosi.extra/usr/bin/setup-persistent-luks
+            modules/seismic/mkosi.extra/usr/bin/setup-persistent-luks \
+            scripts/founding_inputs.sh
 
       - name: Check source pins
         shell: python3 {0}
@@ -203,14 +209,6 @@ jobs:
       - name: Generate EFI checksum
         run: sha256sum build/seismic_*.efi | tee build/checksum.sha256
 
-      # What the release ships beside the measurements. The UKI alone: it is
-      # the whole image identity (the VHD only wraps it on a FAT partition,
-      # and that wrapping is not reproducible, so its hash would be a record
-      # no rebuilder could confirm). Bare filename, so `sha256sum -c
-      # SHA256SUMS` works from wherever the file was downloaded to.
-      - name: Generate release checksums
-        run: (cd build && sha256sum seismic_*.efi) | tee build/SHA256SUMS
-
       # Per-file hashes let reprotest-compare name the exact divergent files
       # on a mismatch, instead of only reporting that the whole UKI differs.
       - name: Hash initrd contents
@@ -222,6 +220,16 @@ jobs:
           (cd "$RUNNER_TEMP/initrd-root" \
             && find . -type f -print0 | sort -z | xargs -0 sha256sum) \
             > build/initrd-files.sha256
+
+      # What it takes to found a network on this image, published with it
+      # (`make founding-inputs`; the script owns the how and the why). Also
+      # the check that the genesis starter is the parameter set of the summit
+      # inside this image, which fails the build rather than the founding.
+      - name: Gather the founding inputs
+        run: |
+          make founding-inputs \
+            INITRD="$(compgen -G 'build/seismic_*.initrd')" \
+            FILE="$(compgen -G 'build/seismic_*.efi')"
 
       - name: Upload checksums for reproducibility comparison
         if: >-
@@ -249,6 +257,10 @@ jobs:
             build/seismic_*.vhd
             build/measurements.azure-tdx.json
             build/SHA256SUMS
+            build/seismic-reth
+            build/summit
+            build/reth-genesis.json
+            build/summit-genesis-starter.toml
           retention-days: 1
           if-no-files-found: error
 
@@ -308,12 +320,18 @@ jobs:
           VHD="build/${{ steps.image.outputs.image }}.vhd"
 
       # The release notes: the one place the blob URL and the measurements
-      # URL are written down together, for a human reading the release.
+      # URL are written down together, for a human reading the release, the
+      # one description of what each founding input is, and where the three
+      # source commits are spelled out (this repository's own commit is the
+      # tag; the pins live in sources.yaml at that commit, so no asset
+      # repeats them).
       - name: Write the release notes
         env:
           IMAGE: ${{ steps.image.outputs.image }}
         run: |
           vhd_blob_url="https://$AZURE_STORAGE_ACCOUNT.blob.core.windows.net/$AZURE_CONTAINER/$IMAGE.vhd"
+          pin() { awk -v key="$1" '$0 ~ "^" key ":" {f=1} f && /git_reference:/ {print $2; exit}' modules/seismic/sources.yaml; }
+          reth=$(pin seismic_reth); summit=$(pin summit); enclave=$(pin enclave)
           cat > "$RUNNER_TEMP/notes.md" <<EOF
           Seismic node image \`$IMAGE\`, built by this repository at $GITHUB_SHA.
 
@@ -321,9 +339,27 @@ jobs:
           |---|---|
           | \`vhd_blob_url\` | \`$vhd_blob_url\` |
           | measurements | [\`measurements.azure-tdx.json\`](https://github.com/$GITHUB_REPOSITORY/releases/download/$IMAGE/measurements.azure-tdx.json) |
-          | checksums | \`SHA256SUMS\` over the \`.efi\` (the UKI the VHD wraps) |
+          | checksums | \`SHA256SUMS\` over the \`.efi\` (the UKI the VHD wraps) and over every founding input below |
 
           Boot nodes from the \`vhd_blob_url\` above; the measurements are what a verifier expects those nodes to attest.
+
+          ### Founding inputs
+
+          What a network founded on this image is founded *from*, as this image has it — so the genesis artifacts a founding derives are computed by the code these nodes run, against the schemas they speak:
+
+          | | |
+          |---|---|
+          | \`seismic-reth\`, \`summit\` | taken out of this image's initrd, so they are byte for byte the binaries the nodes run. x86-64 Linux, dynamically linked against glibc and OpenSSL 3 as Debian trixie has them |
+          | \`reth-genesis.json\` | the execution-layer genesis, read from the \`seismic_reth\` commit compiled into this image |
+          | \`summit-genesis-starter.toml\` | the consensus parameters this image's \`summit\` reads, defaults included. Every value is a per-network choice to review; \`namespace\` ships empty because it must be unique per network |
+
+          ### Built from
+
+          | | |
+          |---|---|
+          | [\`seismic-reth\`](https://github.com/SeismicSystems/seismic-reth/commit/$reth) | \`${reth:0:7}\` |
+          | [\`summit\`](https://github.com/SeismicSystems/summit/commit/$summit) | \`${summit:0:7}\` |
+          | [\`enclave\`](https://github.com/SeismicSystems/enclave/commit/$enclave) | \`${enclave:0:7}\` — attestation service, custodian service, tdx-init, summit-key-holder |
           EOF
 
       # A prerelease: CI builds of the branch are what the `dev` container
@@ -345,6 +381,10 @@ jobs:
           files: |
             build/measurements.azure-tdx.json
             build/SHA256SUMS
+            build/seismic-reth
+            build/summit
+            build/reth-genesis.json
+            build/summit-genesis-starter.toml
 
   reprotest-build:
     name: reproducibility build
