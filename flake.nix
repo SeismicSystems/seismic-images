@@ -5,165 +5,165 @@
     self,
     nixpkgs,
   }: let
-    system = "x86_64-linux";
-    pkgs = import nixpkgs {inherit system;};
-    reprepro = pkgs.stdenv.mkDerivation rec {
-      name = "reprepro-${version}";
-      version = "4.16.0";
+    # Every tool in a dev shell is built for that shell's own system, so the
+    # aarch64 shell (the Lima VM on Apple silicon) runs native binaries rather
+    # than x86-64 ones under Rosetta, where coreutils have crashed on some
+    # kernels. The image's architecture is mkosi's business (Architecture= in
+    # the configs), not the shell's. Port of flashbots/flashbots-images#158.
+    perSystem = system: let
+      pkgs = import nixpkgs {inherit system;};
+      reprepro = pkgs.stdenv.mkDerivation rec {
+        name = "reprepro-${version}";
+        version = "4.16.0";
 
-      src = pkgs.fetchurl {
-        url =
-          "https://alioth.debian.org/frs/download.php/file/"
-          + "4109/reprepro_${version}.orig.tar.gz";
-        sha256 = "14gmk16k9n04xda4446ydfj8cr5pmzsmm4il8ysf69ivybiwmlpx";
-      };
-
-      nativeBuildInputs = [pkgs.makeWrapper];
-      buildInputs =
-        pkgs.lib.singleton (pkgs.gpgme.override {gnupg = pkgs.gnupg;})
-        ++ (with pkgs; [db libarchive bzip2 xz zlib]);
-
-      postInstall = ''
-        wrapProgram "$out/bin/reprepro" --prefix PATH : "${pkgs.gnupg}/bin"
-      '';
-    };
-    measured-boot = pkgs.buildGoModule {
-      pname = "measured-boot";
-      version = "main";
-      src = pkgs.fetchFromGitHub {
-        owner = "flashbots";
-        repo = "measured-boot";
-        rev = "v1.2.0";
-        sha256 = "sha256-FjzJ6UQYyrM+U3OCMBpzd1wTxlikA5LI+NKrylGlG3c=";
-      };
-      vendorHash = "sha256-NrZjORe/MjfbRDcuYVOGjNMCo1JGWvJDNVEPojI3L/g=";
-    };
-    measured-boot-gcp = pkgs.buildGoModule {
-      pname = "measured-boot-gcp";
-      version = "main";
-      src = pkgs.fetchFromGitHub {
-        owner = "flashbots";
-        repo = "dstack-mr-gcp";
-        rev = "b16e08b32b3dc8f1af7087e12f9970dc91a0b9a0";
-        sha256 = "sha256-3KIKgWsDzmLXuRK9YVxX2zJ6jAlZSmRm/bLYE1kJY7k=";
-      };
-      vendorHash = "sha256-glOyRTrIF/zP78XGV+v58a1Bec6C3Fvc5c8G3PglzPM=";
-    };
-    attest-src = pkgs.fetchFromGitHub {
-      owner = "Easy-TEE";
-      repo = "attest";
-      rev = "12f1e29f6ea63ecc2f80f39c2c1f1172720bcf24";
-      hash = "sha256-Ekn8SMhgOzdK3RCGIUVviyge56gX08ZQVFWopsnOneM=";
-    };
-    attest = pkgs.rustPlatform.buildRustPackage {
-      pname = "attest";
-      version = "0.0.1";
-      src = attest-src;
-      cargoLock = {
-        lockFile = "${attest-src}/Cargo.lock";
-        outputHashes = {
-          "dcap-qvl-0.3.12" = "sha256-rLTp5wIhXRAcBtJb7lfd1TAg7yPRnwa0cBa1YT4LwKU=";
-          "cc-eventlog-0.5.8" = "sha256-KEauakj53LrhKTc0yYp5SM8ec0cFNm4YVuHCJYiPQjw=";
+        src = pkgs.fetchurl {
+          url =
+            "https://alioth.debian.org/frs/download.php/file/"
+            + "4109/reprepro_${version}.orig.tar.gz";
+          sha256 = "14gmk16k9n04xda4446ydfj8cr5pmzsmm4il8ysf69ivybiwmlpx";
         };
+
+        nativeBuildInputs = [pkgs.makeWrapper];
+        buildInputs =
+          pkgs.lib.singleton (pkgs.gpgme.override {gnupg = pkgs.gnupg;})
+          ++ (with pkgs; [db libarchive bzip2 xz zlib]);
+
+        postInstall = ''
+          wrapProgram "$out/bin/reprepro" --prefix PATH : "${pkgs.gnupg}/bin"
+        '';
       };
-      cargoBuildFlags = ["-p" "attest-cli" "--no-default-features"];
-      cargoTestFlags = ["-p" "attest-cli" "--no-default-features"];
-    };
-    mkosi = system: let
-      pkgsForSystem = import nixpkgs {inherit system;};
-      mkosiTools = with pkgsForSystem; [
-        apt
-        dpkg
-        gnupg
-        debootstrap
-        dosfstools
-        e2fsprogs
-        erofs-utils
-        mtools
-        gptfdisk
-        binutils
-        util-linux
-        zstd
-        which
-        qemu-utils
-        parted
-        jq
-        syft
-        reprepro
-        systemd
-        bash
-        coreutils
-        findutils
-        gnused
-        gnugrep
-        gawk
-        gnutar
-        gzip
-        xz
-        curl
-        git
-        patch
-        ncurses
-      ];
-      mkosiToolsEnv = pkgsForSystem.buildEnv {
-        name = "mkosi-tools";
-        paths = mkosiTools;
+      measured-boot = pkgs.buildGoModule {
+        pname = "measured-boot";
+        version = "main";
+        src = pkgs.fetchFromGitHub {
+          owner = "flashbots";
+          repo = "measured-boot";
+          rev = "v1.2.0";
+          sha256 = "sha256-FjzJ6UQYyrM+U3OCMBpzd1wTxlikA5LI+NKrylGlG3c=";
+        };
+        vendorHash = "sha256-NrZjORe/MjfbRDcuYVOGjNMCo1JGWvJDNVEPojI3L/g=";
       };
-      mkosi-unwrapped =
-        (pkgsForSystem.mkosi.override {
-          extraDeps = mkosiTools;
-        }).overrideAttrs (old: {
-          src = pkgsForSystem.fetchFromGitHub {
-            owner = "systemd";
-            repo = "mkosi";
-            rev = "f33cc45db3ddf0ed57594b58c9c161169d46e03c";
-            hash = "sha256-wjgucAQzjMy7GJiB+pbmYs3Fxvmg77gGGKIWlrJrarQ=";
+      measured-boot-gcp = pkgs.buildGoModule {
+        pname = "measured-boot-gcp";
+        version = "main";
+        src = pkgs.fetchFromGitHub {
+          owner = "flashbots";
+          repo = "dstack-mr-gcp";
+          rev = "b16e08b32b3dc8f1af7087e12f9970dc91a0b9a0";
+          sha256 = "sha256-3KIKgWsDzmLXuRK9YVxX2zJ6jAlZSmRm/bLYE1kJY7k=";
+        };
+        vendorHash = "sha256-glOyRTrIF/zP78XGV+v58a1Bec6C3Fvc5c8G3PglzPM=";
+      };
+      attest-src = pkgs.fetchFromGitHub {
+        owner = "Easy-TEE";
+        repo = "attest";
+        rev = "12f1e29f6ea63ecc2f80f39c2c1f1172720bcf24";
+        hash = "sha256-Ekn8SMhgOzdK3RCGIUVviyge56gX08ZQVFWopsnOneM=";
+      };
+      attest = pkgs.rustPlatform.buildRustPackage {
+        pname = "attest";
+        version = "0.0.1";
+        src = attest-src;
+        cargoLock = {
+          lockFile = "${attest-src}/Cargo.lock";
+          outputHashes = {
+            "dcap-qvl-0.3.12" = "sha256-rLTp5wIhXRAcBtJb7lfd1TAg7yPRnwa0cBa1YT4LwKU=";
+            "cc-eventlog-0.5.8" = "sha256-KEauakj53LrhKTc0yYp5SM8ec0cFNm4YVuHCJYiPQjw=";
           };
-          # TODO: remove these patch hunks from upstream nixpkgs next time mkosi has a release
-          # The latest mkosi doesn't need them
-          patches = pkgs.lib.drop 2 old.patches;
-          postPatch = let
-            fd = "${pkgs.patchutils}/bin/filterdiff";
-          in ''
-            { ${fd} -x '*/run.py' --hunks=x2,6 ${builtins.elemAt old.patches 0}
-              ${fd} -i '*/run.py' --hunks=x1-2 ${builtins.elemAt old.patches 0}
-              ${fd} --hunks=x1                 ${builtins.elemAt old.patches 1}
-            } | patch -p1 -F0
-
-            # From original nix package
-            substituteInPlace mkosi/__init__.py --replace-fail \
-              'systemd_tool_version(python_binary(context.config), ukify, sandbox=context.sandbox)' \
-              'systemd_tool_version(ukify, sandbox=context.sandbox)'
-
-            # Don't add /usr/bin and /usr/sbin to the PATH, only use /nix
-            sed -i -E '\#^\s+"/usr/(bin|sbin)",$#d' mkosi/run.py
-          '';
-        });
-    in
-      # Create a wrapper script that runs mkosi with unshare
-      # Unshare is needed to create files owned by multiple uids/gids
-      pkgsForSystem.writeShellScriptBin "mkosi" ''
-        exec ${pkgsForSystem.util-linux}/bin/unshare \
-          --map-auto --map-root-user \
-          --setuid=0 --setgid=0 \
-          -- \
-          env PATH="${mkosiToolsEnv}/bin" \
-          ${mkosi-unwrapped}/bin/mkosi "$@"
-      '';
-  in {
-    devShells = builtins.listToAttrs (map (system: {
-      name = system;
-      value.default = pkgs.mkShell {
-        nativeBuildInputs = with pkgs; [
-          (mkosi system)
-          measured-boot
-          measured-boot-gcp
-          attest
+        };
+        cargoBuildFlags = ["-p" "attest-cli" "--no-default-features"];
+        cargoTestFlags = ["-p" "attest-cli" "--no-default-features"];
+      };
+      mkosi = let
+        mkosiTools = with pkgs; [
+          apt
+          dpkg
+          gnupg
+          debootstrap
+          dosfstools
+          e2fsprogs
+          erofs-utils
+          mtools
+          gptfdisk
+          binutils
+          util-linux
+          zstd
+          which
+          qemu-utils
+          parted
+          jq
+          syft
+          reprepro
+          systemd
           bash
+          coreutils
+          findutils
+          gnused
+          gnugrep
+          gawk
+          gnutar
+          gzip
+          xz
           curl
           git
-          jq
+          patch
+          ncurses
         ];
+        mkosiToolsEnv = pkgs.buildEnv {
+          name = "mkosi-tools";
+          paths = mkosiTools;
+        };
+        mkosi-unwrapped =
+          (pkgs.mkosi.override {
+            extraDeps = mkosiTools;
+          }).overrideAttrs (old: {
+            src = pkgs.fetchFromGitHub {
+              owner = "systemd";
+              repo = "mkosi";
+              rev = "f33cc45db3ddf0ed57594b58c9c161169d46e03c";
+              hash = "sha256-wjgucAQzjMy7GJiB+pbmYs3Fxvmg77gGGKIWlrJrarQ=";
+            };
+            # TODO: remove these patch hunks from upstream nixpkgs next time mkosi has a release
+            # The latest mkosi doesn't need them
+            patches = pkgs.lib.drop 2 old.patches;
+            postPatch = let
+              fd = "${pkgs.patchutils}/bin/filterdiff";
+            in ''
+              { ${fd} -x '*/run.py' --hunks=x2,6 ${builtins.elemAt old.patches 0}
+                ${fd} -i '*/run.py' --hunks=x1-2 ${builtins.elemAt old.patches 0}
+                ${fd} --hunks=x1                 ${builtins.elemAt old.patches 1}
+              } | patch -p1 -F0
+
+              # From original nix package
+              substituteInPlace mkosi/__init__.py --replace-fail \
+                'systemd_tool_version(python_binary(context.config), ukify, sandbox=context.sandbox)' \
+                'systemd_tool_version(ukify, sandbox=context.sandbox)'
+
+              # Don't add /usr/bin and /usr/sbin to the PATH, only use /nix
+              sed -i -E '\#^\s+"/usr/(bin|sbin)",$#d' mkosi/run.py
+            '';
+          });
+      in
+        # Create a wrapper script that runs mkosi with unshare
+        # Unshare is needed to create files owned by multiple uids/gids
+        pkgs.writeShellScriptBin "mkosi" ''
+          exec ${pkgs.util-linux}/bin/unshare \
+            --map-auto --map-root-user \
+            --setuid=0 --setgid=0 \
+            -- \
+            env PATH="${mkosiToolsEnv}/bin" \
+            ${mkosi-unwrapped}/bin/mkosi "$@"
+        '';
+    in {inherit pkgs mkosi measured-boot measured-boot-gcp attest;};
+  in {
+    devShells = builtins.listToAttrs (map (system: let
+      inherit (perSystem system) pkgs mkosi measured-boot measured-boot-gcp attest;
+    in {
+      name = system;
+      value.default = pkgs.mkShell {
+        nativeBuildInputs =
+          [mkosi measured-boot measured-boot-gcp attest]
+          ++ (with pkgs; [bash curl git jq cpio zstd]);
         shellHook = ''
           mkdir -p mkosi.packages mkosi.cache mkosi.builddir ~/.cache/mkosi
           touch mkosi.builddir/mkosi.sources
