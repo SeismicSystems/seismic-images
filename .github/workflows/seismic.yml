@@ -19,6 +19,9 @@
 #                          URL and the storage account's ARM ID) and what
 #                          they are (measurements, UKI hash, source commits),
 #                          per cloud target
+#   the attestation      → Sigstore build provenance over every release
+#                          asset, binding its bytes to this workflow, the
+#                          `seismic` branch and the commit
 #
 # One-time setup for publishing. Three repo secrets — AZURE_CLIENT_ID (the
 # service principal's application ID), AZURE_TENANT_ID, AZURE_SUBSCRIPTION_ID.
@@ -291,6 +294,7 @@ jobs:
     permissions:
       contents: write
       id-token: write
+      attestations: write
     env:
       AZURE_STORAGE_ACCOUNT: seismicimages
       AZURE_CONTAINER: dev
@@ -341,6 +345,32 @@ jobs:
       - name: Write image.json
         run: make image-json COMMIT="$GITHUB_SHA"
 
+      # Build provenance over every asset the release will carry, signed
+      # with a short-lived Sigstore certificate issued to this workflow on
+      # this ref at this commit, and logged in Rekor. SHA256SUMS alone
+      # cannot catch a swapped asset: whoever can replace an asset can
+      # replace SHA256SUMS beside it. The attestation cannot be replaced
+      # that way, because the certificate names the workflow that signed
+      # it. After image.json, the last asset written and the one that
+      # completes SHA256SUMS; before the release, so no asset is ever
+      # downloadable unattested. The VHD is not attested: it is not
+      # reproducible, and the `.efi` it wraps is covered through
+      # SHA256SUMS. Pinned to the
+      # commit behind v4.2.2 rather than the tag: this job holds
+      # `contents: write`.
+      - name: Attest build provenance
+        id: attest
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+        with:
+          subject-path: |
+            build/measurements.azure-tdx.json
+            build/SHA256SUMS
+            build/seismic-reth
+            build/summit
+            build/reth-genesis.json
+            build/summit-genesis-starter.toml
+            build/image.json
+
       # The release notes: the same facts as image.json, for a human reading
       # the release — the blob URL and the measurements URL together, what
       # each founding input is, and the three source commits (this
@@ -349,6 +379,7 @@ jobs:
       - name: Write the release notes
         env:
           IMAGE: ${{ steps.image.outputs.image }}
+          ATTESTATION_URL: ${{ steps.attest.outputs.attestation-url }}
         run: |
           fact() { jq -r "$1" build/image.json; }
           vhd_blob_url=$(fact '.targets["azure-tdx"].vhd_blob_url')
@@ -382,6 +413,15 @@ jobs:
           | [\`seismic-reth\`](https://github.com/SeismicSystems/seismic-reth/commit/$reth) | \`${reth:0:7}\` |
           | [\`summit\`](https://github.com/SeismicSystems/summit/commit/$summit) | \`${summit:0:7}\` |
           | [\`enclave\`](https://github.com/SeismicSystems/enclave/commit/$enclave) | \`${enclave:0:7}\` — attestation service, custodian service, tdx-init, summit-key-holder |
+
+          ### Build provenance
+
+          Every asset above carries a [build provenance attestation]($ATTESTATION_URL): a Sigstore signature binding its bytes to the workflow, branch and commit that built it. \`SHA256SUMS\` says a download is what the release lists; the attestation says the release is what this workflow built. For any asset:
+
+          \`\`\`sh
+          gh attestation verify summit --repo $GITHUB_REPOSITORY \\
+              --cert-identity https://github.com/$GITHUB_WORKFLOW_REF
+          \`\`\`
           EOF
 
       # A prerelease: CI builds of the branch are what the `dev` container
