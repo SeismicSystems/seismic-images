@@ -52,6 +52,15 @@ Every push to `seismic` publishes the image it builds, in two places that share 
 
   Anything that needs an image's measurements fetches that URL. The publish job asserts the stamp equals `<tag>.vhd` before it creates the release, so name, blob and file agree by construction.
 
+Every release asset carries a [build provenance attestation](https://docs.github.com/en/actions/security-for-github-actions/using-artifact-attestations/using-artifact-attestations-to-establish-provenance-for-builds): before the release exists, the publish job signs a SLSA provenance statement over each asset's digest with a short-lived Sigstore certificate issued to this workflow on this branch at the building commit, and the signature is logged in Rekor. `SHA256SUMS` cannot catch a swapped asset on its own — whoever can replace an asset can replace the checksum file beside it — while an attestation names the workflow, ref and commit that signed it, so a replacement would have to be built by this workflow from a commit on `seismic`, in the open. Verify any asset against the workflow and the branch, not just the repository, so a file signed by another workflow or from another ref is refused:
+
+```sh
+gh attestation verify summit --repo SeismicSystems/seismic-images \
+    --cert-identity https://github.com/SeismicSystems/seismic-images/.github/workflows/seismic.yml@refs/heads/seismic
+```
+
+The VHD is not attested: it is not reproducible, and the `.efi` it wraps is listed in `SHA256SUMS`, which is. The attestation says who built the bytes and from which commit, not that the source is sound; the reproducibility build is the other half — anyone can rebuild that commit and compare.
+
 ### Founding inputs
 
 A network founded on an image has genesis artifacts that only that image's own code can compute — the execution-layer genesis hash comes out of `seismic-reth`, the consensus config digest out of `summit`, and each is chain identity to the nodes that derive it — and genesis files that have to match the schemas those binaries speak. So the release carries them, as this image has them:
