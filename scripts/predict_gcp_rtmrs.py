@@ -1,11 +1,13 @@
 #!/usr/bin/env python3
-"""Predict RTMR1 for a Seismic UKI booted as a GCP TDX confidential VM.
+"""Predict RTMR1 and RTMR2 for a Seismic UKI booted as a GCP TDX VM without a vTPM.
 
-GCP's TDVF extends RTMR1 with seven events, all derivable from the build:
-the boot-option action string, a separator, the boot disk's GPT, the UKI's
-authenticode hash, the embedded kernel's authenticode hash, and the two
-exit-boot-services strings. Replaying them yields the value a live quote
-carries. Verified against seismic-tee-gcp-1 (2026-09-14).
+RTMR1 takes seven firmware events: the boot-option action string, a
+separator, the boot disk's GPT, the UKI's authenticode hash, the embedded
+kernel's authenticode hash, and the two exit-boot-services strings. RTMR2
+takes systemd-stub's two events per UKI section (the section name, then its
+contents) and, with no vTPM for the kernel's EFI stub to prefer, the kernel's
+two: the command line it received as UTF-16 and the initrd. All are derivable
+from the build. Verified against tee-gcp-novtpm (2026-09-28).
 """
 
 import argparse
@@ -21,6 +23,11 @@ ACTION_EXIT_1 = b"Exit Boot Services Invocation"
 ACTION_EXIT_2 = b"Exit Boot Services Returned with Success"
 SEPARATOR = b"\x00\x00\x00\x00"
 LBA = 512
+# The UKI sections systemd-stub measures, in its order; absent ones are skipped.
+STUB_SECTIONS = [
+    ".linux", ".osrel", ".cmdline", ".initrd", ".ucode", ".splash", ".dtb",
+    ".uname", ".sbat", ".pcrpkey", ".profile", ".dtbauto", ".hwids", ".efifw",
+]
 
 
 def sha384(data: bytes) -> bytes:
@@ -57,17 +64,18 @@ def authenticode_sha384(pe: bytes) -> bytes:
     return h.digest()
 
 
-def linux_section(uki: bytes) -> bytes:
+def sections(uki: bytes) -> dict[str, bytes]:
+    """Each PE section's contents by name, VirtualSize bytes as the stub hashes them."""
     pe_off = struct.unpack_from("<I", uki, 0x3C)[0]
     nsec = struct.unpack_from("<H", uki, pe_off + 6)[0]
     sec_tbl = pe_off + 24 + struct.unpack_from("<H", uki, pe_off + 20)[0]
+    out = {}
     for i in range(nsec):
         off = sec_tbl + 40 * i
-        name = uki[off : off + 8].rstrip(b"\0")
-        vsize, _, _, raw_off = struct.unpack_from("<IIII", uki, off + 8)
-        if name == b".linux":
-            return uki[raw_off : raw_off + vsize]
-    sys.exit("no .linux section in UKI")
+        name = uki[off : off + 8].rstrip(b"\0").decode()
+        vsize, _, raw_size, raw_off = struct.unpack_from("<IIII", uki, off + 8)
+        out[name] = uki[raw_off : raw_off + min(vsize, raw_size)]
+    return out
 
 
 def disk_head(path: str, nbytes: int) -> bytes:
@@ -106,6 +114,7 @@ def main() -> None:
     ap.add_argument("--efi", required=True, help="the UKI, build/<id>_<version>.efi")
     ap.add_argument("--disk", help="GCE disk image (.tar.gz or .raw); default: <efi>.tar.gz")
     ap.add_argument("--expect", help="observed rtmr1 hex to compare against")
+    ap.add_argument("--expect-rtmr2", help="observed rtmr2 hex to compare against")
     ap.add_argument("--out", help="write JSON here instead of stdout")
     args = ap.parse_args()
     disk_path = args.disk or os.path.splitext(args.efi)[0] + ".tar.gz"
@@ -113,9 +122,12 @@ def main() -> None:
     uki = open(args.efi, "rb").read()
     gpt, disk_guid = gpt_event_data(disk_head(disk_path, 34 * LBA))
     uki_hash = authenticode_sha384(uki)
-    kernel_hash = authenticode_sha384(linux_section(uki))
+    secs = sections(uki)
+    if ".linux" not in secs:
+        sys.exit("no .linux section in UKI")
+    kernel_hash = authenticode_sha384(secs[".linux"])
 
-    events = [
+    rtmr1_events = [
         ("EV_EFI_ACTION", ACTION_BOOT.decode(), sha384(ACTION_BOOT)),
         ("EV_SEPARATOR", "00000000", sha384(SEPARATOR)),
         ("EV_EFI_GPT_EVENT", f"disk {disk_guid}", sha384(gpt)),
@@ -124,29 +136,51 @@ def main() -> None:
         ("EV_EFI_ACTION", ACTION_EXIT_1.decode(), sha384(ACTION_EXIT_1)),
         ("EV_EFI_ACTION", ACTION_EXIT_2.decode(), sha384(ACTION_EXIT_2)),
     ]
-    rtmr1 = b"\0" * 48
-    for _, _, digest in events:
-        rtmr1 = sha384(rtmr1 + digest)
+    rtmr2_events = []
+    for name in STUB_SECTIONS:
+        if name in secs:
+            rtmr2_events.append(("EV_IPL", f"{name} name", sha384(name.encode() + b"\0")))
+            rtmr2_events.append(("EV_IPL", f"{name} contents", sha384(secs[name])))
+    cmdline = secs.get(".cmdline", b"").rstrip(b"\0").decode()
+    rtmr2_events.append(
+        ("EV_EVENT_TAG", "LOADED_IMAGE::LoadOptions", sha384(cmdline.encode("utf-16-le") + b"\0\0"))
+    )
+    rtmr2_events.append(("EV_EVENT_TAG", "Linux initrd", sha384(secs.get(".initrd", b""))))
 
-    base = os.path.basename(args.efi)
+    def replay(events):
+        register = b"\0" * 48
+        for _, _, digest in events:
+            register = sha384(register + digest)
+        return register
+
+    rtmr1, rtmr2 = replay(rtmr1_events), replay(rtmr2_events)
+
+    base = os.path.basename(os.path.realpath(args.efi))
     stem = base[: -len(".efi")] if base.endswith(".efi") else base
     result = {
         "attestation_type": "gcp-tdx",
         "measurement_id": stem + ".tar.gz",
-        "measurements": {"rtmr1": {"expected": rtmr1.hex()}},
-        "events": [
-            {"type": t, "description": d, "sha384": h.hex()} for t, d, h in events
-        ],
+        "measurements": {
+            "rtmr1": {"expected": rtmr1.hex()},
+            "rtmr2": {"expected": rtmr2.hex()},
+        },
+        "events": {
+            register: [{"type": t, "description": d, "sha384": h.hex()} for t, d, h in evs]
+            for register, evs in (("rtmr1", rtmr1_events), ("rtmr2", rtmr2_events))
+        },
     }
     text = json.dumps(result, indent=2) + "\n"
     if args.out:
         open(args.out, "w").write(text)
     else:
         sys.stdout.write(text)
-    if args.expect:
-        ok = args.expect.lower().removeprefix("0x") == rtmr1.hex()
-        print(f"rtmr1 {'matches' if ok else 'DIFFERS FROM'} expected", file=sys.stderr)
-        sys.exit(0 if ok else 1)
+    ok = True
+    for name, expect, got in (("rtmr1", args.expect, rtmr1), ("rtmr2", args.expect_rtmr2, rtmr2)):
+        if expect:
+            match = expect.lower().removeprefix("0x") == got.hex()
+            ok = ok and match
+            print(f"{name} {'matches' if match else 'DIFFERS FROM'} expected", file=sys.stderr)
+    sys.exit(0 if ok else 1)
 
 
 if __name__ == "__main__":
