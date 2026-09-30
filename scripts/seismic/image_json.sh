@@ -12,9 +12,10 @@
 # was built from. Shaped per cloud target from the start, so a GCP image
 # adds an entry rather than a schema.
 #
-# Usage: image_json.sh <measurements> <SHA256SUMS> <commit>   (`make image-json`)
+# Usage: image_json.sh <measurements> <measurements-gcp> <SHA256SUMS> <commit>   (`make image-json`)
 #   measurements   the stamped measurements.azure-tdx.json; its measurement_id
 #                  names the image, as `<image>.vhd`
+#   measurements-gcp  the stamped measurements.gcp-tdx.json, `<image>.tar.gz`
 #   SHA256SUMS     the checksum file `make release-assets` wrote; the UKI's line
 #                  is read from it (and must name the same image), and
 #                  image.json's own line is appended to it. image.json is
@@ -26,16 +27,23 @@
 #   AZURE_CONTAINER           container within it             (dev)
 #   AZURE_STORAGE_ACCOUNT_ID  the account's ARM ID; asked of `az` when unset,
 #                             which needs an `az login` that can read the account
+#   GCP_PROJECT               project `make push-gcp` registered the GCE image in
+#   GCP_BUCKET                bucket it pushed the tarball to
 set -euo pipefail
 
-measurements=${1:?usage: image_json.sh <measurements> <SHA256SUMS> <commit>}
-sums=${2:?usage: image_json.sh <measurements> <SHA256SUMS> <commit>}
-commit=${3:?usage: image_json.sh <measurements> <SHA256SUMS> <commit>}
+usage='usage: image_json.sh <measurements> <measurements-gcp> <SHA256SUMS> <commit>'
+measurements=${1:?$usage}
+gcp_measurements=${2:?$usage}
+sums=${3:?$usage}
+commit=${4:?$usage}
 account=${AZURE_STORAGE_ACCOUNT:-seismicimages}
 container=${AZURE_CONTAINER:-dev}
+gcp_project=${GCP_PROJECT:-testnet-477314}
+gcp_bucket=${GCP_BUCKET:-seismic-tee-gcp-images}
 # Resolved before the cd below, so the arguments are read from where the
 # caller spelled them.
 measurements=$(realpath "$measurements")
+gcp_measurements=$(realpath "$gcp_measurements")
 sums=$(realpath "$sums")
 cd "$(dirname "${BASH_SOURCE[0]}")/../.."
 sources=modules/seismic/sources.yaml
@@ -47,6 +55,13 @@ if [ "$image" = "$stamped" ] || [ -z "$image" ]; then
   echo "$measurements: measurement_id $stamped does not name a VHD" >&2
   exit 1
 fi
+gcp_stamped=$(jq -r .measurement_id "$gcp_measurements")
+[ "$gcp_stamped" = "$image.tar.gz" ] || {
+  echo "$gcp_measurements measures $gcp_stamped, not $image.tar.gz: the two measurements are not one build's" >&2
+  exit 1
+}
+# The GCE image name `make push-gcp` registers: the tag with `_` and `.` as `-`.
+gce_image=$(printf '%s' "$image" | tr '_.' '--')
 
 # The one line of SHA256SUMS that names the UKI, and it must name *this*
 # image's: the measurements and the founding inputs are made by separate
@@ -94,6 +109,9 @@ jq -n \
   --arg vhd_blob_url "$vhd_blob_url" \
   --arg storage_account_id "$account_id" \
   --arg measurements "$(basename "$measurements")" \
+  --arg gcp_measurements "$(basename "$gcp_measurements")" \
+  --arg gce_image "projects/$gcp_project/global/images/$gce_image" \
+  --arg tarball_url "https://storage.googleapis.com/$gcp_bucket/$image.tar.gz" \
   --arg efi_sha256 "$efi_sha256" \
   '{
     image: $image,
@@ -104,6 +122,12 @@ jq -n \
         vhd_blob_url: $vhd_blob_url,
         storage_account_id: $storage_account_id,
         measurements: $measurements,
+        efi_sha256: $efi_sha256
+      },
+      "gcp-tdx": {
+        gce_image: $gce_image,
+        tarball_url: $tarball_url,
+        measurements: $gcp_measurements,
         efi_sha256: $efi_sha256
       }
     }
