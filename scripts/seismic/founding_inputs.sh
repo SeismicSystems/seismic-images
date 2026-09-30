@@ -9,10 +9,11 @@
 #        (the Makefile's INITRD, FILE and MEASUREMENTS_AZURE)
 set -euo pipefail
 
-usage='usage: founding_inputs.sh <initrd> <efi> <measurements>'
+usage='usage: founding_inputs.sh <initrd> <efi> <measurements-azure> <measurements-gcp>'
 initrd=${1:?$usage}
 efi=${2:?$usage}
 measurements=${3:?$usage}
+gcp_measurements=${4:?$usage}
 # zstd ignores a symlink, and the build leaves `latest.initrd` as one.
 initrd=$(realpath "$initrd")
 cd "$(dirname "${BASH_SOURCE[0]}")/../.."
@@ -100,6 +101,12 @@ stamped=$(jq -r '.measurement_id // empty' "$measurements")
   echo "$measurements measures ${stamped:-no named image}, not $vhd — it is another build's" >&2
   exit 1
 }
+tarball=${uki%.efi}.tar.gz
+stamped=$(jq -r '.measurement_id // empty' "$gcp_measurements")
+[ "$stamped" = "$tarball" ] || {
+  echo "$gcp_measurements measures ${stamped:-no named image}, not $tarball — it is another build's" >&2
+  exit 1
+}
 
 # One SHA256SUMS over everything the release carries: the UKI — the whole
 # image identity, since the VHD only wraps it on a FAT partition, and that
@@ -111,6 +118,6 @@ stamped=$(jq -r '.measurement_id // empty' "$measurements")
 # `--ignore-missing` checks whichever subset was taken.
 (cd build && sha256sum \
   "$uki" seismic-reth summit reth-genesis.json summit-genesis-starter.toml \
-  "$(basename "$measurements")") \
+  "$(basename "$measurements")" "$(basename "$gcp_measurements")") \
   > build/SHA256SUMS
 cat build/SHA256SUMS
