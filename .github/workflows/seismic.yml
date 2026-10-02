@@ -9,8 +9,12 @@
 #   the VHD              → the `dev` container of the seismicimages storage
 #                          account, as seismic_<version>.vhd (Azure's disk
 #                          import reads only blob storage)
+#   the tarball          → gs://seismic-tee-gcp-images, as seismic_<version>.tar.gz,
+#                          and registered in project testnet-477314 as the GCE
+#                          image seismic-<version with . as ->
 #   the measurements     → a GitHub prerelease tagged seismic_<version>, as
-#                          measurements.azure-tdx.json + SHA256SUMS
+#                          measurements.azure-tdx.json, measurements.gcp-tdx.json
+#                          + SHA256SUMS
 #   the founding inputs  → the same release: the seismic-reth and summit
 #                          binaries taken back out of the built initrd and
 #                          the two genesis files a network founded on this
@@ -54,6 +58,32 @@
 # The second grant is for image.json alone: `az storage account show` reads
 # the account's ARM ID from the management plane, and the blob role does not
 # include that read. Reader on the one account is the narrowest form.
+#
+# The GCP twin. Two repo secrets — GCP_WORKLOAD_IDENTITY_PROVIDER (the
+# provider's full resource name) and GCP_SERVICE_ACCOUNT (its email). No GCP
+# credential is stored either: google-github-actions/auth exchanges the OIDC
+# token through Workload Identity Federation for a token of the service
+# account below, which may write objects in the one bucket and register
+# images in the one project, and trusts the same subject:
+#
+#   PROJECT=testnet-477314
+#   NUMBER=$(gcloud projects describe "$PROJECT" --format='value(projectNumber)')
+#   gcloud iam workload-identity-pools create seismic-tee-github --project "$PROJECT" --location global
+#   gcloud iam workload-identity-pools providers create-oidc github --project "$PROJECT" --location global \
+#       --workload-identity-pool seismic-tee-github \
+#       --issuer-uri https://token.actions.githubusercontent.com \
+#       --attribute-mapping 'google.subject=assertion.sub,attribute.repository=assertion.repository' \
+#       --attribute-condition "assertion.sub == 'repo:SeismicSystems/seismic-images:ref:refs/heads/seismic'"
+#   gcloud iam service-accounts create seismic-tee-images-publish --project "$PROJECT"
+#   SA=seismic-tee-images-publish@$PROJECT.iam.gserviceaccount.com
+#   gcloud iam service-accounts add-iam-policy-binding "$SA" --project "$PROJECT" \
+#       --role roles/iam.workloadIdentityUser \
+#       --member "principalSet://iam.googleapis.com/projects/$NUMBER/locations/global/workloadIdentityPools/seismic-tee-github/attribute.repository/SeismicSystems/seismic-images"
+#   gcloud storage buckets add-iam-policy-binding gs://seismic-tee-gcp-images --member "serviceAccount:$SA" --role roles/storage.objectUser
+#   gcloud projects add-iam-policy-binding "$PROJECT" --member "serviceAccount:$SA" --role roles/compute.storageAdmin
+#
+#   GCP_WORKLOAD_IDENTITY_PROVIDER=projects/$NUMBER/locations/global/workloadIdentityPools/seismic-tee-github/providers/github
+#   GCP_SERVICE_ACCOUNT=$SA
 name: Seismic image CI
 
 on:
@@ -221,6 +251,12 @@ jobs:
             echo "measurement_id $stamped does not name the built VHD $vhd" >&2
             exit 1
           }
+          stamped=$(jq -r .measurement_id build/measurements.gcp-tdx.json)
+          tarball=$(basename "$(compgen -G 'build/seismic_*.tar.gz')")
+          [ "$stamped" = "$tarball" ] || {
+            echo "measurement_id $stamped does not name the built tarball $tarball" >&2
+            exit 1
+          }
 
       - name: Show build artifacts
         run: |
@@ -270,7 +306,9 @@ jobs:
           name: image-seismic
           path: |
             build/seismic_*.vhd
+            build/seismic_*.tar.gz
             build/measurements.azure-tdx.json
+            build/measurements.gcp-tdx.json
             build/SHA256SUMS
             build/seismic-reth
             build/summit
@@ -298,6 +336,9 @@ jobs:
     env:
       AZURE_STORAGE_ACCOUNT: seismicimages
       AZURE_CONTAINER: dev
+      GCP_PROJECT: testnet-477314
+      GCP_BUCKET: seismic-tee-gcp-images
+      GCP_LOCATION: us-central1
     steps:
       # For the Makefile: `make push-azure` is the one definition of the
       # upload and the blob URL, for CI and for a human alike.
@@ -320,6 +361,10 @@ jobs:
             echo "the measurements name $stamped, which is not among the built artifacts" >&2
             exit 1
           }
+          [ -f "build/$image.tar.gz" ] || {
+            echo "build/$image.tar.gz is not among the built artifacts" >&2
+            exit 1
+          }
           echo "image=$image" >> "$GITHUB_OUTPUT"
 
       - uses: azure/login@v3
@@ -335,6 +380,20 @@ jobs:
           AZURE_CONTAINER="$AZURE_CONTAINER"
           VHD="build/${{ steps.image.outputs.image }}.vhd"
 
+      - uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+      - uses: google-github-actions/setup-gcloud@v3
+
+      - name: Mirror the tarball to GCS and register the GCE image
+        run: >-
+          make push-gcp
+          GCP_PROJECT="$GCP_PROJECT"
+          GCP_BUCKET="$GCP_BUCKET"
+          GCP_LOCATION="$GCP_LOCATION"
+          TARBALL="build/${{ steps.image.outputs.image }}.tar.gz"
+
       # The machine-readable record of this release: the blob URL just
       # pushed to and the account's ARM ID (asked of Azure here, where the
       # job is logged in, rather than written down anywhere), the
@@ -343,7 +402,7 @@ jobs:
       # notes, which are rendered from it so the two cannot disagree. The
       # script owns the shape.
       - name: Write image.json
-        run: make image-json COMMIT="$GITHUB_SHA"
+        run: make image-json COMMIT="$GITHUB_SHA" GCP_PROJECT="$GCP_PROJECT" GCP_BUCKET="$GCP_BUCKET"
 
       # Build provenance over every asset the release will carry, signed
       # with a short-lived Sigstore certificate issued to this workflow on
@@ -364,6 +423,7 @@ jobs:
         with:
           subject-path: |
             build/measurements.azure-tdx.json
+            build/measurements.gcp-tdx.json
             build/SHA256SUMS
             build/seismic-reth
             build/summit
@@ -383,6 +443,7 @@ jobs:
         run: |
           fact() { jq -r "$1" build/image.json; }
           vhd_blob_url=$(fact '.targets["azure-tdx"].vhd_blob_url')
+          gce_image=$(fact '.targets["gcp-tdx"].gce_image')
           reth=$(fact .sources.seismic_reth); summit=$(fact .sources.summit); enclave=$(fact .sources.enclave)
           cat > "$RUNNER_TEMP/notes.md" <<EOF
           Seismic node image \`$IMAGE\`, built by this repository at $GITHUB_SHA.
@@ -390,7 +451,8 @@ jobs:
           | | |
           |---|---|
           | \`vhd_blob_url\` | \`$vhd_blob_url\` |
-          | measurements | [\`measurements.azure-tdx.json\`](https://github.com/$GITHUB_REPOSITORY/releases/download/$IMAGE/measurements.azure-tdx.json) |
+          | \`gce_image\` | \`$gce_image\` |
+          | measurements | [\`measurements.azure-tdx.json\`](https://github.com/$GITHUB_REPOSITORY/releases/download/$IMAGE/measurements.azure-tdx.json), [\`measurements.gcp-tdx.json\`](https://github.com/$GITHUB_REPOSITORY/releases/download/$IMAGE/measurements.gcp-tdx.json) |
           | \`image.json\` | where the bytes are and what they are, machine-readably: the blob URL and its storage account's ARM ID, the measurements asset, the UKI's sha256 and the source commits, per cloud target |
           | checksums | \`SHA256SUMS\` over the \`.efi\` (the UKI the VHD wraps), \`image.json\` and every founding input below |
 
@@ -442,6 +504,7 @@ jobs:
           fail_on_unmatched_files: true
           files: |
             build/measurements.azure-tdx.json
+            build/measurements.gcp-tdx.json
             build/SHA256SUMS
             build/seismic-reth
             build/summit
