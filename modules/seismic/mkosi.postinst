@@ -26,8 +26,8 @@ mkosi-chroot useradd -r -s /bin/false -G conf,engine-api,custodian-ipc reth
 mkosi-chroot useradd -r -s /bin/false -G conf,engine-api,tpm summit
 
 # Make scripts executable
-chmod +x "$BUILDROOT/usr/bin/setup-nginx-ssl"
-chmod +x "$BUILDROOT/usr/bin/setup-persistent-luks"
+chmod +x "$BUILDROOT/usr/bin/nginx-ssl-setup"
+chmod +x "$BUILDROOT/usr/bin/persistent-luks-setup"
 
 # Enable services
 mkdir -p "$BUILDROOT/etc/systemd/system/minimal.target.wants"
@@ -45,4 +45,4 @@ do
     ln -sf "/etc/systemd/system/$service" "$BUILDROOT/etc/systemd/system/minimal.target.wants/"
 done
 
-# Note: certbot-renew.timer is enabled by setup-nginx-ssl after initial certbot run
+# Note: certbot-renew.timer is enabled by nginx-ssl-setup after initial certbot run

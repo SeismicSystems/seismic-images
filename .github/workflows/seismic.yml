@@ -93,15 +93,15 @@ jobs:
           bash -n \
             modules/seismic/mkosi.build \
             modules/seismic/mkosi.postinst \
-            modules/seismic/mkosi.extra/usr/bin/setup-nginx-ssl \
-            modules/seismic/mkosi.extra/usr/bin/setup-persistent-luks \
+            modules/seismic/mkosi.extra/usr/bin/nginx-ssl-setup \
+            modules/seismic/mkosi.extra/usr/bin/persistent-luks-setup \
             scripts/seismic/founding_inputs.sh \
             scripts/seismic/image_json.sh
           shellcheck -x \
             modules/seismic/mkosi.build \
             modules/seismic/mkosi.postinst \
-            modules/seismic/mkosi.extra/usr/bin/setup-nginx-ssl \
-            modules/seismic/mkosi.extra/usr/bin/setup-persistent-luks \
+            modules/seismic/mkosi.extra/usr/bin/nginx-ssl-setup \
+            modules/seismic/mkosi.extra/usr/bin/persistent-luks-setup \
             scripts/seismic/founding_inputs.sh \
             scripts/seismic/image_json.sh
 
@@ -183,11 +183,11 @@ jobs:
           etc/systemd/system/minimal.target.wants/summit-key-holder.service
           etc/systemd/system/minimal.target.wants/summit.service
           etc/systemd/system/minimal.target.wants/tdx-init.service
+          usr/bin/nginx-ssl-setup
+          usr/bin/persistent-luks-setup
           usr/bin/seismic-attestation-service
           usr/bin/seismic-custodian-service
           usr/bin/seismic-reth
-          usr/bin/setup-nginx-ssl
-          usr/bin/setup-persistent-luks
           usr/bin/summit
           usr/bin/summit-key-holder
           usr/bin/tdx-init

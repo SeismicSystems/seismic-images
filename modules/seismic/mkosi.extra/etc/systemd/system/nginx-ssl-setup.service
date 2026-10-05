@@ -6,7 +6,7 @@ Requires=persistent-luks-setup.service tdx-init.service
 
 [Service]
 Type=oneshot
-ExecStart=/usr/bin/setup-nginx-ssl
+ExecStart=/usr/bin/nginx-ssl-setup
 StandardOutput=journal
 StandardError=journal
 

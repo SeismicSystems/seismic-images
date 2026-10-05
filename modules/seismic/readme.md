@@ -46,7 +46,7 @@ mkosi.extra/
 │   ├── systemd/system/*.{service,timer}    → /etc/systemd/system/...
 │   └── udev/rules.d/60-tpm-permissions.rules → /etc/udev/rules.d/...
 └── usr/
-    └── bin/{setup-nginx-ssl,setup-persistent-luks} → /usr/bin/...
+    └── bin/{nginx-ssl-setup,persistent-luks-setup} → /usr/bin/...
 ```
 
 Module-root files that are **not** in the image: `mkosi.conf`,
@@ -129,9 +129,9 @@ provisioner POSTs the node's configuration (TOML: `[network]` with the
 base64 network manifest + reth/summit geneses + bootnodes, and `[node]`
 with external_ip, genesis_node, and the domain name/email) via HTTP. On
 receipt tdx-init translates the payload into per-service config files
-under `/run/seismic/conf/`: `domain.env` (for `setup-nginx-ssl`),
+under `/run/seismic/conf/`: `domain.env` (for `nginx-ssl-setup`),
 `custodian.env` (consumed by `custodian.service` via `EnvironmentFile=`,
-and read by `setup-persistent-luks` for the genesis-mode guard),
+and read by `persistent-luks-setup` for the genesis-mode guard),
 `attestation.env` (likewise by `attestation.service`),
 `network-manifest.json` (hashed by the attestation service into
 `network_id`; its appearance also closes `summit-key-holder.service`'s
@@ -149,7 +149,7 @@ Runs as the `tdx-init` system user (group `conf`). The runtime dir is
 materialized with `tdx-init:conf 2750` by systemd-tmpfiles at
 sysinit.target, before any service starts.
 
-`setup-nginx-ssl` sources `domain.env` for certbot. `custodian.service`
+`nginx-ssl-setup` sources `domain.env` for certbot. `custodian.service`
 reads `SEISMIC_CUSTODIAN_GENESIS_NODE` from `custodian.env` and
 `attestation.service` reads `SEISMIC_ROOT_KEY_PEERS` from
 `attestation.env`; the attestation service fails fast at startup if the
@@ -198,7 +198,7 @@ method. A genesis node generates `root_key` at startup
 acquires it through the bootstrap methods driven by the attestation
 service. Whenever the root key becomes present, the custodian drops the
 LUKS keyfile at `/run/seismic/custodian/luks-keys` for
-`setup-persistent-luks` (see boot diagram above).
+`persistent-luks-setup` (see boot diagram above).
 
 ### `attestation.service`
 
@@ -219,7 +219,7 @@ restart; tight loops would hammer the TPM.
 ### `persistent-luks-setup.service`
 
 Oneshot that runs
-[`setup-persistent-luks`](mkosi.extra/usr/bin/setup-persistent-luks):
+[`persistent-luks-setup`](mkosi.extra/usr/bin/persistent-luks-setup):
 waits for the LUKS keys from the custodian, verifies the on-disk
 header, opens the LUKS volume, and mounts it at `/persistent`. In
 genesis mode it refuses to start over an already-provisioned volume

@@ -44,7 +44,7 @@ set -Eeuo pipefail
 # then retries per Restart=on-failure, overwriting this on the next attempt).
 on_error() {
     local rc=$?
-    write_status_json "$(jq -cn --arg e "setup-persistent-luks failed (rc=$rc); see journalctl -u persistent-luks-setup.service" \
+    write_status_json "$(jq -cn --arg e "persistent-luks-setup failed (rc=$rc); see journalctl -u persistent-luks-setup.service" \
         '{state:"error", error:$e}' 2>/dev/null)"
     return "$rc"
 }
@@ -95,7 +95,7 @@ TOKEN_TYPE="seismic-header-mac"
 DEFAULT_DISK_GLOB="/dev/disk/by-path/*10"
 DISK_GLOB_OVERRIDE_FILE="/etc/seismic-images/persistent-disk-glob"
 
-log() { echo "[setup-persistent-luks] $*" >&2; }
+log() { echo "[persistent-luks-setup] $*" >&2; }
 
 # True iff this boot runs in genesis launch mode (the custodian minted a
 # fresh root_key locally instead of fetching one from a peer). Missing file
