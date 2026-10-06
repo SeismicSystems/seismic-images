@@ -1,7 +1,8 @@
 [Unit]
 Description=Summit Consensus Server
-After=network.target persistent-luks-setup.service nginx-ssl-setup.service attestation.service reth.service summit-key-holder.service
-Requires=persistent-luks-setup.service nginx-ssl-setup.service attestation.service reth.service summit-key-holder.service
+After=network.target persistent-luks-setup.service nginx-ssl-setup.service attestation.service reth.service summit-persist.service
+Requires=persistent-luks-setup.service nginx-ssl-setup.service attestation.service reth.service summit-persist.service
+PartOf=summit.target
 
 [Service]
 Type=simple
@@ -16,22 +17,17 @@ UMask=0002
 # and will start working once summit's EnvFilter construction is updated.
 Environment=RUST_LOG=info
 
-# summit-key-holder.service is the sole provisioner of the keystore: it
-# generates the keys in RAM at boot (so deploy's founding harvest can pin
-# them into the network manifest before this node has any identity) and
-# writes them into /persistent/summit/keys on its `persist` op. persist-wait
-# blocks on that op — keystore written (first boot) or confirmed decodable
-# (reboot; the fresh RAM keys are discarded, and the launch-time continuity
-# assertion is what surfaces a pin mismatch) — and exits nonzero on any
-# definitive failure, so summit never starts on keys the network manifest
-# never pinned. The persistent-luks-setup → summit ordering above is what
-# brackets the persist after /persistent is mounted (tmpfiles-persistent.conf
-# creates /persistent/summit{,/db,/keys} via its ExecStartPost).
-ExecStartPre=/usr/bin/summit-key-holder persist-wait
+# summit-persist.service is the only writer of the keystore, and summit only
+# reads it. It must never gain a keygen step of its own, even as a fallback:
+# that would mint fresh keys the manifest never pinned, turning a loud startup
+# failure into a launch-check mismatch. The public-keys file the attestation
+# service serves is read-only here for the same reason.
+ReadOnlyPaths=/persistent/summit/keys /run/seismic/summit
+InaccessiblePaths=/run/seismic/summit/keys
 
-# Required (no `-`): the Requires= chain (attestation -> tdx-init) guarantees
-# summit.env exists, so a missing file is a real boot failure, not something to
-# tolerate.
+# Required (no `-`): the Requires= chain (persistent-luks-setup -> custodian ->
+# tdx-init) guarantees summit.env exists, so a missing file is a real boot
+# failure, not something to tolerate.
 EnvironmentFile=/run/seismic/conf/summit.env
 
 # --rpc-ip 127.0.0.1: nginx fronts the public RPC at /summit
@@ -71,6 +67,3 @@ Restart=on-failure
 RestartSec=10
 StandardOutput=journal
 StandardError=journal
-
-[Install]
-WantedBy=minimal.target

@@ -173,15 +173,16 @@ jobs:
           etc/systemd/system/custodian.service
           etc/systemd/system/persistent-luks-setup.service
           etc/systemd/system/reth.service
-          etc/systemd/system/summit-key-holder.service
+          etc/systemd/system/summit-keygen.service
+          etc/systemd/system/summit-persist.service
           etc/systemd/system/summit.service
+          etc/systemd/system/summit.target
           etc/systemd/system/tdx-init.service
           etc/systemd/system/minimal.target.wants/attestation.service
           etc/systemd/system/minimal.target.wants/custodian.service
           etc/systemd/system/minimal.target.wants/persistent-luks-setup.service
           etc/systemd/system/minimal.target.wants/reth.service
-          etc/systemd/system/minimal.target.wants/summit-key-holder.service
-          etc/systemd/system/minimal.target.wants/summit.service
+          etc/systemd/system/minimal.target.wants/summit.target
           etc/systemd/system/minimal.target.wants/tdx-init.service
           usr/bin/nginx-ssl-setup
           usr/bin/persistent-luks-setup
@@ -189,7 +190,7 @@ jobs:
           usr/bin/seismic-custodian-service
           usr/bin/seismic-reth
           usr/bin/summit
-          usr/bin/summit-key-holder
+          usr/bin/summit-persist
           usr/bin/tdx-init
           EOF
 
@@ -412,7 +413,7 @@ jobs:
           |---|---|
           | [\`seismic-reth\`](https://github.com/SeismicSystems/seismic-reth/commit/$reth) | \`${reth:0:7}\` |
           | [\`summit\`](https://github.com/SeismicSystems/summit/commit/$summit) | \`${summit:0:7}\` |
-          | [\`enclave\`](https://github.com/SeismicSystems/enclave/commit/$enclave) | \`${enclave:0:7}\` — attestation service, custodian service, tdx-init, summit-key-holder |
+          | [\`enclave\`](https://github.com/SeismicSystems/enclave/commit/$enclave) | \`${enclave:0:7}\` — attestation service, custodian service, tdx-init |
 
           ### Build provenance
 

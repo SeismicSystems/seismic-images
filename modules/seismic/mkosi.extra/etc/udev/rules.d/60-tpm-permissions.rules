@@ -1,8 +1,7 @@
-# The in-VM TPM consumers are:
-# - the attestation service (mints and verifies quotes)
-# - summit-key-holder (mints the founding-harvest quote over its RAM summit keys)
+# The in-VM TPM's only consumer is the attestation service, which mints every
+# quote on the node (the founding harvest's included) and verifies peers'.
 # Access goes through the dedicated `tpm` group (not the Debian-conventional `tss`),
-# which attestation and summit join as a supplementary group in mkosi.postinst.
+# which attestation joins as a supplementary group in mkosi.postinst.
 #
 # The quote path reads the Azure vTPM through the `az-cvm-vtpm` crate
 # (tss-esapi), which opens the RAW device `/dev/tpm0` directly rather than the

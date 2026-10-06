@@ -1,0 +1,17 @@
+[Unit]
+Description=Copy summit's tmpfs keys into its keystore, or confirm the keystore
+After=persistent-luks-setup.service summit-keygen.service
+Requires=persistent-luks-setup.service summit-keygen.service
+PartOf=summit.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+User=summit
+
+# Its own unit rather than summit.service's ExecStartPre=, so it runs once per
+# boot rather than at every summit restart, and so only it writes the keystore.
+ExecStart=/usr/bin/summit-persist
+
+StandardOutput=journal
+StandardError=journal

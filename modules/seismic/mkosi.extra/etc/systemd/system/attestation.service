@@ -1,7 +1,15 @@
 [Unit]
 Description=Seismic Attestation Service
-After=network.target tdx-init.service custodian.service
-Requires=tdx-init.service custodian.service
+# Starts at boot, before any configuration exists, so the founding harvest on
+# :7879 can serve summit's public keys, and a quote over them, before the
+# config POST. After summit-keygen, which writes the public-keys file the
+# harvest serves; network-online is for the IMDS round-trip in the quote path.
+After=network-online.target summit-keygen.service
+# The :7878 side waits in-process: it reads its peers once tdx-init's done
+# marker appears, and retries the custodian socket until the custodian creates
+# it. So neither unit is an ordering dependency; Wants= only pulls them into
+# the boot.
+Wants=network-online.target tdx-init.service custodian.service
 
 [Service]
 Type=simple
@@ -9,20 +17,21 @@ User=attestation
 
 Environment=RUST_BACKTRACE=full
 Environment=RUST_LOG=info
-# The dir is created by /etc/tmpfiles.d/seismic-runtime.conf, and the file
-# (carrying SEISMIC_ROOT_KEY_PEERS) is written by tdx-init on every boot
-# (after operator POSTs the config). systemd refuses to start the unit if
-# this file is missing; its existence is an invariant of the boot chain
-# (tdx-init.service is a Requires= above and produces this file before
-# exiting successfully).
-EnvironmentFile=/run/seismic/conf/attestation.env
 
 # Holds no key material: every key operation goes through the custodian's
 # Unix socket (the attestation user is in the custodian-ipc group; the custodian's
-# --allow grants scope what it may call). The HTTP listener binds only once
+# --allow grants scope what it may call). The :7878 listener binds only once
 # the custodian holds the root key, so the open port doubles as the
 # readiness signal deploy tooling watches.
-ExecStart=/usr/bin/seismic-attestation-service --ip 0.0.0.0 --port 7878
+#
+# :7879 is plain HTTP and reachable pre-admission. /v1/quote answers 410 once
+# the network manifest exists, but the conf dir is tmpfs, so the window
+# reopens every boot. It must stay operator-only, permanently, and that can
+# only be enforced outside the guest, by the cloud firewall: it has to hold
+# before the config POST, and the operator's range is not in the image.
+ExecStart=/usr/bin/seismic-attestation-service \
+    --peer-listen 0.0.0.0:7878 \
+    --operator-listen 0.0.0.0:7879
 
 Restart=always
 RestartSec=60
