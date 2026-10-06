@@ -3,14 +3,14 @@ set -euo pipefail
 
 CONFIG_FILE="/run/seismic/conf/domain.env"
 NODE_TEMPLATE="/etc/nginx/node-template.conf"
-NODE_NGINX_CONF="/persistent/conf/node-nginx.conf"
+NODE_NGINX_CONF="/persistent/nginx/node-nginx.conf"
 NODE_NGINX_ENABLED="/etc/nginx/sites-enabled/node"
-CERTBOT_DONE="/persistent/conf/.certbot-done"
+CERTBOT_DONE="/persistent/nginx/.certbot-done"
 
-# Certbot directories in /persistent/conf/certbot/
-CERTBOT_CONFIG_DIR="/persistent/conf/certbot"
-CERTBOT_WORK_DIR="/persistent/conf/certbot/work"
-CERTBOT_LOGS_DIR="/persistent/conf/certbot/logs"
+# Certbot directories in /persistent/nginx/certbot/
+CERTBOT_CONFIG_DIR="/persistent/nginx/certbot"
+CERTBOT_WORK_DIR="/persistent/nginx/certbot/work"
+CERTBOT_LOGS_DIR="/persistent/nginx/certbot/logs"
 
 # Check if config exists
 if [ ! -f "$CONFIG_FILE" ]; then
@@ -31,7 +31,6 @@ fi
 echo "Setting up nginx for domain: $DOMAIN_NAME"
 
 # Create persistent directories
-mkdir -p /persistent/conf
 mkdir -p "$CERTBOT_CONFIG_DIR" "$CERTBOT_WORK_DIR" "$CERTBOT_LOGS_DIR"
 
 # Generate nginx config from template (only if certbot hasn't run yet)
