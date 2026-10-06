@@ -10,7 +10,7 @@ Requires=custodian.service attestation.service
 Type=oneshot
 RemainAfterExit=yes
 
-ExecStart=/usr/bin/setup-persistent-luks
+ExecStart=/usr/bin/persistent-luks-setup
 # Materialize per-service /persistent/<svc> ownership and mode now that /persistent is mounted.
 ExecStartPost=/usr/bin/systemd-tmpfiles --create /etc/seismic/tmpfiles-persistent.conf
 
