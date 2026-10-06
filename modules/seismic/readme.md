@@ -10,7 +10,7 @@ Top-level files at a glance:
 | File                                   | Role                                                                                            |
 | -------------------------------------- | ----------------------------------------------------------------------------------------------- |
 | [`mkosi.conf`](mkosi.conf)             | Debian packages (`nginx`, `certbot`, `cryptsetup`, …) + build packages                          |
-| [`mkosi.build`](mkosi.build)           | Source-builds: pinned commits of `tdx-init`, `seismic-reth`, `seismic-attestation-service`, `seismic-custodian-service`, `summit-key-holder`, `summit` |
+| [`mkosi.build`](mkosi.build)           | Source-builds: pinned commits of `tdx-init`, `seismic-reth`, `seismic-attestation-service`, `seismic-custodian-service`, `summit` |
 | [`sources.yaml`](sources.yaml)         | Pinned git refs read by `mkosi.build` (structured manifest, Renovate/Dependabot-friendly)       |
 | [`mkosi.postinst`](mkosi.postinst)     | Creates users/groups, enables systemd services                                                  |
 | [`kernel/config.d/`](kernel/config.d/) | Seismic-specific kernel config snippets                                                         |
@@ -30,8 +30,8 @@ build-inputs only. The image rootfs is the union of four channels:
 | ----------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | [`mkosi.extra/`](mkosi.extra/)            | Copied wholesale at matching paths — see tree below.                                                                                                                                          |
 | `Packages=` in [`mkosi.conf`](mkosi.conf) | apt-installed Debian packages: `nginx`, `certbot`, `python3-certbot-nginx`, `cryptsetup`, `jq`, `libtss2-*`, `lz4`                                                                                |
-| [`mkosi.build`](mkosi.build)              | Compiled binaries written to `$DESTDIR`: `tdx-init`, `seismic-reth`, `seismic-attestation-service`, `seismic-custodian-service`, `summit-key-holder`, `summit` → `/usr/bin/`              |
-| [`mkosi.postinst`](mkosi.postinst)        | Image-fs mutations: system users + `engine-api`/`custodian-ipc`/`conf`/`tpm` groups in `/etc/{passwd,group}`, services symlinked into `/etc/systemd/system/minimal.target.wants/`, `setup-*` helper scripts made executable |
+| [`mkosi.build`](mkosi.build)              | Compiled binaries written to `$DESTDIR`: `tdx-init`, `seismic-reth`, `seismic-attestation-service`, `seismic-custodian-service`, `summit` → `/usr/bin/`              |
+| [`mkosi.postinst`](mkosi.postinst)        | Image-fs mutations: system users + `engine-api`/`custodian-ipc`/`conf`/`tpm` groups in `/etc/{passwd,group}`, services symlinked into `/etc/systemd/system/minimal.target.wants/`, `/usr/bin` scripts (`nginx-ssl-setup`, `persistent-luks-setup`, `summit-persist`) made executable |
 
 `mkosi.extra/` lays out exactly what its name suggests — the same paths
 relative to the image root:
@@ -46,7 +46,7 @@ mkosi.extra/
 │   ├── systemd/system/*.{service,timer}    → /etc/systemd/system/...
 │   └── udev/rules.d/60-tpm-permissions.rules → /etc/udev/rules.d/...
 └── usr/
-    └── bin/{nginx-ssl-setup,persistent-luks-setup} → /usr/bin/...
+    └── bin/{nginx-ssl-setup,persistent-luks-setup,summit-persist} → /usr/bin/...
 ```
 
 Module-root files that are **not** in the image: `mkosi.conf`,
@@ -57,235 +57,156 @@ documentation only — neither read at build time nor shipped.
 Services
 ---
 
-Each of the following is a systemd unit under
-[`mkosi.extra/etc/systemd/system/`](mkosi.extra/etc/systemd/system/). They're
-enabled (added to `minimal.target.wants`) via the loop in
-[`mkosi.postinst`](mkosi.postinst).
+Each unit lives under
+[`mkosi.extra/etc/systemd/system/`](mkosi.extra/etc/systemd/system/) and
+is enabled into `minimal.target.wants` by the loop in
+[`mkosi.postinst`](mkosi.postinst); the three summit units come in
+through `summit.target`. What each process is, and the order a boot
+walks them in, is
+[the node lifecycle](https://github.com/SeismicSystems/seismic/blob/main/docs/tee/architecture.md#node-lifecycle-power-on-to-serving).
+The edges themselves are each unit's `After=`/`Requires=` lines; on a
+running node, `systemctl list-dependencies minimal.target` prints them.
 
-**Boot chain (services ordered by when they're needed):**
+Two things the boot needs have no unit:
 
-```
-  summit-key-holder.service   (parallel to the whole chain, from network-online:
-                               summit keys in RAM, {pubkeys, quote} on :7879 for
-                               the founding harvest; summit.service's
-                               persist-wait ExecStartPre blocks on its persist op)
+- **TPM device perms** come from a udev rule,
+  [`60-tpm-permissions.rules`](mkosi.extra/etc/udev/rules.d/60-tpm-permissions.rules),
+  applied the moment the kernel publishes the device.
+- **`/persistent/<svc>` ownership and mode** come from
+  [`tmpfiles-persistent.conf`](mkosi.extra/etc/seismic/tmpfiles-persistent.conf),
+  applied by `persistent-luks-setup.service`'s `ExecStartPost` once the
+  LUKS volume is mounted.
 
-  tdx-init.service       (waits for operator config POST → /run/seismic/conf/)
-          │
-          ▼
-  custodian.service      (owns root_key, serves key ops on the custodian socket,
-          │               drops LUKS keys to /run/seismic/custodian/)
-          ▼
-  attestation.service  (attestation RPC on :7878; on joining nodes
-          │                     fetches root_key from peers into the custodian)
-          ▼
-  persistent-luks-setup.service  (reads LUKS keys, verifies header MAC, mounts /persistent)
-          │
-          ▼
-  nginx-ssl-setup.service ──► certbot-renew.timer
-          │                    (cron-style, fires
-          │                     certbot-renew.service
-          │                     monthly to renew the
-          │                     Let's Encrypt cert)
-          ▼
-  reth.service
-          │
-          ▼
-  summit.service
-```
+### Users and groups
 
-The boot chain has no service-level TPM-perms or per-service dir-setup;
-both are handled out-of-band:
+Created in [`mkosi.postinst`](mkosi.postinst). Each service runs as its
+own system user; the groups are the only way one reaches another's
+files, sockets or devices.
 
-- **TPM device perms** — see
-  [`60-tpm-permissions.rules`](mkosi.extra/etc/udev/rules.d/60-tpm-permissions.rules)
-  (udev rule, applied at device-creation time).
-- **`/persistent/<svc>` ownership/mode** — see
-  [`tmpfiles-persistent.conf`](mkosi.extra/etc/seismic/tmpfiles-persistent.conf)
-  (applied by `persistent-luks-setup.service`'s `ExecStartPost` after
-  the LUKS volume is mounted).
+| User | Supplementary groups | Runs |
+| --- | --- | --- |
+| `tdx-init` | — | `tdx-init.service` |
+| `custodian` | — | `custodian.service` |
+| `attestation` | `conf`, `custodian-ipc`, `tpm` | `attestation.service` |
+| `reth` | `conf`, `engine-api`, `custodian-ipc` | `reth.service` (primary group `engine-api`) |
+| `summit` | `conf`, `engine-api` | `summit-keygen`, `summit-persist`, `summit` |
+| root | | `persistent-luks-setup`, `nginx-ssl-setup`, `certbot-renew` |
 
-### TPM access
+| Group | Grants |
+| --- | --- |
+| `conf` | reading `/run/seismic/conf` |
+| `custodian-ipc` | connecting to the custodian socket; the unit's `--allow` grants then decide what each user may call |
+| `engine-api` | summit connecting to reth's Engine API socket |
+| `tpm` | opening `/dev/tpm*`. `attestation` is the only member: a process that can quote arbitrary `report_data` can have a peer wrap `root_key` to a key of its own ([one process opens the TPM](https://github.com/SeismicSystems/seismic/blob/main/docs/tee/architecture.md#one-process-opens-the-tpm)) |
 
-Configured declaratively via the
-[udev rule](mkosi.extra/etc/udev/rules.d/60-tpm-permissions.rules) —
-perms are set the moment the kernel publishes the device, before any
-service starts. No ordering constraints; no `Requires=`/`After=`
-against any TPM-setup unit anywhere.
+### Directories
 
-The udev rule sets the dedicated `tpm` group on the device nodes; the
-in-VM TPM consumers' users join it as a supplementary group in
-`mkosi.postinst`: `attestation` (quote minting/verification in
-`attestation.service`) and `summit` (the founding-harvest quote in
-`summit-key-holder.service`). The custodian and `reth` don't talk to
-the TPM. The TPM2 user-space libraries the quote path links against
-(`libtss2-esys-…`, `libtss2-tctildr0t64`) come from `mkosi.conf`
-Packages.
+Runtime dirs are tmpfs, created each boot by
+[`tmpfiles.d/seismic-runtime.conf`](mkosi.extra/etc/tmpfiles.d/seismic-runtime.conf)
+unless a unit declares them with `RuntimeDirectory=`. Persistent dirs are
+on the LUKS volume, from
+[`tmpfiles-persistent.conf`](mkosi.extra/etc/seismic/tmpfiles-persistent.conf).
+
+| Path | Owner, mode | Written by | Read by |
+| --- | --- | --- | --- |
+| `/run/seismic/conf` | `tdx-init:conf 2750` | tdx-init | `conf` members and root ([files below](#tdx-initservice)) |
+| `/run/seismic/custodian` | `custodian:custodian-ipc 2750` | the custodian: its socket, and the LUKS keyfile (0400) | `custodian-ipc` members connect; `persistent-luks-setup` reads and shreds the keyfile |
+| `/run/seismic/status` | `root:root 0755` | `persistent-luks-setup` (wipe progress) | the attestation service |
+| `/run/seismic/summit` | `summit:summit 0755` | `summit-keygen`, `summit-persist` | the attestation service; read-only to `summit.service` |
+| `/run/seismic/summit/keys` | `summit:summit 0700` | `summit-keygen` | `summit-persist`; inaccessible to `summit.service` |
+| `/run/reth-engine` | `reth:engine-api 0750` (`RuntimeDirectory=`) | reth's Engine API socket | summit |
+| `/persistent/nginx` | `root:root 0700` | `nginx-ssl-setup`, `certbot-renew` | nginx |
+| `/persistent/reth` | `reth:reth 0700` | reth | reth |
+| `/persistent/summit/db` | `summit:summit 0700` | summit | summit |
+| `/persistent/summit/keys` | `summit:summit 0700` | `summit-persist` | summit, read-only |
+
+Setgid on the two `2750` dirs gives every file created in them the
+dir's group, so the writer needs no membership of its own.
 
 ### `tdx-init.service`
 
-Runs `tdx-init wait-for-config`, which on every boot blocks until a
-provisioner POSTs the node's configuration (TOML: `[network]` with the
-base64 network manifest + reth/summit geneses + bootnodes, and `[node]`
-with external_ip, genesis_node, and the domain name/email) via HTTP. On
-receipt tdx-init translates the payload into per-service config files
-under `/run/seismic/conf/`: `domain.env` (for `nginx-ssl-setup`),
-`custodian.env` (consumed by `custodian.service` via `EnvironmentFile=`,
-and read by `persistent-luks-setup` for the genesis-mode guard),
-`attestation.env` (likewise by `attestation.service`),
-`network-manifest.json` (hashed by the attestation service into
-`network_id`; its appearance also closes `summit-key-holder.service`'s
-quote window for the boot), `reth-genesis.json` (the chain spec
-`reth.service` passes to `--chain`), and `summit-genesis.toml` (the
-summit genesis `summit.service` passes to `--genesis-path`, decoded
-verbatim from the POST's `summit_genesis_base64`).
-The drop-zone is tmpfs (declared in
-[`tmpfiles.d/seismic-runtime.conf`](mkosi.extra/etc/tmpfiles.d/seismic-runtime.conf)),
-so the sentinel `tdx-init-done` is wiped each boot and deploy tooling
-re-POSTs every time — matches the broader RAM-only design where
-`root_key` is also re-fetched per boot.
+Blocks on `:8080` every boot until the operator POSTs the node's
+configuration, then writes one file per consumer into
+`/run/seismic/conf` and drops the `.tdx-init-done` sentinel:
 
-Runs as the `tdx-init` system user (group `conf`). The runtime dir is
-materialized with `tdx-init:conf 2750` by systemd-tmpfiles at
-sysinit.target, before any service starts.
+| File | Read by |
+| --- | --- |
+| `domain.env` | `nginx-ssl-setup` |
+| `custodian.env` | systemd for `custodian.service` (`EnvironmentFile=`), and `persistent-luks-setup` for its genesis-mode guard |
+| `attestation.env` | the attestation service, once the sentinel appears |
+| `network-manifest.json` | the attestation service; its appearance closes the harvest's quote window |
+| `reth-p2p.env` | systemd for `reth.service` |
+| `reth-genesis.json` | reth (`--chain`) |
+| `summit.env` | systemd for `summit.service` |
+| `summit-genesis.toml` | summit (`--genesis-path`) |
 
-`nginx-ssl-setup` sources `domain.env` for certbot. `custodian.service`
-reads `SEISMIC_CUSTODIAN_GENESIS_NODE` from `custodian.env` and
-`attestation.service` reads `SEISMIC_ROOT_KEY_PEERS` from
-`attestation.env`; the attestation service fails fast at startup if the
-custodian holds no root key and no peers are set (no in-binary fallback —
-operator config is the only source of peer IPs). reth reads its chain spec from
-`/run/seismic/conf/reth-genesis.json`; summit reads its genesis from
-`/run/seismic/conf/summit-genesis.toml`.
+### `summit.target`: `summit-keygen`, `summit-persist`, `summit`
 
-### `summit-key-holder.service`
+Summit's keys must exist before the manifest pins them, and its keystore
+opens only with LUKS, after the POST. Two oneshots carry the keys across
+that gap
+([summit's keys before LUKS](https://github.com/SeismicSystems/seismic/blob/main/docs/tee/network-founding.md#summits-keys-before-luks)):
 
-Runs [`summit-key-holder`](https://github.com/SeismicSystems/enclave/tree/seismic/bin/summit-key-holder)
-`serve` as user `summit`. Generates this node's summit keys (ed25519
-node + BLS consensus) in RAM at boot and serves `{pubkeys, quote}` over
-plain HTTP on `:7879`, so deploy's founding harvest can pin the keys
-into the network manifest before the node has any identity. Starts at
-`network-online.target`, parallel to `tdx-init.service` — before any
-operator POST (network is only for the IMDS round-trip in the quote
-path). Quote serving returns `410 Gone` once tdx-init drops the network
-manifest; the conf dir is tmpfs, so that window re-opens every boot —
-`:7879` must stay operator-CIDR-only in the NSG permanently. Pubkey
-serving continues for life (from the keystore once it exists) and feeds
-the launch-time pubkey-continuity assertion.
+- **`summit-keygen`** runs at boot: `summit keys generate
+  --no-overwrite` into `/run/seismic/summit/keys`, then the public halves from
+  `summit keys show --json` into `/run/seismic/summit/public-keys.json`.
+- **`summit-persist`** runs after `persistent-luks-setup` and decides
+  from the keystore on disk; the cases are in the
+  [script](mkosi.extra/usr/bin/summit-persist)'s header. Every
+  successful run rewrites the public-keys file from the keystore, which
+  is what the launch checks read.
 
-The persist control socket at `/run/summit-key-holder/control.sock`
-(a `RuntimeDirectory=` of the unit — a service-private dir, not one of
-the cross-user grants in `tmpfiles.d/seismic-runtime.conf`, since both
-ends run as the `summit` user) carries the single `persist` op:
-`summit.service`'s
-`ExecStartPre=summit-key-holder persist-wait` blocks on it, after which
-the keystore under `/persistent/summit/keys` is written (first boot) or
-confirmed (reboot) and the RAM keys are discarded. TPM access for quote
-minting comes via the `tpm` group, shared with the attestation service.
-
-### `custodian.service`
-
-Runs [`seismic-custodian-service`](https://github.com/SeismicSystems/enclave)
-as user `custodian` — the trust root of the node. It owns
-`root_key` (RAM-only) and serves key derivation and root-key wrapping on
-`/run/seismic/custodian/custodian.sock`; it has no network listener.
-The socket lives in a `custodian:custodian-ipc 2750` directory
-(from `tmpfiles.d/seismic-runtime.conf`; setgid assigns new sockets to
-the `custodian-ipc` filesystem access group, which gates who may connect),
-and the unit's `--allow` grants pin which caller UID may invoke which
-method. A genesis node generates `root_key` at startup
-(`SEISMIC_CUSTODIAN_GENESIS_NODE` from `custodian.env`); a joining node
-acquires it through the bootstrap methods driven by the attestation
-service. Whenever the root key becomes present, the custodian drops the
-LUKS keyfile at `/run/seismic/custodian/luks-keys` for
-`persistent-luks-setup` (see boot diagram above).
+The start order, and what restarting each unit reaches, are drawn in
+[`summit.target`](mkosi.extra/etc/systemd/system/summit.target).
 
 ### `attestation.service`
 
-Runs [`seismic-attestation-service`](https://github.com/SeismicSystems/enclave)
-on `:7878` as user `attestation` (supplementary `conf` for
-`/run/seismic/conf`, `custodian-ipc` for the custodian socket). The
-network-facing half of the process split: it verifies and mints
-attestation evidence and answers peer bootstrap, but holds no key
-material — every key operation goes through the custodian socket. On a
-joining node it fetches the wrapped `root_key` from the configured peers
-and installs it into the local custodian. Access to `/dev/tpm0` for
-attestation-quote generation comes via the udev rule that sets `tpm`
-group ownership on the device node (the `attestation` user is a member).
+Two listeners. `:7879` serves the founding harvest from boot, plain
+HTTP, and must stay operator-CIDR-only permanently: the quote window
+reopens every boot, since the manifest that closes it lives on tmpfs.
+`:7878` binds only once the custodian holds `root_key`, so the open port
+is the readiness signal deploy tooling waits on.
 
-`RestartSec=60` is unusually long — TDX quote generation can be slow on
-restart; tight loops would hammer the TPM.
+`RestartSec=60` is unusually long: quote generation can be slow, and a
+tight restart loop would hammer the TPM.
 
 ### `persistent-luks-setup.service`
 
-Oneshot that runs
-[`persistent-luks-setup`](mkosi.extra/usr/bin/persistent-luks-setup):
-waits for the LUKS keys from the custodian, verifies the on-disk
-header, opens the LUKS volume, and mounts it at `/persistent`. In
-genesis mode it refuses to start over an already-provisioned volume
-(the freshly minted `root_key` could never open it — a stale genesis
-flag or the wrong disk). See the script's header comment for the full
-design (key handoff, header MAC, detached-header open).
+Runs [`persistent-luks-setup`](mkosi.extra/usr/bin/persistent-luks-setup);
+its header comment has the design (key handoff, header MAC,
+detached-header open). In genesis mode it refuses an
+already-provisioned volume, since a freshly minted `root_key` could
+never open it. `Restart=on-failure` rides out a disk not yet attached
+or a slow root-key bootstrap.
 
-`Restart=on-failure RestartSec=5` to ride out transient cases (disk
-not yet attached, root-key bootstrap slow to complete).
+The disk defaults to `/dev/disk/by-path/*10` (Azure LUN 10). Other
+clouds override it with globs in
+`/etc/seismic-images/persistent-disk-glob`. TODO: have deploy tooling
+write the override at provisioning time.
 
-`ExecStartPost=/usr/bin/systemd-tmpfiles --create /etc/seismic/tmpfiles-persistent.conf`
-materializes the per-service `/persistent/<svc>` subdirs after mount.
+### `nginx-ssl-setup.service` and `certbot-renew.timer`
 
-The disk discovery defaults to `/dev/disk/by-path/*10` (Azure LUN 10).
-Override with globs in `/etc/seismic-images/persistent-disk-glob` for
-other clouds. TODO: have deploy tooling write the override file at
-provisioning time.
+`nginx-ssl-setup` templates
+[`node-template.conf`](mkosi.extra/etc/nginx/node-template.conf) with
+the domain, obtains a Let's Encrypt certificate, and enables
+`certbot-renew.timer`. reth and summit both `Requires=` it, so a failed
+certificate keeps them down, though neither needs public HTTPS to run.
 
-### `nginx-ssl-setup.service`
+The timer renews monthly with `RandomizedDelaySec=1h`, so a fleet does
+not hit Let's Encrypt in the same minute. Renewal can race a disk
+snapshot (TODO in the service file).
 
-Oneshot. Sources `/run/seismic/conf/domain.env` for domain+email,
-templates [`node-template.conf`](mkosi.extra/etc/nginx/node-template.conf)
-into a real nginx config, runs certbot to obtain a Let's Encrypt cert,
-and enables the renewal timer.
+### `reth.service` and `summit.service`
 
-Currently a hard dependency for `reth.service` + `summit.service`
-(see their `Requires=`). Cert acquisition failure blocks them from
-starting — coupling is probably too tight (an EL/CL doesn't
-fundamentally need public HTTPS up to function), but it's the
-current behavior.
+| | reth | summit |
+| --- | --- | --- |
+| Public | devp2p `:30303` TCP+UDP (discv5 only) | P2P `:18551` |
+| Loopback | RPC `:8545`, WS `:8546`, metrics `:9001` | REST `:3030` (nginx `/summit`), metrics `:9002` |
 
-### `certbot-renew.service` + `certbot-renew.timer`
-
-Monthly cron-style job that runs `certbot renew`. The timer uses
-`RandomizedDelaySec=1h` so fleet deployments don't all hit Let's
-Encrypt at the same minute.
-
-Known issue (flagged inline in the service file): potential race with
-disk snapshots — worth adding a lock before production use.
-
-### `reth.service`
-
-Runs [`seismic-reth`](https://github.com/SeismicSystems/seismic-reth) as
-user `reth` (group `eth`). Execution client — HTTP RPC on `:8545`, WS on
-`:8546`, devp2p on `:30303` (TCP+UDP; discv5-only discovery, discv4 and DNS
-discovery disabled), metrics on `:9001`. Fetches its purpose keys at
-startup and decrypts `TxSeismic` (type `0x74`) calldata in-process.
-
-Gated on `attestation.service` (and through it `custodian.service`),
-since it fetches its purpose keys from the custodian's Unix socket
-at startup.
-
-### `summit.service`
-
-Runs [`summit`](https://github.com/SeismicSystems/summit) as user
-`summit` (group `eth`). Consensus client — REST API on `:3030` (reached
-via nginx `/summit`), P2P on `:18551`, metrics on `:9002`. Reads its
-genesis from `/run/seismic/conf/summit-genesis.toml` (written by
-tdx-init each boot) and its keys from `/persistent/summit/keys`,
-provisioned solely by `summit-key-holder.service` — the
-`persist-wait` `ExecStartPre` blocks until the holder has written or
-confirmed the keystore, so summit never starts on keys the network
-manifest never pinned.
-
-Gated on both `attestation.service` and `reth.service`
-(EL ↔ CL via Engine API), plus `summit-key-holder.service`.
+reth fetches its purpose keys from the custodian socket at startup;
+`persistent-luks-setup` finishing implies the custodian holds
+`root_key`. summit drives reth over the Engine API socket and only
+reads its keystore.
 
 Doc gap
 ---
