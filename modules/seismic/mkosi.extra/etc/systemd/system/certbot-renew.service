@@ -5,6 +5,6 @@ Requires=persistent-luks-setup.service
 
 [Service]
 Type=oneshot
-ExecStart=/usr/bin/certbot renew --quiet --nginx --config-dir /persistent/conf/certbot --work-dir /persistent/conf/certbot/work --logs-dir /persistent/conf/certbot/logs
+ExecStart=/usr/bin/certbot renew --quiet --nginx --config-dir /persistent/nginx/certbot --work-dir /persistent/nginx/certbot/work --logs-dir /persistent/nginx/certbot/logs
 
 # TODO: create lockfile when snapshots are running; don't run this until it's deleted
