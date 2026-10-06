@@ -1,0 +1,33 @@
+[Unit]
+Description=Summit and the setup units that carry its keys into the keystore
+# A name for the group, not a dependency: nothing orders after this target.
+# It pulls its members into the boot, and gives operators one handle to
+# restart, stop or inspect them by (`systemctl restart summit.target`) without
+# knowing which member the others hang off.
+#
+# Members, in start order:
+#
+#   summit-keygen    oneshot, at boot        keys into /run/seismic/summit/keys,
+#        │                                   public halves beside them
+#        ▼
+#   summit-persist   oneshot, after          tmpfs keys into /persistent/summit/keys,
+#        │           persistent-luks-setup   or confirms the keystore
+#        ▼
+#   summit           long-running            only reads the keystore
+#
+# What a restart reaches. A restart propagates to the units that depend on the
+# restarted one, never to its dependencies, and a start leaves an active unit
+# alone: both oneshots stay active (RemainAfterExit=yes), so each runs once per
+# boot unless restarted explicitly.
+#
+#   restart summit.target    → keygen, persist, summit   (PartOf= on each)
+#   restart summit-keygen    → keygen, persist, summit   (Requires= chain)
+#   restart summit-persist   → persist, summit           (summit Requires= it)
+#   restart summit.service   → summit
+#
+# Keygen is a no-op on a re-run (--no-overwrite), so no restart can replace
+# the keys the manifest pins.
+Wants=summit-keygen.service summit-persist.service summit.service
+
+[Install]
+WantedBy=minimal.target

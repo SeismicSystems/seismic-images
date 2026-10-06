@@ -3,7 +3,7 @@ set -euxo pipefail
 
 # Create the system users/groups our services run as (User=, Group= in unit files).
 # They have to exist in the image's /etc/passwd and /etc/group at boot;
-# hence build-time creation here via mkosi-chroot, not at first boot. Each user is referenced 
+# hence build-time creation here via mkosi-chroot, not at first boot. Each user is referenced
 # by name in the corresponding service unit; deleting any of these breaks startup.
 # TODO(samlaf): consider switching to systemd-sysusers for declarative user/group creation.
 mkosi-chroot groupadd -r engine-api    # reth ↔ summit engine-API IPC socket at /run/reth-engine/api.ipc
@@ -11,35 +11,34 @@ mkosi-chroot groupadd -r custodian-ipc # local clients authorized to reach the k
 mkosi-chroot groupadd -r conf          # tdx-init writes /persistent/conf/*; readers join this group
 mkosi-chroot groupadd -r tpm           # /dev/tpm* access for quote minting (60-tpm-permissions.rules)
 
-# The conf group lets services read the config files tdx-init writes under
-# /run/seismic/conf. The custodian stays out of every shared group: its one
-# config input (custodian.env) is loaded by systemd as root via
-# EnvironmentFile=, so the key-holding process itself opens no conf file.
-# reth is in custodian-ipc so the image generation that ships the custodian's
-# --allow reth grant also lets a socket-consuming reth connect.
-# tpm membership lists the in-VM TPM consumers: attestation for its quote
-# RPCs, summit for summit-key-holder's founding-harvest quote.
 mkosi-chroot useradd -r -s /bin/false -G conf tdx-init
+# The custodian doesn't need the conf group because its one config
+# input (custodian.env) is loaded by systemd as root via EnvironmentFile=
 mkosi-chroot useradd -r -s /bin/false custodian
+# Only attestation is in tpm: it mints every quote on the node, the founding
+# harvest's included. Any process that can quote arbitrary report_data can
+# have a peer wrap root_key to a key of its own, so the set stays at one.
 mkosi-chroot useradd -r -s /bin/false -G conf,custodian-ipc,tpm attestation
+# reth fetches its keys from the custodian socket (custodian.service grants
+# reth:tx-io,rng).
 mkosi-chroot useradd -r -s /bin/false -G conf,engine-api,custodian-ipc reth
-mkosi-chroot useradd -r -s /bin/false -G conf,engine-api,tpm summit
+mkosi-chroot useradd -r -s /bin/false -G conf,engine-api summit
 
 # Make scripts executable
 chmod +x "$BUILDROOT/usr/bin/nginx-ssl-setup"
 chmod +x "$BUILDROOT/usr/bin/persistent-luks-setup"
+chmod +x "$BUILDROOT/usr/bin/summit-persist"
 
 # Enable services
 mkdir -p "$BUILDROOT/etc/systemd/system/minimal.target.wants"
 for service in \
     persistent-luks-setup.service \
     tdx-init.service \
-    summit-key-holder.service \
     nginx-ssl-setup.service \
     reth.service \
     custodian.service \
     attestation.service \
-    summit.service
+    summit.target
 do
     mkosi-chroot systemctl enable "$service"
     ln -sf "/etc/systemd/system/$service" "$BUILDROOT/etc/systemd/system/minimal.target.wants/"

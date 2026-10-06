@@ -26,13 +26,14 @@ RuntimeDirectoryPreserve=restart
 # peers, NAT extip) can't be hardcoded, so tdx-init emits them as flag
 # fragments in reth-p2p.env, spliced in via $RETH_*_FLAG.
 
-# Required (no `-`): the Requires= chain (attestation -> tdx-init) guarantees
-# reth-p2p.env exists, so a missing file is a real boot failure, not something
-# to tolerate.
+# Required (no `-`): the Requires= chain (persistent-luks-setup -> custodian ->
+# tdx-init) guarantees reth-p2p.env exists, so a missing file is a real boot
+# failure, not something to tolerate.
 EnvironmentFile=/run/seismic/conf/reth-p2p.env
 
 # --chain reth-genesis.json: tdx-init writes it each boot (/run is tmpfs); the
-#   Requires= chain (attestation -> tdx-init) guarantees it exists first.
+#   Requires= chain (persistent-luks-setup -> custodian -> tdx-init) guarantees
+#   it exists first.
 # --datadir /persistent/reth: created by tmpfiles-persistent.conf via
 #   persistent-luks-setup's ExecStartPost.
 # --http.api/--ws.api eth,net,web3 (not `all`): nginx proxies /rpc+/ws wholesale,

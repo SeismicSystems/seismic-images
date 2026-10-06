@@ -1,0 +1,25 @@
+[Unit]
+Description=Generate summit's consensus keys into tmpfs
+# Runs at boot, before any configuration exists: the founding harvest quotes
+# these keys' public halves, and the manifest pins them, before the config
+# POST. It depends on nothing the POST produces.
+PartOf=summit.target
+
+[Service]
+Type=oneshot
+# Stays active after it exits, so it runs once per boot: summit-persist's
+# Requires= then finds it satisfied instead of starting it again.
+RemainAfterExit=yes
+User=summit
+
+# --no-overwrite makes the key files their own write-once marker: with either
+# file present summit writes nothing and exits 0, so a re-run in the same boot
+# cannot replace pinned keys. /run/seismic/summit/keys comes from
+# tmpfiles.d/seismic-runtime.conf.
+ExecStart=/usr/bin/summit keys generate --key-store-path /run/seismic/summit/keys --no-overwrite
+# The attestation service's harvest serves this file. `keys show` fails on a
+# half-written set, which fails the unit.
+ExecStartPost=/bin/sh -c '/usr/bin/summit keys show --json --key-store-path /run/seismic/summit/keys > /run/seismic/summit/public-keys.json.tmp && mv -f /run/seismic/summit/public-keys.json.tmp /run/seismic/summit/public-keys.json'
+
+StandardOutput=journal
+StandardError=journal
