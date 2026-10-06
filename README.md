@@ -39,6 +39,8 @@ The two formats differ because Azure and GCP expose TDX quotes through different
 
 The files are named for the attestation type whose registers they hold (the admission pipeline keys policy records on `attestation_type`), so an image published for both clouds carries one of each under one release.
 
+What a node's boot measures on Azure, register by register, and the `(pcr4, pcr9, pcr11)` guest identity admission binds, is in [`docs/azure-measurements.md`](docs/azure-measurements.md).
+
 ## Published images
 
 Every push to `seismic` publishes the image it builds, in two places that share one name:
@@ -99,16 +101,13 @@ Where the image's bytes are and what they are, in one machine-readable file, so 
 
 ## What's in the image
 
-| Component                | Purpose                                                           | Source                                                                                                                       |
-| ------------------------ | ----------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
-| `tdx-init`               | First-boot LUKS provisioning; writes `/persistent/conf/node.json` | [SeismicSystems/enclave/bin/tdx-init](https://github.com/SeismicSystems/enclave/tree/seismic/bin/tdx-init)             |
-| `seismic-custodian-service` | Owns `root_key`; serves key derivation and root-key wrapping over a local Unix socket only | [SeismicSystems/enclave/bin/custodian-service](https://github.com/SeismicSystems/enclave/tree/seismic/bin/custodian-service) |
-| `seismic-attestation-service` | Attestation evidence + peer root-key bootstrap; network-facing on `:7878` | [SeismicSystems/enclave/bin/attestation-service](https://github.com/SeismicSystems/enclave/tree/seismic/bin/attestation-service) |
-| `seismic-reth`           | Execution client                                                  | [SeismicSystems/seismic-reth](https://github.com/SeismicSystems/seismic-reth)                                                |
-| `summit`                 | Consensus client                                                  | [SeismicSystems/summit](https://github.com/SeismicSystems/summit)                                                            |
-| `nginx` + `certbot`      | HTTPS termination with Let's Encrypt for public RPC/WS/metrics    | Debian                                                                                                                       |
-
-Source-built pins are in [`modules/seismic/mkosi.build`](modules/seismic/mkosi.build).
+The Seismic node stack: [`seismic-reth`](https://github.com/SeismicSystems/seismic-reth),
+[`summit`](https://github.com/SeismicSystems/summit), and from
+[`enclave`](https://github.com/SeismicSystems/enclave) `tdx-init`, the custodian and the
+attestation service, built from the commits pinned in
+[`sources.yaml`](modules/seismic/sources.yaml), plus nginx and certbot from Debian.
+[`modules/seismic/readme.md`](modules/seismic/readme.md) covers how they are assembled:
+units, users and groups, directories.
 
 ## Exposed HTTPS endpoints
 
@@ -119,31 +118,20 @@ nginx terminates TLS (Let's Encrypt) and reverse-proxies the following paths to 
 | `/rpc`            | `reth` `:8545`                   | Ethereum JSON-RPC (shielded tx support via TxSeismic)                                                 | ✅ intended public                      |
 | `/ws`             | `reth` `:8546`                   | Ethereum WebSocket RPC                                                                                | ✅ intended public                      |
 | `/summit`         | `summit` `:3030`                 | Consensus REST API, incl. `/summit/get_deposit_signature/...` used by the staking UI                  | ⚠️ **overly broad** — see warning below |
-| `/attestation`    | `attestation-service` `:7878` | Attestation API (tx-io attestation evidence, health/LUKS status, reth's purpose-key fetch, peer root-key bootstrap) | ⚠️ **overly broad** — see warning below |
+| `/attestation`    | `attestation-service` `:7878` | Attestation API (tx-io attestation evidence, health/LUKS status, admission-chain status, peer root-key bootstrap) | ✅ same surface as `:7878`, which is open to anyone |
 | `/metrics/reth`   | `reth` `:9001`                   | Prometheus metrics                                                                                    | ⚠️ unauthenticated                      |
 | `/metrics/summit` | `summit` `:9002`                 | Prometheus metrics                                                                                    | ⚠️ unauthenticated                      |
 
 ### ⚠️ Known sharp edges
 
-Everything above listens on the single public `:443`. The intended long-term fix is to split nginx into two tiers — a public server block with only the endpoints that should reach the open internet (`/rpc`, `/ws`, a narrowed `/summit/get_deposit_signature`, attestation-quote queries on `/attestation`), and an internal server block on a separate port with the rest (`/metrics/*`, the full `/summit/*` query surface, operator-facing `/attestation/*`). The deploy tooling would then configure cloud firewall rules (Azure NSG / GCP firewall) to allow the public port from `0.0.0.0/0` and restrict the internal port to the VPC CIDR. Until that split lands, the concrete issues are:
+Everything above listens on the single public `:443`. The intended long-term fix is to split nginx into two tiers — a public server block with only the endpoints that should reach the open internet (`/rpc`, `/ws`, a narrowed `/summit/get_deposit_signature`, `/attestation`), and an internal server block on a separate port with the rest (`/metrics/*`, the full `/summit/*` query surface). The deploy tooling would then configure cloud firewall rules (Azure NSG / GCP firewall) to allow the public port from `0.0.0.0/0` and restrict the internal port to the VPC CIDR. Until that split lands, the concrete issues are:
 
 - **`/summit/*` is a blanket proxy.** Summit exposes a JSON-RPC surface (via `jsonrpsee`) with ~20 methods: mostly read-only state queries (`getCheckpoint`, `getValidatorBalance`, `getDeposit`, etc. — analogous to `eth_*` reads and safe to expose), plus `getDepositSignature` which causes a BLS signature in the enclave, plus `sendGenesis` on the genesis-setup API which must *never* be public at runtime. Narrowing requires JSON-RPC-method-level filtering (all calls are `POST /`, so you can't gate by URL path alone). `getDepositSignature` additionally has no rate limiting — trivially DoS-able — and should gain `limit_req` regardless of network controls.
-- **`/attestation/*` is a blanket proxy.** Only endpoints *designed* to be public should be reachable (attestation quotes, health/status queries). `getPurposeKeys` returns secret key material and is meant for reth over localhost only. Current config doesn't enforce this, and the attestation service has no caller auth of its own — anyone who can reach the port can call `getPurposeKeys`. Pending the public/internal port split, or narrowing via an explicit allowlist — and `getPurposeKeys` retires entirely once reth fetches its keys from the custodian socket.
 - **`/metrics/*` is unauthenticated.** Operationally safe on a locked-down network (the cloud firewall rule above is the right fix), but anyone who can reach the port can scrape sync status, peer info, and resource usage. Do *not* expose the internal port to the open internet without adding basic auth or an IP allowlist on top.
 
 ## Our diff vs upstream
 
 You can track [diff with upstream](https://github.com/SeismicSystems/seismic-images/compare/main...seismic) by comparing the `seismic` branch with `origin/main` (which is pinned to the upstream commit we most recently rebased on).
-
-## Where to look next
-
-- [**DEVELOPMENT.md**](DEVELOPMENT.md) — generic mkosi module/kernel-config/reproducibility guidance (from upstream)
-- [`docs/azure-measurements.md`](docs/azure-measurements.md) — what a node's boot measures on Azure TDX: the register inventory, what each PCR covers, and the `(pcr4, pcr9, pcr11)` guest identity admission uses
-- [`modules/seismic/mkosi.conf`](modules/seismic/mkosi.conf) — Debian packages in the image
-- [`modules/seismic/mkosi.build`](modules/seismic/mkosi.build) — pinned commits for `reth` / `enclave` / `summit` / `tdx-init`
-- [`modules/seismic/mkosi.postinst`](modules/seismic/mkosi.postinst) — systemd services enabled on boot
-- [`modules/seismic/mkosi.extra/`](modules/seismic/mkosi.extra/) — per-service unit files and configs
-- Deploy tooling lives in a separate repo.
 
 ## Running locally
 
