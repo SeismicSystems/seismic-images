@@ -25,8 +25,8 @@ Environment=RUST_LOG=info
 ReadOnlyPaths=/persistent/summit/keys /run/seismic/summit
 InaccessiblePaths=/run/seismic/summit/keys
 
-# Required (no `-`): the Requires= chain (persistent-luks-setup -> custodian ->
-# tdx-init) guarantees summit.env exists, so a missing file is a real boot
+# Required (no `-`): the Requires= chain (persistent-luks-setup -> tdx-init)
+# guarantees summit.env exists, so a missing file is a real boot
 # failure, not something to tolerate.
 EnvironmentFile=/run/seismic/conf/summit.env
 

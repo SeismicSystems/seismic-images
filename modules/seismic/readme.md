@@ -85,8 +85,8 @@ files, sockets or devices.
 
 | User | Supplementary groups | Runs |
 | --- | --- | --- |
-| `tdx-init` | — | `tdx-init.service` |
-| `custodian` | — | `custodian.service` |
+| `tdx-init` | `custodian-ipc` | `tdx-init.service` |
+| `custodian` | `conf` | `custodian.service` |
 | `attestation` | `conf`, `custodian-ipc`, `tpm` | `attestation.service` |
 | `reth` | `conf`, `engine-api`, `custodian-ipc` | `reth.service` (primary group `engine-api`) |
 | `summit` | `conf`, `engine-api` | `summit-keygen`, `summit-persist`, `summit` |
@@ -95,7 +95,7 @@ files, sockets or devices.
 | Group | Grants |
 | --- | --- |
 | `conf` | reading `/run/seismic/conf` |
-| `custodian-ipc` | connecting to the custodian socket; the unit's `--allow` grants then decide what each user may call |
+| `custodian-ipc` | connecting to the custodian socket, where the unit's `--allow` grants then decide what each user may call; reading `candidate-tx-io-pk` |
 | `engine-api` | summit connecting to reth's Engine API socket |
 | `tpm` | opening `/dev/tpm*`. `attestation` is the only member: a process that can quote arbitrary `report_data` can have a peer wrap `root_key` to a key of its own ([one process opens the TPM](https://github.com/SeismicSystems/seismic/blob/main/docs/tee/architecture.md#one-process-opens-the-tpm)) |
 
@@ -110,7 +110,7 @@ on the LUKS volume, from
 | Path | Owner, mode | Written by | Read by |
 | --- | --- | --- | --- |
 | `/run/seismic/conf` | `tdx-init:conf 2750` | tdx-init | `conf` members and root ([files below](#tdx-initservice)) |
-| `/run/seismic/custodian` | `custodian:custodian-ipc 2750` | the custodian: its socket, and the LUKS keyfile (0400) | `custodian-ipc` members connect; `persistent-luks-setup` reads and shreds the keyfile |
+| `/run/seismic/custodian` | `custodian:custodian-ipc 2750` | the custodian: its socket, the LUKS keyfile (0400), and `candidate-tx-io-pk` (0640) | `custodian-ipc` members connect; `persistent-luks-setup` reads and shreds the keyfile; the attestation service and tdx-init read `candidate-tx-io-pk` |
 | `/run/seismic/status` | `root:root 0755` | `persistent-luks-setup` (wipe progress) | the attestation service |
 | `/run/seismic/summit` | `summit:summit 0755` | `summit-keygen`, `summit-persist` | the attestation service; read-only to `summit.service` |
 | `/run/seismic/summit/keys` | `summit:summit 0700` | `summit-keygen` | `summit-persist`; inaccessible to `summit.service` |
@@ -132,9 +132,8 @@ configuration, then writes one file per consumer into
 | File | Read by |
 | --- | --- |
 | `domain.env` | `nginx-ssl-setup` |
-| `custodian.env` | systemd for `custodian.service` (`EnvironmentFile=`), and `persistent-luks-setup` for its genesis-mode guard |
 | `attestation.env` | the attestation service, once the sentinel appears |
-| `network-manifest.json` | the attestation service; its appearance closes the harvest's quote window |
+| `network-manifest.json` | the attestation service, whose quote window it closes; the custodian, for its `founding_tx_io_pk` |
 | `reth-p2p.env` | systemd for `reth.service` |
 | `reth-genesis.json` | reth (`--chain`) |
 | `summit.env` | systemd for `summit.service` |
@@ -159,11 +158,21 @@ that gap
 The start order, and what restarting each unit reaches, are drawn in
 [`summit.target`](mkosi.extra/etc/systemd/system/summit.target).
 
+### `custodian.service`
+
+Starts at boot, mints a candidate `root_key` in RAM, and writes its
+`tx_io_pk@0` to `/run/seismic/custodian/candidate-tx-io-pk`, so the
+founding harvest can quote it before any configuration exists. When the
+attestation service first asks for `root_key`, after the POST, the custodian
+reads the manifest's pin: it keeps the candidate if the pin names it, and
+otherwise discards it and installs only a fetched key that derives the pin.
+
 ### `attestation.service`
 
-Two listeners. `:7879` serves the founding harvest from boot, plain
-HTTP, and must stay operator-CIDR-only permanently: the quote window
-reopens every boot, since the manifest that closes it lives on tmpfs.
+Two listeners. `:7879` serves the founding harvest from boot (summit's
+public keys and the custodian's candidate `tx_io_pk@0`), plain HTTP, and
+must stay operator-CIDR-only permanently: the quote window reopens every
+boot, since the manifest that closes it lives on tmpfs.
 `:7878` binds only once the custodian holds `root_key`, so the open port
 is the readiness signal deploy tooling waits on.
 
@@ -174,10 +183,8 @@ tight restart loop would hammer the TPM.
 
 Runs [`persistent-luks-setup`](mkosi.extra/usr/bin/persistent-luks-setup);
 its header comment has the design (key handoff, header MAC,
-detached-header open). In genesis mode it refuses an
-already-provisioned volume, since a freshly minted `root_key` could
-never open it. `Restart=on-failure` rides out a disk not yet attached
-or a slow root-key bootstrap.
+detached-header open). `Restart=on-failure` rides out a disk not yet
+attached or a slow root-key bootstrap.
 
 The disk defaults to `/dev/disk/by-path/*10` (Azure LUN 10). Other
 clouds override it with globs in
