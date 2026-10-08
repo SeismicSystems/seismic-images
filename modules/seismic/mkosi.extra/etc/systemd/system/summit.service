@@ -1,7 +1,7 @@
 [Unit]
 Description=Summit Consensus Server
-After=network.target persistent-luks-setup.service nginx-ssl-setup.service attestation.service reth.service summit-persist.service
-Requires=persistent-luks-setup.service nginx-ssl-setup.service attestation.service reth.service summit-persist.service
+After=network.target persistent-luks-setup.service attestation.service reth.service summit-persist.service
+Requires=persistent-luks-setup.service attestation.service reth.service summit-persist.service
 PartOf=summit.target
 
 [Service]

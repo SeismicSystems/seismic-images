@@ -170,7 +170,10 @@ jobs:
             }
           done <<'EOF'
           etc/systemd/system/attestation.service
+          etc/systemd/system/certbot-renew.service
+          etc/systemd/system/certbot-renew.timer
           etc/systemd/system/custodian.service
+          etc/systemd/system/nginx-ssl-setup.service
           etc/systemd/system/persistent-luks-setup.service
           etc/systemd/system/reth.service
           etc/systemd/system/summit-keygen.service
@@ -179,7 +182,9 @@ jobs:
           etc/systemd/system/summit.target
           etc/systemd/system/tdx-init.service
           etc/systemd/system/minimal.target.wants/attestation.service
+          etc/systemd/system/minimal.target.wants/certbot-renew.timer
           etc/systemd/system/minimal.target.wants/custodian.service
+          etc/systemd/system/minimal.target.wants/nginx-ssl-setup.service
           etc/systemd/system/minimal.target.wants/persistent-luks-setup.service
           etc/systemd/system/minimal.target.wants/reth.service
           etc/systemd/system/minimal.target.wants/summit.target

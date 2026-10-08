@@ -2,6 +2,9 @@
 Description=Certbot SSL Certificate Renewal
 After=network-online.target persistent-luks-setup.service
 Requires=persistent-luks-setup.service
+# The timer is enabled in every image, but only a node whose nginx-ssl-setup
+# obtained a certificate has anything to renew.
+ConditionPathExists=/persistent/nginx/.certbot-done
 
 [Service]
 Type=oneshot

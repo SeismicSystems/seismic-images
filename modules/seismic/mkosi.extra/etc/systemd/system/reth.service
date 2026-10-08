@@ -1,7 +1,7 @@
 [Unit]
 Description=Seismic Reth Node
-After=network.target persistent-luks-setup.service nginx-ssl-setup.service attestation.service
-Requires=persistent-luks-setup.service nginx-ssl-setup.service attestation.service
+After=network.target persistent-luks-setup.service attestation.service
+Requires=persistent-luks-setup.service attestation.service
 
 [Service]
 Type=simple

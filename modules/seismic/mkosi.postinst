@@ -32,19 +32,16 @@ chmod +x "$BUILDROOT/usr/bin/nginx-ssl-setup"
 chmod +x "$BUILDROOT/usr/bin/persistent-luks-setup"
 chmod +x "$BUILDROOT/usr/bin/summit-persist"
 
-# Enable services
-mkdir -p "$BUILDROOT/etc/systemd/system/minimal.target.wants"
-for service in \
+# Enable services: `systemctl enable` creates the symlink each unit's
+# [Install] WantedBy= names, here minimal.target.wants/<unit>, so the boot
+# target pulls it in. It must happen at build time: the rootfs is a tmpfs,
+# so a unit enabled on a running node is disabled again after a reboot.
+mkosi-chroot systemctl enable \
     persistent-luks-setup.service \
     tdx-init.service \
     nginx-ssl-setup.service \
+    certbot-renew.timer \
     reth.service \
     custodian.service \
     attestation.service \
     summit.target
-do
-    mkosi-chroot systemctl enable "$service"
-    ln -sf "/etc/systemd/system/$service" "$BUILDROOT/etc/systemd/system/minimal.target.wants/"
-done
-
-# Note: certbot-renew.timer is enabled by nginx-ssl-setup after initial certbot run
