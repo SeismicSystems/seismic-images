@@ -1,7 +1,12 @@
 [Unit]
 Description=Seismic Key Custodian
-After=tdx-init.service
-Requires=tdx-init.service
+# Starts at boot, before any configuration exists, and mints a candidate
+# root_key in RAM, writing its public tx_io_pk@0 to
+# /run/seismic/custodian/candidate-tx-io-pk for the founding harvest to
+# quote. The manifest's pin decides the candidate's fate: the custodian reads
+# it from /run/seismic/conf (via its `conf` group) when the attestation
+# service first asks for root_key, which it does only after the config POST.
+# So tdx-init is not an ordering dependency.
 
 [Service]
 Type=simple
@@ -9,12 +14,6 @@ User=custodian
 
 Environment=RUST_BACKTRACE=full
 Environment=RUST_LOG=info
-# The dir is created by /etc/tmpfiles.d/seismic-runtime.conf, and the file is
-# written by tdx-init on every boot (after operator POSTs the config). It
-# carries SEISMIC_CUSTODIAN_GENESIS_NODE; systemd loads the file as root, so
-# the custodian user needs no `conf` membership.
-EnvironmentFile=/run/seismic/conf/custodian.env
-
 # The custodian owns root_key in process memory and serves key operations on
 # /run/seismic/custodian/custodian.sock only — no network listener. Callers
 # authenticate by UID (SO_PEERCRED); the socket dir's custodian-ipc group

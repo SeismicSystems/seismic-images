@@ -1,9 +1,10 @@
 [Unit]
 Description=Seismic Attestation Service
 # Starts at boot, before any configuration exists, so the founding harvest on
-# :7879 can serve summit's public keys, and a quote over them, before the
-# config POST. After summit-keygen, which writes the public-keys file the
-# harvest serves; network-online is for the IMDS round-trip in the quote path.
+# :7879 can serve summit's public keys and the custodian's candidate
+# tx_io_pk@0, and a quote over them, before the config POST. After
+# summit-keygen, which writes the public-keys file the harvest serves;
+# network-online is for the IMDS round-trip in the quote path.
 After=network-online.target summit-keygen.service
 # The :7878 side waits in-process: it reads its peers once tdx-init's done
 # marker appears, and retries the custodian socket until the custodian creates

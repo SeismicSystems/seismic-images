@@ -2,9 +2,11 @@
 Description=Provision and unlock the persistent LUKS volume, mount /persistent
 # The custodian writes the LUKS keyfile the setup script polls for; on a
 # joining node that happens only once the attestation service completes the
-# root-key bootstrap, so both are required.
-After=custodian.service attestation.service
-Requires=custodian.service attestation.service
+# root-key bootstrap, so both are required. Either way the custodian holds
+# root_key only once the manifest exists, so tdx-init has run; requiring it
+# here makes that explicit for everything ordered after this unit.
+After=tdx-init.service custodian.service attestation.service
+Requires=tdx-init.service custodian.service attestation.service
 
 [Service]
 Type=oneshot

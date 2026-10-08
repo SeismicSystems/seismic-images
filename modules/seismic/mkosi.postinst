@@ -7,16 +7,17 @@ set -euxo pipefail
 # by name in the corresponding service unit; deleting any of these breaks startup.
 # TODO(samlaf): consider switching to systemd-sysusers for declarative user/group creation.
 mkosi-chroot groupadd -r engine-api    # reth ↔ summit engine-API IPC socket at /run/reth-engine/api.ipc
-mkosi-chroot groupadd -r custodian-ipc # local clients authorized to reach the key-custodian socket
+mkosi-chroot groupadd -r custodian-ipc # local clients of the key custodian: its socket and candidate-tx-io-pk
 mkosi-chroot groupadd -r conf          # readers of the config tdx-init writes to /run/seismic/conf
 mkosi-chroot groupadd -r tpm           # /dev/tpm* access for quote minting (60-tpm-permissions.rules)
 
 # tdx-init owns /run/seismic/conf, whose setgid bit gives every file it writes
-# group conf, so it needs no conf membership of its own.
-mkosi-chroot useradd -r -s /bin/false tdx-init
-# The custodian doesn't need the conf group because its one config
-# input (custodian.env) is loaded by systemd as root via EnvironmentFile=
-mkosi-chroot useradd -r -s /bin/false custodian
+# group conf, so it needs no conf membership of its own. custodian-ipc lets it
+# read candidate-tx-io-pk at the config POST; the custodian grants it no
+# methods.
+mkosi-chroot useradd -r -s /bin/false -G custodian-ipc tdx-init
+# The custodian reads the manifest's founding_tx_io_pk from the conf dir.
+mkosi-chroot useradd -r -s /bin/false -G conf custodian
 # Only attestation is in tpm: it mints every quote on the node, the founding
 # harvest's included. Any process that can quote arbitrary report_data can
 # have a peer wrap root_key to a key of its own, so the set stays at one.
