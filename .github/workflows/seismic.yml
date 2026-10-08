@@ -93,14 +93,12 @@ jobs:
           bash -n \
             modules/seismic/mkosi.build \
             modules/seismic/mkosi.postinst \
-            modules/seismic/mkosi.extra/usr/bin/nginx-ssl-setup \
             modules/seismic/mkosi.extra/usr/bin/persistent-luks-setup \
             scripts/seismic/founding_inputs.sh \
             scripts/seismic/image_json.sh
           shellcheck -x \
             modules/seismic/mkosi.build \
             modules/seismic/mkosi.postinst \
-            modules/seismic/mkosi.extra/usr/bin/nginx-ssl-setup \
             modules/seismic/mkosi.extra/usr/bin/persistent-luks-setup \
             scripts/seismic/founding_inputs.sh \
             scripts/seismic/image_json.sh
@@ -113,8 +111,8 @@ jobs:
 
           source = pathlib.Path("modules/seismic/sources.yaml").read_text()
           pins = re.findall(r"^\s+git_reference:\s*([0-9a-f]+)\s*$", source, re.MULTILINE)
-          if len(pins) != 3 or any(len(pin) != 40 for pin in pins):
-              raise SystemExit("sources.yaml must contain three full 40-character git pins")
+          if len(pins) != 4 or any(len(pin) != 40 for pin in pins):
+              raise SystemExit("sources.yaml must contain four full 40-character git pins")
 
   build:
     name: build Seismic image
@@ -169,11 +167,10 @@ jobs:
               exit 1
             }
           done <<'EOF'
+          etc/caddy/Caddyfile
           etc/systemd/system/attestation.service
-          etc/systemd/system/certbot-renew.service
-          etc/systemd/system/certbot-renew.timer
+          etc/systemd/system/caddy.service
           etc/systemd/system/custodian.service
-          etc/systemd/system/nginx-ssl-setup.service
           etc/systemd/system/persistent-luks-setup.service
           etc/systemd/system/reth.service
           etc/systemd/system/summit-keygen.service
@@ -182,14 +179,13 @@ jobs:
           etc/systemd/system/summit.target
           etc/systemd/system/tdx-init.service
           etc/systemd/system/minimal.target.wants/attestation.service
-          etc/systemd/system/minimal.target.wants/certbot-renew.timer
+          etc/systemd/system/minimal.target.wants/caddy.service
           etc/systemd/system/minimal.target.wants/custodian.service
-          etc/systemd/system/minimal.target.wants/nginx-ssl-setup.service
           etc/systemd/system/minimal.target.wants/persistent-luks-setup.service
           etc/systemd/system/minimal.target.wants/reth.service
           etc/systemd/system/minimal.target.wants/summit.target
           etc/systemd/system/minimal.target.wants/tdx-init.service
-          usr/bin/nginx-ssl-setup
+          usr/bin/caddy
           usr/bin/persistent-luks-setup
           usr/bin/seismic-attestation-service
           usr/bin/seismic-custodian-service
@@ -251,6 +247,16 @@ jobs:
           (cd "$RUNNER_TEMP/initrd-root" \
             && find . -type f -print0 | sort -z | xargs -0 sha256sum) \
             > build/initrd-files.sha256
+
+      # A node parses the Caddyfile only after the config POST, so a mistake
+      # in it would first show as a node without HTTPS. The image's own caddy
+      # checks it here, with placeholder values for what domain.env provides.
+      - name: Validate the Caddyfile
+        run: |
+          root="$RUNNER_TEMP/initrd-root"
+          XDG_DATA_HOME="$RUNNER_TEMP/caddy" XDG_CONFIG_HOME="$RUNNER_TEMP/caddy" \
+          DOMAIN_NAME=node.example.com DOMAIN_EMAIL=ops@example.com \
+            "$root/usr/bin/caddy" validate --config "$root/etc/caddy/Caddyfile" --adapter caddyfile
 
       - name: Upload checksums for reproducibility comparison
         if: >-
@@ -379,7 +385,7 @@ jobs:
 
       # The release notes: the same facts as image.json, for a human reading
       # the release — the blob URL and the measurements URL together, what
-      # each founding input is, and the three source commits (this
+      # each founding input is, and the four source commits (this
       # repository's own commit is the tag; the pins live in sources.yaml at
       # that commit, so no asset repeats them beyond image.json).
       - name: Write the release notes
@@ -389,7 +395,7 @@ jobs:
         run: |
           fact() { jq -r "$1" build/image.json; }
           vhd_blob_url=$(fact '.targets["azure-tdx"].vhd_blob_url')
-          reth=$(fact .sources.seismic_reth); summit=$(fact .sources.summit); enclave=$(fact .sources.enclave)
+          reth=$(fact .sources.seismic_reth); summit=$(fact .sources.summit); enclave=$(fact .sources.enclave); caddy=$(fact .sources.caddy)
           cat > "$RUNNER_TEMP/notes.md" <<EOF
           Seismic node image \`$IMAGE\`, built by this repository at $GITHUB_SHA.
 
@@ -419,6 +425,7 @@ jobs:
           | [\`seismic-reth\`](https://github.com/SeismicSystems/seismic-reth/commit/$reth) | \`${reth:0:7}\` |
           | [\`summit\`](https://github.com/SeismicSystems/summit/commit/$summit) | \`${summit:0:7}\` |
           | [\`enclave\`](https://github.com/SeismicSystems/enclave/commit/$enclave) | \`${enclave:0:7}\` — attestation service, custodian service, tdx-init |
+          | [\`caddy\`](https://github.com/caddyserver/caddy/commit/$caddy) | \`${caddy:0:7}\` — the public HTTPS proxy |
 
           ### Build provenance
 

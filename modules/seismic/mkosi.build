@@ -10,6 +10,7 @@ SOURCES_YAML="$SRCDIR/modules/seismic/sources.yaml"
 ENCLAVE_COMMIT=$(mkosi-chroot yq -r '.enclave.git_reference' < "$SOURCES_YAML")
 RETH_COMMIT=$(mkosi-chroot yq -r '.seismic_reth.git_reference' < "$SOURCES_YAML")
 SUMMIT_COMMIT=$(mkosi-chroot yq -r '.summit.git_reference' < "$SOURCES_YAML")
+CADDY_COMMIT=$(mkosi-chroot yq -r '.caddy.git_reference' < "$SOURCES_YAML")
 
 # We manage our own rust toolchain instead of using the one provided by the Debian Snapshot.
 # This decouples us from Debian's release cycle and installs deterministically the version
@@ -144,3 +145,24 @@ make_git_package \
     "https://github.com/SeismicSystems/summit" \
     "$SUMMIT_BUILD_CMD" \
     "target/release/summit:/usr/bin/summit"
+
+# Build caddy. Debian's golang-go is too old for it and only bootstraps:
+# GOTOOLCHAIN makes it fetch the pinned Go release, which the checksum
+# database verifies, the way rustup pins Rust above. It must be at least the
+# `go` line of caddy's go.mod. CGO_ENABLED=0 links caddy statically, so it
+# does not depend on the image's libc.
+CADDY_BUILD_CMD="
+    git checkout $CADDY_COMMIT
+    export GOTOOLCHAIN='go1.26.9'
+    export GOPATH='/go'
+    export GOCACHE='/go/cache'
+    export CGO_ENABLED='0'
+
+    go build -trimpath -ldflags '-s -w -buildid=' -o build/caddy ./cmd/caddy
+"
+make_git_package \
+    "caddy" \
+    "$CADDY_COMMIT" \
+    "https://github.com/caddyserver/caddy" \
+    "$CADDY_BUILD_CMD" \
+    "build/caddy:/usr/bin/caddy"

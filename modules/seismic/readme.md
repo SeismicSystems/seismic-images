@@ -9,12 +9,12 @@ Top-level files at a glance:
 
 | File                                   | Role                                                                                            |
 | -------------------------------------- | ----------------------------------------------------------------------------------------------- |
-| [`mkosi.conf`](mkosi.conf)             | Debian packages (`nginx`, `certbot`, `cryptsetup`, …) + build packages                          |
-| [`mkosi.build`](mkosi.build)           | Source-builds: pinned commits of `tdx-init`, `seismic-reth`, `seismic-attestation-service`, `seismic-custodian-service`, `summit` |
+| [`mkosi.conf`](mkosi.conf)             | Debian packages (`cryptsetup`, `jq`, …) + build packages                                        |
+| [`mkosi.build`](mkosi.build)           | Source-builds: pinned commits of `tdx-init`, `seismic-reth`, `seismic-attestation-service`, `seismic-custodian-service`, `summit`, `caddy` |
 | [`sources.yaml`](sources.yaml)         | Pinned git refs read by `mkosi.build` (structured manifest, Renovate/Dependabot-friendly)       |
 | [`mkosi.postinst`](mkosi.postinst)     | Creates users/groups, enables systemd services                                                  |
 | [`kernel/config.d/`](kernel/config.d/) | Seismic-specific kernel config snippets                                                         |
-| [`mkosi.extra/`](mkosi.extra/)         | Filesystem overlay — systemd units, nginx config, helper scripts                                |
+| [`mkosi.extra/`](mkosi.extra/)         | Filesystem overlay — systemd units, the Caddyfile, helper scripts                               |
 
 What the resulting boot measures into the vTPM on Azure — the register
 inventory, and the `(pcr4, pcr9, pcr11)` guest identity admission binds — is
@@ -29,9 +29,9 @@ build-inputs only. The image rootfs is the union of four channels:
 | Channel                                   | What it puts in the image                                                                                                                                                                     |
 | ----------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | [`mkosi.extra/`](mkosi.extra/)            | Copied wholesale at matching paths — see tree below.                                                                                                                                          |
-| `Packages=` in [`mkosi.conf`](mkosi.conf) | apt-installed Debian packages: `nginx`, `certbot`, `python3-certbot-nginx`, `cryptsetup`, `jq`, `libtss2-*`, `lz4`                                                                                |
-| [`mkosi.build`](mkosi.build)              | Compiled binaries written to `$DESTDIR`: `tdx-init`, `seismic-reth`, `seismic-attestation-service`, `seismic-custodian-service`, `summit` → `/usr/bin/`              |
-| [`mkosi.postinst`](mkosi.postinst)        | Image-fs mutations: system users + `engine-api`/`custodian-ipc`/`conf`/`tpm` groups in `/etc/{passwd,group}`, services symlinked into `/etc/systemd/system/minimal.target.wants/`, `/usr/bin` scripts (`nginx-ssl-setup`, `persistent-luks-setup`, `summit-persist`) made executable |
+| `Packages=` in [`mkosi.conf`](mkosi.conf) | apt-installed Debian packages: `cryptsetup`, `jq`, `libtss2-*`, `lz4`                                                                                |
+| [`mkosi.build`](mkosi.build)              | Compiled binaries written to `$DESTDIR`: `tdx-init`, `seismic-reth`, `seismic-attestation-service`, `seismic-custodian-service`, `summit`, `caddy` → `/usr/bin/`              |
+| [`mkosi.postinst`](mkosi.postinst)        | Image-fs mutations: system users + `engine-api`/`custodian-ipc`/`conf`/`tpm` groups in `/etc/{passwd,group}`, services symlinked into `/etc/systemd/system/minimal.target.wants/`, `/usr/bin` scripts (`persistent-luks-setup`, `summit-persist`) made executable |
 
 `mkosi.extra/` lays out exactly what its name suggests — the same paths
 relative to the image root:
@@ -39,14 +39,14 @@ relative to the image root:
 ```
 mkosi.extra/
 ├── etc/
-│   ├── nginx/node-template.conf            → /etc/nginx/node-template.conf
+│   ├── caddy/Caddyfile                     → /etc/caddy/Caddyfile
 │   ├── security/limits.d/nofile.conf       → /etc/security/limits.d/nofile.conf
 │   ├── seismic/tmpfiles-persistent.conf    → /etc/seismic/tmpfiles-persistent.conf
 │   ├── tmpfiles.d/seismic-runtime.conf     → /etc/tmpfiles.d/seismic-runtime.conf
-│   ├── systemd/system/*.{service,timer}    → /etc/systemd/system/...
+│   ├── systemd/system/*.{service,target}   → /etc/systemd/system/...
 │   └── udev/rules.d/60-tpm-permissions.rules → /etc/udev/rules.d/...
 └── usr/
-    └── bin/{nginx-ssl-setup,persistent-luks-setup,summit-persist} → /usr/bin/...
+    └── bin/{persistent-luks-setup,summit-persist} → /usr/bin/...
 ```
 
 Module-root files that are **not** in the image: `mkosi.conf`,
@@ -90,7 +90,8 @@ files, sockets or devices.
 | `attestation` | `conf`, `custodian-ipc`, `tpm` | `attestation.service` |
 | `reth` | `conf`, `engine-api`, `custodian-ipc` | `reth.service` (primary group `engine-api`) |
 | `summit` | `conf`, `engine-api` | `summit-keygen`, `summit-persist`, `summit` |
-| root | | `persistent-luks-setup`, `nginx-ssl-setup`, `certbot-renew` |
+| `caddy` | | `caddy.service` |
+| root | | `persistent-luks-setup` |
 
 | Group | Grants |
 | --- | --- |
@@ -115,7 +116,7 @@ on the LUKS volume, from
 | `/run/seismic/summit` | `summit:summit 0755` | `summit-keygen`, `summit-persist` | the attestation service; read-only to `summit.service` |
 | `/run/seismic/summit/keys` | `summit:summit 0700` | `summit-keygen` | `summit-persist`; inaccessible to `summit.service` |
 | `/run/reth-engine` | `reth:engine-api 0750` (`RuntimeDirectory=`) | reth's Engine API socket | summit |
-| `/persistent/nginx` | `root:root 0700` | `nginx-ssl-setup`, `certbot-renew` | nginx |
+| `/persistent/caddy` | `caddy:caddy 0700` | caddy | caddy |
 | `/persistent/reth` | `reth:reth 0700` | reth | reth |
 | `/persistent/summit/db` | `summit:summit 0700` | summit | summit |
 | `/persistent/summit/keys` | `summit:summit 0700` | `summit-persist` | summit, read-only |
@@ -131,7 +132,7 @@ configuration, then writes one file per consumer into
 
 | File | Read by |
 | --- | --- |
-| `domain.env` | `nginx-ssl-setup` |
+| `domain.env` | systemd for `caddy.service` |
 | `attestation.env` | the attestation service, once the sentinel appears |
 | `network-manifest.json` | the attestation service, whose quote window it closes; the custodian, for its `founding_tx_io_pk` |
 | `reth-p2p.env` | systemd for `reth.service` |
@@ -191,27 +192,30 @@ clouds override it with globs in
 `/etc/seismic-images/persistent-disk-glob`. TODO: have deploy tooling
 write the override at provisioning time.
 
-### `nginx-ssl-setup.service` and `certbot-renew.timer`
+### `caddy.service`
 
-`nginx-ssl-setup` templates
-[`node-template.conf`](mkosi.extra/etc/nginx/node-template.conf) with
-the domain and obtains a Let's Encrypt certificate. Nothing depends on
-it: a failed certificate leaves the node without public HTTPS, while
-reth and summit run regardless.
+The public HTTPS proxy on `:443`, as the unprivileged `caddy` user with
+`CAP_NET_BIND_SERVICE` alone. The
+[Caddyfile](mkosi.extra/etc/caddy/Caddyfile) is static and in the
+image, so it is measured and the same on every node; the only per-node
+input is the domain name and ACME contact from `domain.env`, which
+systemd reads for it.
 
-`certbot-renew.timer` is enabled in the image, since the rootfs is tmpfs
-and an enablement made at runtime would not survive a reboot. Its
-service is skipped until `nginx-ssl-setup` has obtained a certificate.
-The timer renews monthly with `RandomizedDelaySec=1h`, so a fleet does
-not hit Let's Encrypt in the same minute. Renewal can race a disk
-snapshot (TODO in the service file).
+Caddy takes and renews its certificate itself, from Let's Encrypt or,
+when that fails, ZeroSSL, over TLS-ALPN-01 on `:443`, and retries a
+failed attempt in-process.
+Nothing listens on `:80`, there is no admin endpoint, and HTTP/3 is
+off. The certificate, its key and the ACME account live in
+`/persistent/caddy`, so a reboot keeps them. Nothing depends on the
+unit: a node without a certificate has no public HTTPS, while reth and
+summit run regardless.
 
 ### `reth.service` and `summit.service`
 
 | | reth | summit |
 | --- | --- | --- |
 | Public | devp2p `:30303` TCP+UDP (discv5 only) | P2P `:18551` |
-| Loopback | RPC `:8545`, WS `:8546`, metrics `:9001` | REST `:3030` (nginx `/summit`), metrics `:9002` |
+| Loopback | RPC `:8545`, WS `:8546`, metrics `:9001` | REST `:3030` (Caddy `/summit`), metrics `:9002` |
 
 reth fetches its purpose keys from the custodian socket at startup;
 `persistent-luks-setup` finishing implies the custodian holds
