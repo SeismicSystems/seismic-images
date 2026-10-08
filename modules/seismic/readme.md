@@ -195,10 +195,13 @@ write the override at provisioning time.
 
 `nginx-ssl-setup` templates
 [`node-template.conf`](mkosi.extra/etc/nginx/node-template.conf) with
-the domain, obtains a Let's Encrypt certificate, and enables
-`certbot-renew.timer`. reth and summit both `Requires=` it, so a failed
-certificate keeps them down, though neither needs public HTTPS to run.
+the domain and obtains a Let's Encrypt certificate. Nothing depends on
+it: a failed certificate leaves the node without public HTTPS, while
+reth and summit run regardless.
 
+`certbot-renew.timer` is enabled in the image, since the rootfs is tmpfs
+and an enablement made at runtime would not survive a reboot. Its
+service is skipped until `nginx-ssl-setup` has obtained a certificate.
 The timer renews monthly with `RandomizedDelaySec=1h`, so a fleet does
 not hit Let's Encrypt in the same minute. Renewal can race a disk
 snapshot (TODO in the service file).

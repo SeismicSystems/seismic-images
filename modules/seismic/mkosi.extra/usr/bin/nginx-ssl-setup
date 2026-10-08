@@ -85,12 +85,7 @@ if [ ! -f "$CERTBOT_DONE" ]; then
     # Mark as done
     touch "$CERTBOT_DONE"
 
-    # Enable automatic renewal timer
-    systemctl enable certbot-renew.timer
-    systemctl start certbot-renew.timer
-
     echo "SSL certificate obtained successfully"
-    echo "Automatic renewal enabled"
 else
     echo "Certbot already run, skipping (remove $CERTBOT_DONE to re-run)"
 fi
