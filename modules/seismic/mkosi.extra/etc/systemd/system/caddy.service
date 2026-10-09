@@ -1,0 +1,43 @@
+[Unit]
+Description=Caddy, the node's public HTTPS proxy
+# The domain comes from tdx-init's domain.env, and the certificate lives on
+# the LUKS volume. Nothing requires this unit: a node without a certificate
+# has no public HTTPS, while reth and summit run regardless.
+After=network-online.target tdx-init.service persistent-luks-setup.service
+Wants=network-online.target
+Requires=tdx-init.service persistent-luks-setup.service
+
+[Service]
+Type=notify
+User=caddy
+Group=caddy
+
+# Read by systemd, not by caddy, so the caddy user needs no `conf` group.
+# Provides {$DOMAIN_NAME} and {$DOMAIN_EMAIL} to the Caddyfile.
+EnvironmentFile=/run/seismic/conf/domain.env
+ExecStart=/usr/bin/caddy run --config /etc/caddy/Caddyfile --adapter caddyfile
+# Caddy keeps all its state in $XDG_DATA_HOME/caddy: the ACME account, the
+# certificate and its key. On the LUKS volume, so a reboot keeps the
+# certificate. XDG_CONFIG_HOME only gives Caddy a config dir to resolve; with
+# persist_config off it writes nothing there.
+Environment=XDG_DATA_HOME=/persistent XDG_CONFIG_HOME=/persistent
+
+# Binding :443 is the one privilege it needs.
+AmbientCapabilities=CAP_NET_BIND_SERVICE
+CapabilityBoundingSet=CAP_NET_BIND_SERVICE
+NoNewPrivileges=yes
+ProtectSystem=strict
+ReadWritePaths=/persistent/caddy
+PrivateTmp=yes
+PrivateDevices=yes
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+
+# Caddy retries a failed issuance or renewal in-process; a restart is for
+# the process itself dying.
+Restart=on-failure
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=minimal.target

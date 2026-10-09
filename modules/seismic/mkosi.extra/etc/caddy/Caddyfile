@@ -1,0 +1,96 @@
+# The node's public HTTPS proxy. Every confidentiality property comes from
+# attested application-layer keys, so TLS here is hygiene: a valid
+# certificate for browsers and RPC clients.
+#
+# Caddy substitutes {$VAR} as raw text before parsing this file. Both values
+# come from domain.env, which tdx-init writes from the operator's config POST
+# and admits only hostname and plain-email characters, so neither can inject
+# config:
+# https://github.com/SeismicSystems/enclave/blob/seismic/crates/tdx-init-config/src/domain.rs
+{
+	# The default admin endpoint, localhost:2019, would let any local process
+	# replace this config.
+	admin off
+	persist_config off
+
+	# Caddy's default issuers, Let's Encrypt and then ZeroSSL, spelled out
+	# because each one disables the HTTP-01 challenge. Each repeated
+	# `cert_issuer` is tried in order. ZeroSSL needs `email`: Caddy registers
+	# it with ZeroSSL's API for the account credentials its ACME endpoint
+	# requires. For Let's Encrypt it is only the account contact.
+	#
+	# One challenge: TLS-ALPN-01, which Caddy answers in the TLS handshake on
+	# :443. HTTP-01 would need :80 open to the internet, and so would the
+	# HTTP->HTTPS redirect, so with both off nothing listens on :80 and the
+	# firewall can close it. The cost: :443 must reach Caddy directly, with no
+	# TLS-terminating load balancer in front, and a failed TLS-ALPN-01 has no
+	# other challenge to fall back to, only the other CA.
+	email {$DOMAIN_EMAIL}
+	cert_issuer acme {
+		disable_http_challenge
+	}
+	cert_issuer acme https://acme.zerossl.com/v2/DV90 {
+		disable_http_challenge
+	}
+	auto_https disable_redirects
+
+	# No HTTP/3: the firewall does not open UDP 443.
+	servers {
+		protocols h1 h2
+	}
+}
+
+{$DOMAIN_NAME} {
+	# Only /ws may open a WebSocket, as an HTTP/1.1 Upgrade or an HTTP/2
+	# extended CONNECT.
+	@websocket_off_ws {
+		not path /ws /ws/
+		expression {header.Upgrade} != "" || {method} == "CONNECT"
+	}
+	handle @websocket_off_ws {
+		respond 403
+	}
+
+	# Every backend serves one endpoint whatever the request path, so each
+	# route matches its prefix exactly, with or without a trailing slash, and
+	# forwards to /. Anything under or beside it (/rpc/foo, /rpcfoo) is a 404.
+	@rpc path /rpc /rpc/
+	handle @rpc {
+		rewrite /
+		reverse_proxy 127.0.0.1:8545
+	}
+
+	@ws path /ws /ws/
+	handle @ws {
+		rewrite /
+		reverse_proxy 127.0.0.1:8546
+	}
+
+	@summit path /summit /summit/
+	handle @summit {
+		rewrite /
+		reverse_proxy 127.0.0.1:3030
+	}
+
+	@attestation path /attestation /attestation/
+	handle @attestation {
+		rewrite /
+		reverse_proxy 127.0.0.1:7878
+	}
+
+	@metrics_reth path /metrics/reth /metrics/reth/
+	handle @metrics_reth {
+		rewrite /
+		reverse_proxy 127.0.0.1:9001
+	}
+
+	@metrics_summit path /metrics/summit /metrics/summit/
+	handle @metrics_summit {
+		rewrite /
+		reverse_proxy 127.0.0.1:9002
+	}
+
+	handle {
+		respond 404
+	}
+}

@@ -26,9 +26,9 @@ mkosi-chroot useradd -r -s /bin/false -G conf,custodian-ipc,tpm attestation
 # reth:tx-io,rng).
 mkosi-chroot useradd -r -s /bin/false -G conf,engine-api,custodian-ipc reth
 mkosi-chroot useradd -r -s /bin/false -G conf,engine-api summit
+mkosi-chroot useradd -r -s /bin/false caddy
 
 # Make scripts executable
-chmod +x "$BUILDROOT/usr/bin/nginx-ssl-setup"
 chmod +x "$BUILDROOT/usr/bin/persistent-luks-setup"
 chmod +x "$BUILDROOT/usr/bin/summit-persist"
 
@@ -39,8 +39,7 @@ chmod +x "$BUILDROOT/usr/bin/summit-persist"
 mkosi-chroot systemctl enable \
     persistent-luks-setup.service \
     tdx-init.service \
-    nginx-ssl-setup.service \
-    certbot-renew.timer \
+    caddy.service \
     reth.service \
     custodian.service \
     attestation.service \
