@@ -1,7 +1,7 @@
 [Unit]
 Description=Grant the tpm group access to the TDX quote interfaces
 After=sys-kernel-config.mount systemd-tmpfiles-setup.service
-Before=summit-key-holder.service attestation.service
+Before=attestation.service
 ConditionPathExists=/sys/kernel/config/tsm
 
 [Service]
