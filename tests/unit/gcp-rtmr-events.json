@@ -1,0 +1,112 @@
+{
+  "measurement_id": "seismic-dev_2026-09-30.596f15.tar.gz",
+  "measurements": {
+    "rtmr1": {
+      "expected": "15e6ac002d53aed85e425ee93f5da666c53171f331e8595f63cbba71df12ed275de0b0d0f266e280cb5ef1b42b571e22"
+    },
+    "rtmr2": {
+      "expected": "806b26468f1dd338cfd16e240a36bf41c99f462c973faba5c5186017a18ddc053887056b1ddc5d47ecda19218a4b7300"
+    }
+  },
+  "events": {
+    "rtmr1": [
+      {
+        "type": "EV_EFI_ACTION",
+        "description": "Calling EFI Application from Boot Option",
+        "sha384": "77a0dab2312b4e1e57a84d865a21e5b2ee8d677a21012ada819d0a98988078d3d740f6346bfe0abaa938ca20439a8d71"
+      },
+      {
+        "type": "EV_SEPARATOR",
+        "description": "00000000",
+        "sha384": "394341b7182cd227c5c6b07ef8000cdfd86136c4292b8e576573ad7ed9ae41019f5818b4b971c9effc60e1ad9f1289f0"
+      },
+      {
+        "type": "EV_EFI_GPT_EVENT",
+        "description": "disk 12345678-1234-5678-1234-567812345678",
+        "sha384": "488fa3f08aae01c1a46b497319e8a7d3b7335c9ff4f4d7fe6a3dd62c844b03de22157c0303be58f10e3152687778e68d"
+      },
+      {
+        "type": "EV_EFI_BOOT_SERVICES_APPLICATION",
+        "description": "UKI authenticode",
+        "sha384": "c511d7e2161845d00d076a2886673449a0f564f4a8e7f873976a09eb2d3e2c13aef6e4cce0b15ae92fba684e7152440d"
+      },
+      {
+        "type": "EV_EFI_BOOT_SERVICES_APPLICATION",
+        "description": ".linux authenticode",
+        "sha384": "2df57ede408ffb338110f2280df8d81969001dc7ac4cc0a6f97a903cbfeee379bcd60acd1d8900dab5bff54dd8083879"
+      },
+      {
+        "type": "EV_EFI_ACTION",
+        "description": "Exit Boot Services Invocation",
+        "sha384": "214b0bef1379756011344877743fdc2a5382bac6e70362d624ccf3f654407c1b4badf7d8f9295dd3dabdef65b27677e0"
+      },
+      {
+        "type": "EV_EFI_ACTION",
+        "description": "Exit Boot Services Returned with Success",
+        "sha384": "0a2e01c85deae718a530ad8c6d20a84009babe6c8989269e950d8cf440c6e997695e64d455c4174a652cd080f6230b74"
+      }
+    ],
+    "rtmr2": [
+      {
+        "type": "EV_IPL",
+        "description": ".linux name",
+        "sha384": "2fdc8531577607d99031d70fb3063e9e4aecf50a7eaa9c2b0bcda5c5a6e111302996c138465920cadea4416d36089651"
+      },
+      {
+        "type": "EV_IPL",
+        "description": ".linux contents",
+        "sha384": "f25d6a3674c27adf88114cbc8daf0403b416b700d832126e007e98702df44d69f4a2cab3eafb81ff70fe0ec300377728"
+      },
+      {
+        "type": "EV_IPL",
+        "description": ".cmdline name",
+        "sha384": "93c4536618d5be4a74e2cb9caa0a4d8975ce70dc9efe0c53aa4cedbcda9d02f60c8a68fd01f960b876f9dd31818a6f41"
+      },
+      {
+        "type": "EV_IPL",
+        "description": ".cmdline contents",
+        "sha384": "3d235cb33d6d3d6d2b59e43915ac6a7f265dd872d01c14d974f83a605ca499db870dd7880a2619cfffcc2502d2a64fda"
+      },
+      {
+        "type": "EV_IPL",
+        "description": ".initrd name",
+        "sha384": "1bcd2ed729fb9dc7b1a168ab4a6e2e04b66d7405ea2622d666780ec9f1eceb031010f0bdf37c46ab34e6a7201b73d5ae"
+      },
+      {
+        "type": "EV_IPL",
+        "description": ".initrd contents",
+        "sha384": "5c736a6ef8ce320c424d0955d6020778d1bbcf2e63b137959d24bd3861f2d36af7078eb4eb8ce77ffff3c217255e43df"
+      },
+      {
+        "type": "EV_IPL",
+        "description": ".uname name",
+        "sha384": "16b48d924b98bdfe9d5c97983801443e5371dae2de1a9911636b417b1b14a7d54d9c648a8c64510c3dbd5d6060387171"
+      },
+      {
+        "type": "EV_IPL",
+        "description": ".uname contents",
+        "sha384": "3f2f93b48dafa955ed24418312a42ef7252678ed1f75cd796482fa83533e762da1a214d6280b96e1f29a2c9e8dafed68"
+      },
+      {
+        "type": "EV_IPL",
+        "description": ".sbat name",
+        "sha384": "52a957bc706ceae8f202046a07342684b10ce67c73756def7713fe1246935abe07f7043f6b76d78e1e05772aaa46c56c"
+      },
+      {
+        "type": "EV_IPL",
+        "description": ".sbat contents",
+        "sha384": "a220c60a763f4ea9b2f50cc8a8e28e24e208a62ef98fbaed30d0f503654c8cbe6763f9b24992edaddbc1f52e70c06c2c"
+      },
+      {
+        "type": "EV_EVENT_TAG",
+        "description": "LOADED_IMAGE::LoadOptions",
+        "sha384": "e03b89abf354a38976537b7a9138fd312e4cbf73b61eebc44086491701b1d167b9f6cb97a922325866c93e0834723d87"
+      },
+      {
+        "type": "EV_EVENT_TAG",
+        "description": "Linux initrd",
+        "sha384": "5c736a6ef8ce320c424d0955d6020778d1bbcf2e63b137959d24bd3861f2d36af7078eb4eb8ce77ffff3c217255e43df"
+      }
+    ]
+  }
+}

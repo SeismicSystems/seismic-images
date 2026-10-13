@@ -109,18 +109,9 @@ def gpt_event_data(disk: bytes) -> tuple[bytes, str]:
     return header + struct.pack("<Q", len(used)) + b"".join(used), disk_guid
 
 
-def main() -> None:
-    ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    ap.add_argument("--efi", required=True, help="the UKI, build/<id>_<version>.efi")
-    ap.add_argument("--disk", help="GCE disk image (.tar.gz or .raw); default: <efi>.tar.gz")
-    ap.add_argument("--expect", help="observed rtmr1 hex to compare against")
-    ap.add_argument("--expect-rtmr2", help="observed rtmr2 hex to compare against")
-    ap.add_argument("--out", help="write JSON here instead of stdout")
-    args = ap.parse_args()
-    disk_path = args.disk or os.path.splitext(args.efi)[0] + ".tar.gz"
-
-    uki = open(args.efi, "rb").read()
-    gpt, disk_guid = gpt_event_data(disk_head(disk_path, 34 * LBA))
+def predict(uki: bytes, disk: bytes) -> tuple[list, list]:
+    """The RTMR1 and RTMR2 events as (type, description, digest), in extension order."""
+    gpt, disk_guid = gpt_event_data(disk)
     uki_hash = authenticode_sha384(uki)
     secs = sections(uki)
     if ".linux" not in secs:
@@ -146,13 +137,29 @@ def main() -> None:
         ("EV_EVENT_TAG", "LOADED_IMAGE::LoadOptions", sha384(cmdline.encode("utf-16-le") + b"\0\0"))
     )
     rtmr2_events.append(("EV_EVENT_TAG", "Linux initrd", sha384(secs.get(".initrd", b""))))
+    return rtmr1_events, rtmr2_events
 
-    def replay(events):
-        register = b"\0" * 48
-        for _, _, digest in events:
-            register = sha384(register + digest)
-        return register
 
+def replay(events: list) -> bytes:
+    """Extend a zero register with each event's digest in turn."""
+    register = b"\0" * 48
+    for _, _, digest in events:
+        register = sha384(register + digest)
+    return register
+
+
+def main() -> None:
+    ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    ap.add_argument("--efi", required=True, help="the UKI, build/<id>_<version>.efi")
+    ap.add_argument("--disk", help="GCE disk image (.tar.gz or .raw); default: <efi>.tar.gz")
+    ap.add_argument("--expect", help="observed rtmr1 hex to compare against")
+    ap.add_argument("--expect-rtmr2", help="observed rtmr2 hex to compare against")
+    ap.add_argument("--out", help="write JSON here instead of stdout")
+    args = ap.parse_args()
+    disk_path = args.disk or os.path.splitext(args.efi)[0] + ".tar.gz"
+
+    uki = open(args.efi, "rb").read()
+    rtmr1_events, rtmr2_events = predict(uki, disk_head(disk_path, 34 * LBA))
     rtmr1, rtmr2 = replay(rtmr1_events), replay(rtmr2_events)
 
     base = os.path.basename(os.path.realpath(args.efi))
