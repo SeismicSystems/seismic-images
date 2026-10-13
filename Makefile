@@ -117,7 +117,8 @@ GCP_BUCKET ?= seismic-tee-gcp-images
 GCP_LOCATION ?= us-central1
 TARBALL ?= $(shell ls build/seismic_*.tar.gz 2>/dev/null | head -1)
 push-gcp: ## Upload the built .tar.gz to GCS and register it as a GCE image (uses GCP_PROJECT, GCP_BUCKET, GCP_LOCATION, TARBALL)
-	@if [ ! -e "$(TARBALL)" ]; then \
+	@set -e; \
+	if [ ! -e "$(TARBALL)" ]; then \
 		echo "Error: $(TARBALL) not found. Run 'make build' or 'make build-dev' first, or pass TARBALL=<path>." >&2; \
 		exit 1; \
 	fi; \
