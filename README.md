@@ -92,12 +92,23 @@ Where the image's bytes are and what they are, in one machine-readable file, so 
       "storage_account_id": "/subscriptions/<id>/resourceGroups/<group>/providers/Microsoft.Storage/storageAccounts/seismicimages",
       "measurements": "measurements.azure-tdx.json",
       "efi_sha256": "<sha256 of the .efi>"
+    },
+    "gcp-tdx": {
+      "gce_image": "projects/testnet-477314/global/images/seismic-2026-09-22-2ee71c",
+      "tarball_url": "https://storage.googleapis.com/seismic-tee-gcp-images/seismic_2026-09-22.2ee71c.tar.gz",
+      "measurements": "measurements.gcp-tdx.json",
+      "efi_sha256": "<sha256 of the .efi>"
     }
   }
 }
 ```
 
-`targets` is keyed by attestation type, one entry per cloud the image is published for: `azure-tdx` (the VHD's blob and storage account) and `gcp-tdx` (the registered GCE image and the tarball it was made from). Per target: the artifact the nodes boot from, the storage account's ARM ID (Azure's managed-disk import refuses to read a blob from another subscription or resource group without it, and the URL names the account but neither of those; a SAS URL would avoid the requirement but expires, so it has no place in a release), the measurements asset for that target, and the sha256 of the artifact where it is reproducible — the `.efi`, since neither wrapping is. Once per file: the image name (the tag, and the stem of each `measurement_id`), this repository's commit, and the three source pins from `sources.yaml`. The build writes it, in `make release-assets` ([`scripts/seismic/release_assets.sh`](scripts/seismic/release_assets.sh)), before the bytes are anywhere: the blob URL and the GCE image are where the VHD and the tarball will go, in the container `AZURE_CONTAINER` picks and the bucket and project `GCP_BUCKET` and `GCP_PROJECT` name, and the account's ARM ID comes from the Makefile — not a secret, since every `image.json` carries it. The publish job then makes the record true: `make push-azure` ([`scripts/seismic/push_azure.sh`](scripts/seismic/push_azure.sh)) uploads the VHD to the blob `image.json` names and `make push-gcp` ([`scripts/seismic/push_gcp.sh`](scripts/seismic/push_gcp.sh)) uploads the tarball to the bucket and registers the GCE image it names, each reading its destination from the record rather than from settings of its own, and the release notes are rendered from it. It refuses measurements stamped for any other UKI, so the halves of a release cannot come from different builds.
+Once per file: `image` (the tag, and the stem of each `measurement_id`), `commit` (this repository's) and `sources` (the three pins from `sources.yaml`). `targets` is keyed by attestation type, one entry per cloud the image is published for. Each names the artifact its nodes boot, the `measurements` asset stamped for that artifact, and `efi_sha256`, the hash of the `.efi`, the one artifact that is reproducible (neither the VHD's nor the tarball's wrapping is).
+
+- `azure-tdx`: `vhd_blob_url`, the VHD's blob, and `storage_account_id`, the account's ARM ID, which Azure's managed-disk import needs to read a blob from another subscription or resource group (the URL names the account but neither of those). `measurements` is `measurements.azure-tdx.json`, stamped `<image>.vhd`.
+- `gcp-tdx`: `gce_image`, the registered image as `projects/<project>/global/images/<name>` (the tag with `_` and `.` as `-`), and `tarball_url`, the `.tar.gz` it was made from. `measurements` is `measurements.gcp-tdx.json`, stamped `<image>.tar.gz`.
+
+The build writes it, in `make release-assets` ([`scripts/seismic/release_assets.sh`](scripts/seismic/release_assets.sh)), before the bytes are anywhere: the blob URL and the GCE image are where the VHD and the tarball will go, in the container `AZURE_CONTAINER` picks and the bucket and project `GCP_BUCKET` and `GCP_PROJECT` name, and the account's ARM ID comes from the Makefile. The publish job then makes the record true: `make push-azure` ([`scripts/seismic/push_azure.sh`](scripts/seismic/push_azure.sh)) uploads the VHD to the blob it names, and `make push-gcp` ([`scripts/seismic/push_gcp.sh`](scripts/seismic/push_gcp.sh)) uploads the tarball to the bucket and registers the GCE image it names, each reading its destination from the record. It refuses measurements stamped for any other UKI, so the halves of a release cannot come from different builds.
 
 ## What's in the image
 

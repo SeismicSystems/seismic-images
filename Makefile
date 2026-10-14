@@ -52,8 +52,7 @@ build-dev: setup ## Build module with development tools
 # One measurements file per attestation type, named for it: the admission
 # pipeline keys a policy record on `attestation_type`, and an image published
 # for more than one cloud carries one file per type under one release, so
-# the name says which registers are inside before anyone opens it. The GCP
-# type string is provisional until its admission schema exists.
+# the name says which registers are inside before anyone opens it.
 MEASUREMENTS_AZURE := build/measurements.azure-tdx.json
 MEASUREMENTS_GCP := build/measurements.gcp-tdx.json
 
