@@ -13,10 +13,10 @@ from the build. Verified against tee-gcp-novtpm (2026-09-28).
 import argparse
 import hashlib
 import json
-import os
 import struct
 import sys
 import tarfile
+from pathlib import Path
 
 ACTION_BOOT = b"Calling EFI Application from Boot Option"
 ACTION_EXIT_1 = b"Exit Boot Services Invocation"
@@ -28,6 +28,8 @@ STUB_SECTIONS = [
     ".linux", ".osrel", ".cmdline", ".initrd", ".ucode", ".splash", ".dtb",
     ".uname", ".sbat", ".pcrpkey", ".profile", ".dtbauto", ".hwids", ".efifw",
 ]
+# One measured event: its type, a description and the sha384 extended into the register.
+Event = tuple[str, str, bytes]
 
 
 def sha384(data: bytes) -> bytes:
@@ -82,7 +84,8 @@ def disk_head(path: str, nbytes: int) -> bytes:
     if path.endswith((".tar.gz", ".tgz")):
         with tarfile.open(path, "r:gz") as tar:
             member = next(m for m in tar if m.name.endswith("disk.raw"))
-            return tar.extractfile(member).read(nbytes)
+            with tar.extractfile(member) as raw:
+                return raw.read(nbytes)
     with open(path, "rb") as f:
         return f.read(nbytes)
 
@@ -109,7 +112,7 @@ def gpt_event_data(disk: bytes) -> tuple[bytes, str]:
     return header + struct.pack("<Q", len(used)) + b"".join(used), disk_guid
 
 
-def predict(uki: bytes, disk: bytes) -> tuple[list, list]:
+def predict(uki: bytes, disk: bytes) -> tuple[list[Event], list[Event]]:
     """The RTMR1 and RTMR2 events as (type, description, digest), in extension order."""
     gpt, disk_guid = gpt_event_data(disk)
     uki_hash = authenticode_sha384(uki)
@@ -118,7 +121,7 @@ def predict(uki: bytes, disk: bytes) -> tuple[list, list]:
         sys.exit("no .linux section in UKI")
     kernel_hash = authenticode_sha384(secs[".linux"])
 
-    rtmr1_events = [
+    rtmr1_events: list[Event] = [
         ("EV_EFI_ACTION", ACTION_BOOT.decode(), sha384(ACTION_BOOT)),
         ("EV_SEPARATOR", "00000000", sha384(SEPARATOR)),
         ("EV_EFI_GPT_EVENT", f"disk {disk_guid}", sha384(gpt)),
@@ -127,7 +130,7 @@ def predict(uki: bytes, disk: bytes) -> tuple[list, list]:
         ("EV_EFI_ACTION", ACTION_EXIT_1.decode(), sha384(ACTION_EXIT_1)),
         ("EV_EFI_ACTION", ACTION_EXIT_2.decode(), sha384(ACTION_EXIT_2)),
     ]
-    rtmr2_events = []
+    rtmr2_events: list[Event] = []
     for name in STUB_SECTIONS:
         if name in secs:
             rtmr2_events.append(("EV_IPL", f"{name} name", sha384(name.encode() + b"\0")))
@@ -140,7 +143,7 @@ def predict(uki: bytes, disk: bytes) -> tuple[list, list]:
     return rtmr1_events, rtmr2_events
 
 
-def replay(events: list) -> bytes:
+def replay(events: list[Event]) -> bytes:
     """Extend a zero register with each event's digest in turn."""
     register = b"\0" * 48
     for _, _, digest in events:
@@ -156,14 +159,14 @@ def main() -> None:
     ap.add_argument("--expect-rtmr2", help="observed rtmr2 hex to compare against")
     ap.add_argument("--out", help="write JSON here instead of stdout")
     args = ap.parse_args()
-    disk_path = args.disk or os.path.splitext(args.efi)[0] + ".tar.gz"
+    efi = Path(args.efi)
+    disk_path = args.disk or str(efi.with_suffix(".tar.gz"))
 
-    uki = open(args.efi, "rb").read()
+    uki = efi.read_bytes()
     rtmr1_events, rtmr2_events = predict(uki, disk_head(disk_path, 34 * LBA))
     rtmr1, rtmr2 = replay(rtmr1_events), replay(rtmr2_events)
 
-    base = os.path.basename(os.path.realpath(args.efi))
-    stem = base[: -len(".efi")] if base.endswith(".efi") else base
+    stem = efi.resolve().name.removesuffix(".efi")
     result = {
         "attestation_type": "gcp-tdx",
         "measurement_id": stem + ".tar.gz",
@@ -178,7 +181,7 @@ def main() -> None:
     }
     text = json.dumps(result, indent=2) + "\n"
     if args.out:
-        open(args.out, "w").write(text)
+        Path(args.out).write_text(text)
     else:
         sys.stdout.write(text)
     ok = True

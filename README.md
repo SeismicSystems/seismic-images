@@ -92,12 +92,23 @@ Where the image's bytes are and what they are, in one machine-readable file, so 
       "storage_account_id": "/subscriptions/<id>/resourceGroups/<group>/providers/Microsoft.Storage/storageAccounts/seismicimages",
       "measurements": "measurements.azure-tdx.json",
       "efi_sha256": "<sha256 of the .efi>"
+    },
+    "gcp-tdx": {
+      "gce_image": "projects/testnet-477314/global/images/seismic-2026-09-22-2ee71c",
+      "tarball_url": "https://storage.googleapis.com/seismic-tee-gcp-images/seismic_2026-09-22.2ee71c.tar.gz",
+      "measurements": "measurements.gcp-tdx.json",
+      "efi_sha256": "<sha256 of the .efi>"
     }
   }
 }
 ```
 
-`targets` is keyed by attestation type, one entry per cloud the image is published for: `azure-tdx` (the VHD's blob and storage account) and `gcp-tdx` (the registered GCE image and the tarball it was made from). Per target: the artifact the nodes boot from, the storage account's ARM ID (Azure's managed-disk import refuses to read a blob from another subscription or resource group without it, and the URL names the account but neither of those; a SAS URL would avoid the requirement but expires, so it has no place in a release), the measurements asset for that target, and the sha256 of the artifact where it is reproducible — the `.efi`, since the VHD's wrapping is not. Once per file: the image name (the tag, and the stem of `measurement_id`), this repository's commit, and the four source pins from `sources.yaml`. The publish job writes it (`make image-json`, [`scripts/seismic/image_json.sh`](scripts/seismic/image_json.sh)) after the VHD is pushed, asking Azure for the account's ID rather than carrying it in this repo, and renders the release notes from it. It refuses a measurements file and a `SHA256SUMS` that name different UKIs, so the two halves of a release cannot come from different builds. It is the one asset `make release-assets` does not produce, since the ID is a fact about where the bytes were put, not about the build.
+Once per file: `image` (the tag, and the stem of each `measurement_id`), `commit` (this repository's) and `sources` (the four pins from `sources.yaml`). `targets` is keyed by attestation type, one entry per cloud the image is published for. Each names the artifact its nodes boot, the `measurements` asset stamped for that artifact, and `efi_sha256`, the hash of the `.efi`, the one artifact that is reproducible (neither the VHD's nor the tarball's wrapping is).
+
+- `azure-tdx`: `vhd_blob_url`, the VHD's blob, and `storage_account_id`, the account's ARM ID, which Azure's managed-disk import needs to read a blob from another subscription or resource group (the URL names the account but neither of those). `measurements` is `measurements.azure-tdx.json`, stamped `<image>.vhd`.
+- `gcp-tdx`: `gce_image`, the registered image as `projects/<project>/global/images/<name>` (the tag with `_` and `.` as `-`), and `tarball_url`, the `.tar.gz` it was made from. `measurements` is `measurements.gcp-tdx.json`, stamped `<image>.tar.gz`.
+
+The publish job writes it (`make image-json`, [`scripts/seismic/image_json.sh`](scripts/seismic/image_json.sh)) after the VHD and the tarball are pushed, asking Azure for the account's ID. It refuses measurements files and a `SHA256SUMS` that name different UKIs, so the halves of a release cannot come from different builds. It is the one asset `make release-assets` does not produce, since the IDs are facts about where the bytes were put.
 
 ## What's in the image
 

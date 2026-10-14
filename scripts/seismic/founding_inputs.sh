@@ -5,8 +5,8 @@
 # build is checked against a release with
 # `sha256sum -c --ignore-missing SHA256SUMS`.
 #
-# Usage: founding_inputs.sh <initrd> <efi> <measurements>
-#        (the Makefile's INITRD, FILE and MEASUREMENTS_AZURE)
+# Usage: founding_inputs.sh <initrd> <efi> <measurements-azure> <measurements-gcp>
+#        (the Makefile's INITRD, FILE, MEASUREMENTS_AZURE and MEASUREMENTS_GCP)
 set -euo pipefail
 
 usage='usage: founding_inputs.sh <initrd> <efi> <measurements-azure> <measurements-gcp>'
