@@ -109,6 +109,40 @@ push-azure: ## Upload the built .vhd to Azure blob storage (uses AZURE_CONTAINER
 push-azure-dev: ## Upload the .vhd to dev/ (ephemeral — default)
 	@$(MAKE) push-azure AZURE_CONTAINER=dev
 
+# GCE boots a registered image, not a bucket object, so the push is two
+# steps: the tarball into the bucket, then the image registered from it under
+# the tag with `_` and `.` as `-`, the characters a GCE name refuses.
+GCP_PROJECT ?= testnet-477314
+GCP_BUCKET ?= seismic-tee-gcp-images
+GCP_LOCATION ?= us-central1
+TARBALL ?= $(shell ls build/seismic_*.tar.gz 2>/dev/null | head -1)
+push-gcp: ## Upload the built .tar.gz to GCS and register it as a GCE image (uses GCP_PROJECT, GCP_BUCKET, GCP_LOCATION, TARBALL)
+	@set -e; \
+	if [ ! -e "$(TARBALL)" ]; then \
+		echo "Error: $(TARBALL) not found. Run 'make build' or 'make build-dev' first, or pass TARBALL=<path>." >&2; \
+		exit 1; \
+	fi; \
+	OBJECT=$$(basename $$(realpath $(TARBALL))); \
+	GCE=$$(echo "$${OBJECT%.tar.gz}" | tr '_.' '--'); \
+	if gcloud storage objects describe "gs://$(GCP_BUCKET)/$$OBJECT" --project $(GCP_PROJECT) >/dev/null 2>&1; then \
+		echo "$$OBJECT is already in gs://$(GCP_BUCKET)/; not overwriting."; \
+	else \
+		echo "Uploading $$OBJECT → gs://$(GCP_BUCKET)/ ..."; \
+		gcloud storage cp --no-clobber $(TARBALL) "gs://$(GCP_BUCKET)/$$OBJECT" --project $(GCP_PROJECT); \
+	fi; \
+	if gcloud compute images describe "$$GCE" --project $(GCP_PROJECT) >/dev/null 2>&1; then \
+		echo "$$GCE is already registered in $(GCP_PROJECT); not replacing."; \
+	else \
+		echo "Registering $$GCE from gs://$(GCP_BUCKET)/$$OBJECT ..."; \
+		gcloud compute images create "$$GCE" --project $(GCP_PROJECT) \
+			--source-uri "gs://$(GCP_BUCKET)/$$OBJECT" \
+			--guest-os-features=UEFI_COMPATIBLE,GVNIC,TDX_CAPABLE \
+			--storage-location $(GCP_LOCATION); \
+	fi; \
+	echo ""; \
+	echo "Here is the GCE image:"; \
+	echo "  projects/$(GCP_PROJECT)/global/images/$$GCE"
+
 push-azure-releases: ## Upload the .vhd to releases/ (long-term)
 	@$(MAKE) push-azure AZURE_CONTAINER=releases
 
@@ -117,8 +151,7 @@ push-azure-releases: ## Upload the .vhd to releases/ (long-term)
 # One measurements file per attestation type, named for it: the admission
 # pipeline keys a policy record on `attestation_type`, and an image published
 # for more than one cloud carries one file per type under one release, so
-# the name says which registers are inside before anyone opens it. The GCP
-# type string is provisional until its admission schema exists.
+# the name says which registers are inside before anyone opens it.
 MEASUREMENTS_AZURE := build/measurements.azure-tdx.json
 MEASUREMENTS_GCP := build/measurements.gcp-tdx.json
 
@@ -139,16 +172,16 @@ measure-portable-gcp: measure-portable ## Export a portable GCP-only attestation
 	@$(WRAPPER) bash -c 'jq -e "[{attestation_type: \"gcp-tdx\", dcap_image_hashes: .dcap}]" build/portable_measurements.json > build/measurements-gcp.json'
 	echo "GCP attestation policy exported to build/measurements-gcp.json"
 
-measure-gcp: ## Export GCP TDX measurements for the built EFI file
-	@$(WRAPPER) dstack-mr -uki $(FILE) > $(MEASUREMENTS_GCP)
-	echo "GCP Measurements exported to $(MEASUREMENTS_GCP)"
+measure-gcp: ## Predict RTMR1 and RTMR2 for a GCP TDX boot (no vTPM) of the built EFI file
+	@python3 scripts/predict_gcp_rtmrs.py --efi $(FILE) --out $(MEASUREMENTS_GCP) && \
+	echo "GCP measurements exported to $(MEASUREMENTS_GCP)"
 
 # The release's founding inputs, from the built image: the seismic-reth and
 # summit binaries out of the initrd, both genesis files, and SHA256SUMS over
 # them, the measurements and the UKI. See the readme's "Founding inputs".
 .PHONY: founding-inputs
-founding-inputs: measure ## Gather the founding inputs into build/ and write SHA256SUMS (uses INITRD, FILE)
-	@$(WRAPPER) scripts/seismic/founding_inputs.sh $(INITRD) $(FILE) $(MEASUREMENTS_AZURE)
+founding-inputs: measure measure-gcp ## Gather the founding inputs into build/ and write SHA256SUMS (uses INITRD, FILE)
+	@$(WRAPPER) scripts/seismic/founding_inputs.sh $(INITRD) $(FILE) $(MEASUREMENTS_AZURE) $(MEASUREMENTS_GCP)
 
 # Everything a release carries that a rebuild can reproduce, from one FILE
 # and INITRD: the measurements and the founding inputs with their
@@ -167,10 +200,11 @@ release-assets: founding-inputs ## Measure the UKI and gather the founding input
 SUMS ?= build/SHA256SUMS
 COMMIT ?= $(shell git rev-parse HEAD)
 .PHONY: image-json
-image-json: ## Write build/image.json and add it to SHA256SUMS (uses AZURE_STORAGE_ACCOUNT, AZURE_CONTAINER, AZURE_STORAGE_ACCOUNT_ID, COMMIT)
+image-json: ## Write build/image.json and add it to SHA256SUMS (uses AZURE_STORAGE_ACCOUNT, AZURE_CONTAINER, AZURE_STORAGE_ACCOUNT_ID, GCP_PROJECT, GCP_BUCKET, COMMIT)
 	@AZURE_STORAGE_ACCOUNT=$(AZURE_STORAGE_ACCOUNT) AZURE_CONTAINER=$(AZURE_CONTAINER) \
 		AZURE_STORAGE_ACCOUNT_ID=$(AZURE_STORAGE_ACCOUNT_ID) \
-		scripts/seismic/image_json.sh $(MEASUREMENTS_AZURE) $(SUMS) $(COMMIT)
+		GCP_PROJECT=$(GCP_PROJECT) GCP_BUCKET=$(GCP_BUCKET) \
+		scripts/seismic/image_json.sh $(MEASUREMENTS_AZURE) $(MEASUREMENTS_GCP) $(SUMS) $(COMMIT)
 
 ##@ Utilities
 
