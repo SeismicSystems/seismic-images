@@ -178,6 +178,7 @@ jobs:
           etc/systemd/system/summit.service
           etc/systemd/system/summit.target
           etc/systemd/system/tdx-init.service
+          etc/systemd/system/system.slice.d/deny-reth-rpc-port.conf
           etc/systemd/system/minimal.target.wants/attestation.service
           etc/systemd/system/minimal.target.wants/caddy.service
           etc/systemd/system/minimal.target.wants/custodian.service

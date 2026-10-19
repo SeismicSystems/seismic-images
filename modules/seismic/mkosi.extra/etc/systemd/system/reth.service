@@ -6,6 +6,9 @@ Requires=persistent-luks-setup.service attestation.service
 [Service]
 Type=simple
 User=reth
+# Own slice, outside system.slice's SocketBindDeny=tcp:8545, so reth is the
+# only unit that can bind its RPC port. See system.slice.d/.
+Slice=reth.slice
 # Group= override is load-bearing here: the RuntimeDirectory= below creates
 # /run/reth-engine/ with the unit's primary group. Without engine-api here,
 # the dir would be reth:reth and summit couldn't open the IPC socket inside.
