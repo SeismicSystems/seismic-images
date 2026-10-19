@@ -1,7 +1,7 @@
 [Unit]
 Description=Summit Consensus Server
-After=network.target persistent-luks-setup.service attestation.service reth.service summit-persist.service
-Requires=persistent-luks-setup.service attestation.service reth.service summit-persist.service
+After=network.target persistent-luks-setup.service reth.service summit-persist.service
+Requires=persistent-luks-setup.service reth.service summit-persist.service
 PartOf=summit.target
 
 [Service]
@@ -25,13 +25,13 @@ Environment=RUST_LOG=info
 ReadOnlyPaths=/persistent/summit/keys /run/seismic/summit
 InaccessiblePaths=/run/seismic/summit/keys
 
-# Required (no `-`): the Requires= chain (persistent-luks-setup -> tdx-init)
-# guarantees summit.env exists, so a missing file is a real boot
-# failure, not something to tolerate.
+# Required (no `-`): persistent-luks-setup finishing implies tdx-init wrote
+# summit.env (see that unit), so a missing file is a real boot failure, not
+# something to tolerate.
 EnvironmentFile=/run/seismic/conf/summit.env
 
-# --rpc-ip 127.0.0.1: nginx fronts the public RPC at /summit
-# (proxy_pass http://localhost:3030), so the listener itself never needs to be
+# --rpc-ip 127.0.0.1: Caddy fronts the public RPC at /summit
+# (reverse_proxy 127.0.0.1:3030), so the listener itself never needs to be
 # reachable off-box. Binding loopback makes that structural instead of resting
 # on the NSG leaving :3030 closed.
 # --genesis-path: written verbatim by tdx-init on every boot from the

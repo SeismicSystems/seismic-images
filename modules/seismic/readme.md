@@ -64,7 +64,7 @@ is enabled into `minimal.target.wants` by the loop in
 through `summit.target`. What each process is, and the order a boot
 walks them in, is
 [the node lifecycle](https://github.com/SeismicSystems/seismic/blob/main/docs/tee/architecture.md#node-lifecycle-power-on-to-serving).
-The edges themselves are each unit's `After=`/`Requires=` lines; on a
+The edges themselves are each unit's `After=`/`Wants=`/`Requires=` lines; on a
 running node, `systemctl list-dependencies minimal.target` prints them.
 
 Two things the boot needs have no unit:
@@ -168,6 +168,11 @@ attestation service first asks for `root_key`, after the POST, the custodian
 reads the manifest's pin: it keeps the candidate if the pin names it, and
 otherwise discards it and installs only a fetched key that derives the pin.
 
+A restart loses `root_key`, so the attestation service restarts with the
+custodian and fetches it back from peers. What restarting either unit
+reaches is in
+[`custodian.service`](mkosi.extra/etc/systemd/system/custodian.service).
+
 ### `attestation.service`
 
 Two listeners. `:7879` serves the founding harvest from boot (summit's
@@ -184,8 +189,9 @@ tight restart loop would hammer the TPM.
 
 Runs [`persistent-luks-setup`](mkosi.extra/usr/bin/persistent-luks-setup);
 its header comment has the design (key handoff, header MAC,
-detached-header open). `Restart=on-failure` rides out a disk not yet
-attached or a slow root-key bootstrap.
+detached-header open). The script itself waits for the disk and for the
+custodian's keyfile, so `Restart=on-failure` is only a backstop for
+unforeseen failures.
 
 The disk defaults to `/dev/disk/by-path/*10` (Azure LUN 10). Other
 clouds override it with globs in

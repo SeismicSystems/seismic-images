@@ -6,11 +6,15 @@ Description=Seismic Attestation Service
 # summit-keygen, which writes the public-keys file the harvest serves;
 # network-online is for the IMDS round-trip in the quote path.
 After=network-online.target summit-keygen.service
-# The :7878 side waits in-process: it reads its peers once tdx-init's done
-# marker appears, and retries the custodian socket until the custodian creates
-# it. So neither unit is an ordering dependency; Wants= only pulls them into
-# the boot.
-Wants=network-online.target tdx-init.service custodian.service
+# The :7878 side reads its peers once tdx-init's done marker appears, so
+# tdx-init is not an ordering dependency; Wants= only pulls it into the boot.
+Wants=network-online.target tdx-init.service
+# Restarts with the custodian, so the root-key bootstrap runs again whenever
+# the custodian loses root_key; see custodian.service for what a restart
+# reaches. After= orders that bootstrap after the restarted custodian's
+# socket; the socket client retries regardless.
+Requires=custodian.service
+After=custodian.service
 
 [Service]
 Type=simple
