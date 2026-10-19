@@ -1,12 +1,19 @@
 [Unit]
 Description=Provision and unlock the persistent LUKS volume, mount /persistent
-# The custodian writes the LUKS keyfile the setup script polls for; on a
-# joining node that happens only once the attestation service completes the
-# root-key bootstrap, so both are required. Either way the custodian holds
-# root_key only once the manifest exists, so tdx-init has run; requiring it
-# here makes that explicit for everything ordered after this unit.
-After=tdx-init.service custodian.service attestation.service
-Requires=tdx-init.service custodian.service attestation.service
+# The LUKS keyfile the custodian writes is this unit's only synchronization
+# point, and it also implies tdx-init has finished: the custodian writes it
+# once it holds root_key, which the attestation service fetches or confirms
+# only after tdx-init's done marker, written after every other config file. So
+# every unit ordered after this one finds /run/seismic/conf complete.
+# After=tdx-init only keeps this unit queued, rather than polling, until the
+# config POST.
+#
+# Wants= rather than Requires= on all three: Requires= would restart this unit
+# whenever one of them restarts (see custodian.service), and would cancel its
+# queued start for good if tdx-init failed once, even when tdx-init's Restart=
+# then recovers.
+After=tdx-init.service
+Wants=tdx-init.service custodian.service attestation.service
 
 [Service]
 Type=oneshot
@@ -16,9 +23,9 @@ ExecStart=/usr/bin/persistent-luks-setup
 # Materialize per-service /persistent/<svc> ownership and mode now that /persistent is mounted.
 ExecStartPost=/usr/bin/systemd-tmpfiles --create /etc/seismic/tmpfiles-persistent.conf
 
-# Backstop for unforeseen failures only. 
+# Backstop for unforeseen failures only.
 # A failure here — even one a restart later recovers — cancels the queued start
-# jobs of every Requires= dependent (nginx-ssl-setup/reth/summit-persist/summit),
+# jobs of every Requires= dependent (caddy/reth/summit-persist/summit),
 # and systemd never re-enqueues them. If that stranding ever happens anyway,
 # `systemctl start summit.target` pulls the whole chain back up.
 Restart=on-failure

@@ -149,7 +149,7 @@ split_progress_stream() {
 }
 
 # Block until the custodian drops the keyfile. The custodian unit runs in
-# parallel with this script (via systemd Requires=); the keyfile is the
+# parallel with this script (via systemd Wants=); the keyfile is the
 # synchronization point. The custodian renames the file into place, so
 # existence implies fully written.
 wait_for_keyfile() {

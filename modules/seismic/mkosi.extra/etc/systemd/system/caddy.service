@@ -1,11 +1,13 @@
 [Unit]
 Description=Caddy, the node's public HTTPS proxy
-# The domain comes from tdx-init's domain.env, and the certificate lives on
-# the LUKS volume. Nothing requires this unit: a node without a certificate
-# has no public HTTPS, while reth and summit run regardless.
-After=network-online.target tdx-init.service persistent-luks-setup.service
+# Starts only once persistent-luks-setup has finished, which implies both of
+# its inputs exist: tdx-init's domain.env, and /persistent, where Caddy keeps
+# its certificate and ACME account (see that unit). Nothing requires this
+# unit: a node without a certificate has no public HTTPS, while reth and
+# summit run regardless.
+After=network-online.target persistent-luks-setup.service
 Wants=network-online.target
-Requires=tdx-init.service persistent-luks-setup.service
+Requires=persistent-luks-setup.service
 
 [Service]
 Type=notify
