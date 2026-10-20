@@ -21,8 +21,9 @@ Environment=RUST_LOG=info
 # only reads it. It must never gain a keygen step of its own, even as a
 # fallback: that would mint fresh keys the manifest never pinned, turning a
 # loud startup failure into a launch-check mismatch. The public-keys file the
-# attestation service serves is read-only here for the same reason.
-ReadOnlyPaths=/persistent/summit/keys /run/seismic/summit
+# attestation service serves is read-only here for the same reason. The
+# sandbox baseline's ProtectSystem=strict leaves both read-only, and
+# ReadWritePaths= opens only the database.
 InaccessiblePaths=/run/seismic/summit/keys
 
 # Required (no `-`): seismic-persistent-luks-setup finishing implies tdx-init
@@ -67,3 +68,36 @@ Restart=on-failure
 RestartSec=10
 StandardOutput=journal
 StandardError=journal
+
+####### SANDBOX #######
+# What code running inside summit could still reach, on top of the shared
+# baseline in seismic-.service.d/. It holds the consensus signing keys, and
+# needs its ports, reth's Engine API socket and its database.
+
+# Network
+# Its own slice, outside system.slice's port reservation (see system.slice.d/),
+# so it can bind its own ports. SocketBindDeny=any keeps it off every other
+# port, the other node services' included. tcp:3031 is the admin RPC, which
+# summit binds on loopback by default, and which stops the REST server on :3030
+# too when its bind fails.
+Slice=seismic-summit.slice
+SocketBindAllow=tcp:3030
+SocketBindAllow=tcp:3031
+SocketBindAllow=tcp:9002
+SocketBindAllow=tcp:18551
+SocketBindDeny=any
+# IP sockets, beside the baseline's Unix ones.
+RestrictAddressFamilies=AF_INET AF_INET6
+
+# Filesystem
+# Its database.
+ReadWritePaths=/persistent/summit/db
+
+# Devices
+# A minimal /dev of pseudo-devices: no TPM, no disks, no /dev/mem.
+PrivateDevices=yes
+
+# Privileges
+# No Linux capabilities, ever, even as UID 0.
+CapabilityBoundingSet=
+####### END SANDBOX #######

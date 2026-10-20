@@ -6,9 +6,6 @@ Requires=seismic-persistent-luks-setup.service
 [Service]
 Type=simple
 User=reth
-# Own slice, outside system.slice's SocketBindDeny=tcp:8545, so reth is the
-# only unit that can bind its RPC port. See system.slice.d/.
-Slice=seismic-reth.slice
 # Group= override is load-bearing here: the RuntimeDirectory= below creates
 # /run/reth-engine/ with the unit's primary group. Without engine-api here,
 # the dir would be reth:reth and summit couldn't open the IPC socket inside.
@@ -101,6 +98,40 @@ Restart=on-failure
 RestartSec=10
 StandardOutput=journal
 StandardError=journal
+
+####### SANDBOX #######
+# What code running inside reth could still reach, on top of the shared
+# baseline in seismic-.service.d/. It holds the tx-io and RNG keys, and needs
+# its ports, its datadir and the Engine API socket it serves.
+
+# Network
+# Its own slice, outside system.slice's port reservation (see system.slice.d/),
+# so it can bind its own ports. SocketBindDeny=any keeps it off every other
+# port, the other node services' included. tcp:8551 is the JWT-authenticated
+# Engine API over HTTP, which reth starts beside --auth-ipc and has no flag to
+# turn off; summit uses the IPC socket.
+Slice=seismic-reth.slice
+SocketBindAllow=tcp:8545
+SocketBindAllow=tcp:8546
+SocketBindAllow=tcp:8551
+SocketBindAllow=tcp:9001
+SocketBindAllow=30303
+SocketBindDeny=any
+# IP sockets, beside the baseline's Unix ones.
+RestrictAddressFamilies=AF_INET AF_INET6
+
+# Filesystem
+# Its datadir. RuntimeDirectory= keeps /run/reth-engine writable as well.
+ReadWritePaths=/persistent/reth
+
+# Devices
+# A minimal /dev of pseudo-devices: no TPM, no disks, no /dev/mem.
+PrivateDevices=yes
+
+# Privileges
+# No Linux capabilities, ever, even as UID 0.
+CapabilityBoundingSet=
+####### END SANDBOX #######
 
 [Install]
 WantedBy=minimal.target

@@ -20,16 +20,59 @@ Type=oneshot
 RemainAfterExit=yes
 
 ExecStart=/usr/bin/seismic-persistent-luks-setup
+# Both run outside the sandbox below ("+"): a mount made in the unit's private
+# mount namespace would never reach the other units, and only the tmpfiles
+# step needs CAP_CHOWN and CAP_FOWNER.
+ExecStartPost=+/bin/sh -c 'mountpoint -q /persistent || { mkdir -p /persistent && mount /dev/mapper/persistent /persistent; }'
 # Materialize per-service /persistent/<svc> ownership and mode now that /persistent is mounted.
-ExecStartPost=/usr/bin/systemd-tmpfiles --create /etc/seismic/tmpfiles-persistent.conf
+ExecStartPost=+/usr/bin/systemd-tmpfiles --create /etc/seismic/tmpfiles-persistent.conf
 
 # Backstop for unforeseen failures only.
 # A failure here — even one a restart later recovers — cancels the queued start
 # jobs of every Requires= dependent (seismic-caddy, seismic-reth,
-# seismic-summit-persist, seismic-summit), and systemd never re-enqueues them. If that stranding ever happens anyway,
-# `systemctl start seismic-summit.target` pulls the whole chain back up.
+# seismic-summit-persist, seismic-summit), and systemd never re-enqueues them.
+# If that stranding ever happens anyway, `systemctl start seismic-summit.target`
+# pulls the whole chain back up.
 Restart=on-failure
 RestartSec=5
+
+####### SANDBOX #######
+# What code running inside seismic-persistent-luks-setup could still reach, on
+# top of the shared baseline in seismic-.service.d/. It runs as root, since
+# device-mapper needs CAP_SYS_ADMIN, and parses a LUKS header from a disk the
+# cloud controls. The "+" lines above escape all of it but the device policy,
+# which covers the whole cgroup.
+
+# Network
+# The baseline's Unix sockets only. Not PrivateNetwork=: it cuts the udev
+# events cryptsetup waits on.
+
+# Filesystem
+# The wipe-progress file, the custodian's keyfile it shreds, and cryptsetup's
+# lock directory (cryptsetup-bin's tmpfiles.d creates it). The verified header
+# copy lives in RuntimeDirectory=.
+ReadWritePaths=/run/seismic/status /run/seismic/custodian /run/cryptsetup
+RuntimeDirectory=seismic-persistent-luks-setup
+
+# Devices
+# The data disk (SCSI or NVMe, depending on the cloud), the device-mapper
+# volumes opened on it, and their control node. The baseline's ProtectClock=
+# implies DeviceAllow=char-rtc r, which closes every device not listed.
+DeviceAllow=block-sd rw
+DeviceAllow=block-blkext rw
+DeviceAllow=block-device-mapper rw
+DeviceAllow=/dev/mapper/control rw
+
+# Privileges
+# device-mapper (SYS_ADMIN), cryptsetup's locked memory (IPC_LOCK), and reading
+# and shredding the custodian's 0400 keyfile (DAC_OVERRIDE).
+# TODO(samlaf): run as a dedicated user without DAC_OVERRIDE. That needs the
+# custodian (enclave) to write the keyfile 0440 to a group of this unit's user
+# in a directory that group can unlink from, and a udev rule for
+# /dev/mapper/control (root 0600); then User= with SupplementaryGroups=disk and
+# AmbientCapabilities=CAP_SYS_ADMIN CAP_IPC_LOCK.
+CapabilityBoundingSet=CAP_SYS_ADMIN CAP_IPC_LOCK CAP_DAC_OVERRIDE
+####### END SANDBOX #######
 
 [Install]
 WantedBy=minimal.target

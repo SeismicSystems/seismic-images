@@ -46,7 +46,7 @@ Environment=RUST_LOG=info
 # founding policy once the chain passes block 0, and public-only tx-io evidence
 # minting (tx-io-public) — never a purpose that exposes tx_io_sk to the
 # network-facing process.
-# reth fetches its own keys from the socket (tx-io,rng). 
+# reth fetches its own keys from the socket (tx-io,rng).
 # The snapshot purpose stays ungranted until snapshot-svc exists.
 ExecStart=/usr/bin/seismic-custodian-service \
     --allow attestation:tx-io-public,create-root-key-bootstrap-attempt,wrap-root-key,retire-founding-policy,install-root-key-from-verified-bootstrap-response \
@@ -56,6 +56,29 @@ Restart=always
 RestartSec=5
 StandardOutput=journal
 StandardError=journal
+
+####### SANDBOX #######
+# What code running inside the custodian could still reach, on top of the
+# shared baseline in seismic-.service.d/. It holds root_key and needs nothing
+# but its Unix socket.
+
+# Network
+# Loopback only, so there is nothing to send root_key out on. Unix sockets on
+# the filesystem aren't tied to a network namespace, so callers still reach it.
+PrivateNetwork=yes
+
+# Filesystem
+# Its socket, candidate-tx-io-pk and the LUKS keyfile.
+ReadWritePaths=/run/seismic/custodian
+
+# Devices
+# A minimal /dev of pseudo-devices: no TPM, no disks, no /dev/mem.
+PrivateDevices=yes
+
+# Privileges
+# No Linux capabilities, ever, even as UID 0.
+CapabilityBoundingSet=
+####### END SANDBOX #######
 
 [Install]
 WantedBy=minimal.target

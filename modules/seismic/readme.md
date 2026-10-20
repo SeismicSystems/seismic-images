@@ -124,6 +124,73 @@ on the LUKS volume, from
 Setgid on the two `2750` dirs gives every file created in them the
 dir's group, so the writer needs no membership of its own.
 
+### Sandboxing
+
+One shared baseline,
+[`10-sandbox-baseline.conf`](mkosi.extra/etc/systemd/system/seismic-.service.d/10-sandbox-baseline.conf),
+sits in `seismic-.service.d/`, which systemd applies to every unit whose
+name starts with `seismic-`. Each unit file adds only what differs:
+network, writable paths, devices and capabilities. Together they give
+every unit:
+
+- no capabilities beyond the ones it lists, and no way to gain more
+  (`NoNewPrivileges=`, no setuid/setgid bits);
+- a read-only filesystem except the paths below, a private `/tmp`, no
+  `/home`, and no other users' processes in `/proc`;
+- no devices beyond the ones below;
+- kernel tunables, modules, logs, cgroups, the clock and the hostname
+  out of reach;
+- no new namespaces, no realtime scheduling, no writable and executable
+  memory;
+- native syscalls from `@system-service` minus `@privileged`; any other
+  fails with `EPERM`.
+
+| Unit | Network | Writes | Devices | Binds |
+| --- | --- | --- | --- | --- |
+| `seismic-tdx-init` | IP | `/run/seismic/conf` | none | tcp `8080` |
+| `seismic-custodian` | none | `/run/seismic/custodian` | none | none |
+| `seismic-attestation` | IP | nothing | `/dev/tpm0`, `/dev/tpmrm0` | tcp `7878`, `7879`; any UDP but `30303` |
+| `seismic-persistent-luks-setup` | Unix sockets only | `/run/seismic/status`, `/run/seismic/custodian`, `/run/cryptsetup` | the data disk, device-mapper | none |
+| `seismic-summit-keygen` | none | `/run/seismic/summit` | none | none |
+| `seismic-summit-persist` | none | `/persistent/summit/keys`, `/run/seismic/summit` | none | none |
+| `seismic-summit` | IP | `/persistent/summit/db` | none | tcp `3030`, `3031`, `9002`, `18551` |
+| `seismic-reth` | IP | `/persistent/reth`, `/run/reth-engine` | none | tcp `8545`, `8546`, `8551`, `9001`; tcp+udp `30303` |
+| `seismic-caddy` | IP | `/persistent/caddy` | none | tcp `443` |
+
+"None" for network means a private network namespace: the Unix sockets
+on the filesystem still work.
+
+`seismic-persistent-luks-setup` mounts `/persistent` for every other
+unit, and a mount made in its private mount namespace would never reach
+them. So the mount, and the `systemd-tmpfiles` step after it, run as
+`ExecStartPost=+` lines outside the sandbox. The script itself, which
+parses a LUKS header from a disk the cloud controls, runs inside it as
+root with three capabilities; its
+[unit](mkosi.extra/etc/systemd/system/seismic-persistent-luks-setup.service)
+lists them and why.
+
+**Every listening port belongs to one unit.**
+[`system.slice.d/`](mkosi.extra/etc/systemd/system/system.slice.d/)
+denies every port in the Binds column to all of `system.slice`, and each
+listener runs in a slice of its own, `seismic-<name>.slice`, with
+`SocketBindAllow=` for its own ports and `SocketBindDeny=any` for the
+rest. No unit can lift its slice's deny, so no other process can bind a
+node service's port, even while that service is down. The attestation
+service is the one exception to `any`: its DNS resolver binds a random
+UDP source port for every query, so it denies all TCP and only reth's
+UDP port.
+
+Two settings cover the whole node:
+
+- **No core dumps:**
+  [`system.conf.d/no-core-dumps.conf`](mkosi.extra/etc/systemd/system.conf.d/no-core-dumps.conf)
+  sets every service's core limit to 0, hard limit included.
+- **No ptrace:**
+  [`sysctl.d/10-no-ptrace.conf`](mkosi.extra/etc/sysctl.d/10-no-ptrace.conf)
+  sets Yama's `ptrace_scope` to 3, so no process, root included, can
+  attach to another until the next boot. The devtools profile overrides
+  it to 1 so `strace` works on dev images.
+
 ### `seismic-tdx-init.service`
 
 Blocks on `:8080` every boot until the operator POSTs the node's
@@ -221,7 +288,7 @@ summit run regardless.
 | | reth | summit |
 | --- | --- | --- |
 | Public | devp2p `:30303` TCP+UDP (discv5 only) | P2P `:18551` |
-| Loopback | RPC `:8545`, WS `:8546`, metrics `:9001` | REST `:3030` (Caddy `/summit`), metrics `:9002` |
+| Loopback | RPC `:8545`, WS `:8546`, Engine API over HTTP `:8551` (unused: summit takes the IPC socket, but reth has no flag to turn it off), metrics `:9001` | REST `:3030` (Caddy `/summit`), admin RPC `:3031`, metrics `:9002` |
 
 reth fetches its purpose keys from the custodian socket at startup;
 `seismic-persistent-luks-setup` finishing implies the custodian holds

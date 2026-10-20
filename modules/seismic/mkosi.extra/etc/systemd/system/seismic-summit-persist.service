@@ -16,3 +16,27 @@ ExecStart=/usr/bin/seismic-summit-persist
 
 StandardOutput=journal
 StandardError=journal
+
+####### SANDBOX #######
+# What code running inside seismic-summit-persist could still reach, on top of
+# the shared baseline in seismic-.service.d/. It copies summit's consensus keys
+# into the keystore and only moves files.
+
+# Network
+# Loopback only, so there is nothing to send the keys out on.
+PrivateNetwork=yes
+
+# Filesystem
+# The keystore and the public-keys file.
+ReadWritePaths=/persistent/summit/keys /run/seismic/summit
+# The tmpfs keys, which it only reads.
+ReadOnlyPaths=/run/seismic/summit/keys
+
+# Devices
+# A minimal /dev of pseudo-devices: no TPM, no disks, no /dev/mem.
+PrivateDevices=yes
+
+# Privileges
+# No Linux capabilities, ever, even as UID 0.
+CapabilityBoundingSet=
+####### END SANDBOX #######
