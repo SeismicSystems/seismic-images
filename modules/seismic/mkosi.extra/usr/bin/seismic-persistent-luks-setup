@@ -44,7 +44,7 @@ set -Eeuo pipefail
 # then retries per Restart=on-failure, overwriting this on the next attempt).
 on_error() {
     local rc=$?
-    write_status_json "$(jq -cn --arg e "persistent-luks-setup failed (rc=$rc); see journalctl -u persistent-luks-setup.service" \
+    write_status_json "$(jq -cn --arg e "seismic-persistent-luks-setup failed (rc=$rc); see journalctl -u seismic-persistent-luks-setup.service" \
         '{state:"error", error:$e}' 2>/dev/null)"
     return "$rc"
 }
@@ -65,7 +65,7 @@ STATUS_FILE="/run/seismic/status/luks.json"
 
 # Drop-zone for the LUKS keys, written by the custodian as soon as it holds
 # the root key: 64 bytes total = storage_key (32B) || header_mac_key (32B).
-# TODO(samlaf): consider swapping polling for systemd Type=notify on custodian.service.
+# TODO(samlaf): consider swapping polling for systemd Type=notify on seismic-custodian.service.
 # The custodian would sd_notify(READY=1) after writing the keyfile, and
 # this script could drop wait_for_keyfile entirely. Gives clean failure
 # propagation if the custodian never readies.
@@ -88,7 +88,7 @@ TOKEN_TYPE="seismic-header-mac"
 DEFAULT_DISK_GLOB="/dev/disk/by-path/*10"
 DISK_GLOB_OVERRIDE_FILE="/etc/seismic-images/persistent-disk-glob"
 
-log() { echo "[persistent-luks-setup] $*" >&2; }
+log() { echo "[seismic-persistent-luks-setup] $*" >&2; }
 
 # --- LUKS-wipe progress producer (best-effort; never aborts the script) -----
 #

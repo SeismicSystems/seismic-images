@@ -17,16 +17,16 @@ Description=Seismic Key Custodian
 #   stop custodian           → custodian, attestation
 #   restart attestation      → attestation   (bootstrap: RootKeyAlreadyPresent)
 #
-# attestation.service's Requires= on this unit carries the first three rows:
-# systemd (>= 254) passes an automatic Restart= along it as well as an explicit
-# restart, but only under the default RestartMode=normal. BindsTo= in its
-# place would stop the attestation service on a crash and never start it
+# seismic-attestation.service's Requires= on this unit carries the first three
+# rows: systemd (>= 254) passes an automatic Restart= along it as well as an
+# explicit restart, but only under the default RestartMode=normal. BindsTo= in
+# its place would stop the attestation service on a crash and never start it
 # again, since the carried-over restart reaches only units still active.
 #
 # Nothing else may have Requires= or BindsTo= on either unit, or the restart
-# reaches it too: re-running persistent-luks-setup on an open volume fails,
-# or waits forever for the keyfile it already shredded, and takes reth and
-# summit down with it.
+# reaches it too: re-running seismic-persistent-luks-setup on an open volume
+# fails, or waits forever for the keyfile it already shredded, and takes reth
+# and summit down with it.
 
 [Service]
 Type=simple
