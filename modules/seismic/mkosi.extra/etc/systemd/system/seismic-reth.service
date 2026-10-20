@@ -1,14 +1,14 @@
 [Unit]
 Description=Seismic Reth Node
-After=network.target persistent-luks-setup.service
-Requires=persistent-luks-setup.service
+After=network.target seismic-persistent-luks-setup.service
+Requires=seismic-persistent-luks-setup.service
 
 [Service]
 Type=simple
 User=reth
 # Own slice, outside system.slice's SocketBindDeny=tcp:8545, so reth is the
 # only unit that can bind its RPC port. See system.slice.d/.
-Slice=reth.slice
+Slice=seismic-reth.slice
 # Group= override is load-bearing here: the RuntimeDirectory= below creates
 # /run/reth-engine/ with the unit's primary group. Without engine-api here,
 # the dir would be reth:reth and summit couldn't open the IPC socket inside.
@@ -29,15 +29,15 @@ RuntimeDirectoryPreserve=restart
 # peers, NAT extip) can't be hardcoded, so tdx-init emits them as flag
 # fragments in reth-p2p.env, spliced in via $RETH_*_FLAG.
 
-# Required (no `-`): persistent-luks-setup finishing implies tdx-init wrote
-# reth-p2p.env (see that unit), so a missing file is a real boot failure, not
-# something to tolerate.
+# Required (no `-`): seismic-persistent-luks-setup finishing implies tdx-init
+# wrote reth-p2p.env (see that unit), so a missing file is a real boot failure,
+# not something to tolerate.
 EnvironmentFile=/run/seismic/conf/reth-p2p.env
 
 # --chain reth-genesis.json: tdx-init writes it each boot (/run is tmpfs);
-#   persistent-luks-setup finishing implies it exists.
+#   seismic-persistent-luks-setup finishing implies it exists.
 # --datadir /persistent/reth: created by tmpfiles-persistent.conf via
-#   persistent-luks-setup's ExecStartPost.
+#   seismic-persistent-luks-setup's ExecStartPost.
 # --http.api/--ws.api eth,net,web3 (not `all`): Caddy proxies /rpc+/ws wholesale,
 #   so this allowlist is what keeps admin/debug/txpool off the public surface. The
 #   seismic namespace and eth_ overrides register regardless;

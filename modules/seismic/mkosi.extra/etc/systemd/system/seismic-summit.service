@@ -1,8 +1,8 @@
 [Unit]
 Description=Summit Consensus Server
-After=network.target persistent-luks-setup.service reth.service summit-persist.service
-Requires=persistent-luks-setup.service reth.service summit-persist.service
-PartOf=summit.target
+After=network.target seismic-persistent-luks-setup.service seismic-reth.service seismic-summit-persist.service
+Requires=seismic-persistent-luks-setup.service seismic-reth.service seismic-summit-persist.service
+PartOf=seismic-summit.target
 
 [Service]
 Type=simple
@@ -17,17 +17,17 @@ UMask=0002
 # and will start working once summit's EnvFilter construction is updated.
 Environment=RUST_LOG=info
 
-# summit-persist.service is the only writer of the keystore, and summit only
-# reads it. It must never gain a keygen step of its own, even as a fallback:
-# that would mint fresh keys the manifest never pinned, turning a loud startup
-# failure into a launch-check mismatch. The public-keys file the attestation
-# service serves is read-only here for the same reason.
+# seismic-summit-persist.service is the only writer of the keystore, and summit
+# only reads it. It must never gain a keygen step of its own, even as a
+# fallback: that would mint fresh keys the manifest never pinned, turning a
+# loud startup failure into a launch-check mismatch. The public-keys file the
+# attestation service serves is read-only here for the same reason.
 ReadOnlyPaths=/persistent/summit/keys /run/seismic/summit
 InaccessiblePaths=/run/seismic/summit/keys
 
-# Required (no `-`): persistent-luks-setup finishing implies tdx-init wrote
-# summit.env (see that unit), so a missing file is a real boot failure, not
-# something to tolerate.
+# Required (no `-`): seismic-persistent-luks-setup finishing implies tdx-init
+# wrote summit.env (see that unit), so a missing file is a real boot failure,
+# not something to tolerate.
 EnvironmentFile=/run/seismic/conf/summit.env
 
 # --rpc-ip 127.0.0.1: Caddy fronts the public RPC at /summit

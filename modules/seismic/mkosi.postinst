@@ -22,25 +22,25 @@ mkosi-chroot useradd -r -s /bin/false -G conf custodian
 # harvest's included. Any process that can quote arbitrary report_data can
 # have a peer wrap root_key to a key of its own, so the set stays at one.
 mkosi-chroot useradd -r -s /bin/false -G conf,custodian-ipc,tpm attestation
-# reth fetches its keys from the custodian socket (custodian.service grants
-# reth:tx-io,rng).
+# reth fetches its keys from the custodian socket (seismic-custodian.service
+# grants reth:tx-io,rng).
 mkosi-chroot useradd -r -s /bin/false -G conf,engine-api,custodian-ipc reth
 mkosi-chroot useradd -r -s /bin/false -G conf,engine-api summit
 mkosi-chroot useradd -r -s /bin/false caddy
 
 # Make scripts executable
-chmod +x "$BUILDROOT/usr/bin/persistent-luks-setup"
-chmod +x "$BUILDROOT/usr/bin/summit-persist"
+chmod +x "$BUILDROOT/usr/bin/seismic-persistent-luks-setup"
+chmod +x "$BUILDROOT/usr/bin/seismic-summit-persist"
 
 # Enable services: `systemctl enable` creates the symlink each unit's
 # [Install] WantedBy= names, here minimal.target.wants/<unit>, so the boot
 # target pulls it in. It must happen at build time: the rootfs is a tmpfs,
 # so a unit enabled on a running node is disabled again after a reboot.
 mkosi-chroot systemctl enable \
-    persistent-luks-setup.service \
-    tdx-init.service \
-    caddy.service \
-    reth.service \
-    custodian.service \
-    attestation.service \
-    summit.target
+    seismic-persistent-luks-setup.service \
+    seismic-tdx-init.service \
+    seismic-caddy.service \
+    seismic-reth.service \
+    seismic-custodian.service \
+    seismic-attestation.service \
+    seismic-summit.target

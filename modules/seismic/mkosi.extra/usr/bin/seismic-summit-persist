@@ -1,12 +1,12 @@
 #!/bin/bash
 # Carry summit's keys from tmpfs into its keystore on /persistent, or confirm
 # the keystore already there, then rewrite the public-keys file from the
-# keystore. Run once per boot by summit-persist.service, as the summit user,
-# after persistent-luks-setup has mounted /persistent.
+# keystore. Run once per boot by seismic-summit-persist.service, as the summit
+# user, after seismic-persistent-luks-setup has mounted /persistent.
 #
-# summit-keygen wrote this boot's keys to /run/seismic/summit/keys before the
-# config POST, and the founding harvest pinned their public halves. The
-# decision is made from the keystore on disk, never from tmpfs:
+# seismic-summit-keygen wrote this boot's keys to /run/seismic/summit/keys
+# before the config POST, and the founding harvest pinned their public halves.
+# The decision is made from the keystore on disk, never from tmpfs:
 #
 #   keystore complete   `summit keys show` on it must succeed; the tmpfs keys
 #                       are a reboot's throwaway set
@@ -18,8 +18,8 @@
 #                       anything else is refused
 #
 # Each file lands atomically (temporary name, fsync, rename). The tmpfs keys
-# are never deleted: with summit-keygen's --no-overwrite they are their own
-# write-once marker until the next reboot empties tmpfs.
+# are never deleted: with seismic-summit-keygen's --no-overwrite they are their
+# own write-once marker until the next reboot empties tmpfs.
 
 set -euo pipefail
 
@@ -30,7 +30,7 @@ PUBLIC_KEYS=/run/seismic/summit/public-keys.json
 KEY_FILES=(node_key.pem consensus_key.pem)
 
 die() {
-    echo "summit-persist: $*" >&2
+    echo "seismic-summit-persist: $*" >&2
     exit 1
 }
 
@@ -63,7 +63,7 @@ case ${#present[@]} in
         # A reboot: the keystore holds the keys the manifest pinned, and this
         # boot's tmpfs keys are discarded. Confirming it decodes is the
         # `keys show` after the case.
-        echo "summit-persist: keystore present; confirming it"
+        echo "seismic-summit-persist: keystore present; confirming it"
         ;;
     0)
         # First boot. Check both tmpfs files before copying either, so a
@@ -77,7 +77,7 @@ case ${#present[@]} in
         done
         # Flush the directory too, so the renames themselves survive a crash.
         sync "$KEYSTORE"
-        echo "summit-persist: copied this boot's keys into $KEYSTORE"
+        echo "seismic-summit-persist: copied this boot's keys into $KEYSTORE"
         ;;
     1)
         # A first-boot copy interrupted between the two files. If only this
@@ -91,14 +91,15 @@ case ${#present[@]} in
             die "partial keystore: $KEYSTORE/$name is not this boot's key; refusing to complete it"
         copy_in "${missing[0]}"
         sync "$KEYSTORE"
-        echo "summit-persist: finished an interrupted copy into $KEYSTORE"
+        echo "seismic-summit-persist: finished an interrupted copy into $KEYSTORE"
         ;;
 esac
 
 # Fails unless both keystore files decode. On success, republish the public
 # keys from the keystore. On a reboot this replaces the throwaway keys
-# summit-keygen published, so the harvest's /v1/keys serves the keys summit
-# actually runs with, which the launch checks compare against the manifest.
+# seismic-summit-keygen published, so the harvest's /v1/keys serves the keys
+# summit actually runs with, which the launch checks compare against the
+# manifest.
 /usr/bin/summit keys show --json --key-store-path "$KEYSTORE" >"$PUBLIC_KEYS.tmp" ||
     die "summit keys show failed on $KEYSTORE"
 mv -f "$PUBLIC_KEYS.tmp" "$PUBLIC_KEYS"

@@ -3,12 +3,13 @@ Description=Generate summit's consensus keys into tmpfs
 # Runs at boot, before any configuration exists: the founding harvest quotes
 # these keys' public halves, and the manifest pins them, before the config
 # POST. It depends on nothing the POST produces.
-PartOf=summit.target
+PartOf=seismic-summit.target
 
 [Service]
 Type=oneshot
-# Stays active after it exits, so it runs once per boot: summit-persist's
-# Requires= then finds it satisfied instead of starting it again.
+# Stays active after it exits, so it runs once per boot:
+# seismic-summit-persist's Requires= then finds it satisfied instead of
+# starting it again.
 RemainAfterExit=yes
 User=summit
 

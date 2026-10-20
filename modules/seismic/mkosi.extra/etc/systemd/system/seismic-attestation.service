@@ -3,18 +3,18 @@ Description=Seismic Attestation Service
 # Starts at boot, before any configuration exists, so the founding harvest on
 # :7879 can serve summit's public keys and the custodian's candidate
 # tx_io_pk@0, and a quote over them, before the config POST. After
-# summit-keygen, which writes the public-keys file the harvest serves;
+# seismic-summit-keygen, which writes the public-keys file the harvest serves;
 # network-online is for the IMDS round-trip in the quote path.
-After=network-online.target summit-keygen.service
+After=network-online.target seismic-summit-keygen.service
 # The :7878 side reads its peers once tdx-init's done marker appears, so
 # tdx-init is not an ordering dependency; Wants= only pulls it into the boot.
-Wants=network-online.target tdx-init.service
+Wants=network-online.target seismic-tdx-init.service
 # Restarts with the custodian, so the root-key bootstrap runs again whenever
-# the custodian loses root_key; see custodian.service for what a restart
+# the custodian loses root_key; see seismic-custodian.service for what a restart
 # reaches. After= orders that bootstrap after the restarted custodian's
 # socket; the socket client retries regardless.
-Requires=custodian.service
-After=custodian.service
+Requires=seismic-custodian.service
+After=seismic-custodian.service
 
 [Service]
 Type=simple

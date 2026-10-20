@@ -7,8 +7,9 @@
 #   its shape.
 # summit and seismic_reth move together too: summit drives reth's Engine API
 # through reth-seismic-engine-types, pinned in summit's Cargo.toml.
-# The summit pin must also keep the `keys` CLI that summit-keygen.service and
-# usr/bin/summit-persist call (`generate --no-overwrite`, `show --json`).
+# The summit pin must also keep the `keys` CLI that
+# seismic-summit-keygen.service and usr/bin/seismic-summit-persist call
+# (`generate --no-overwrite`, `show --json`).
 # TODO: we prob should add a CI check to ensure these pins stay in sync.
 enclave:
   # One pin builds seismic-attestation-service, seismic-custodian-service,
