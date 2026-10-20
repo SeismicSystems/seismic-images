@@ -26,33 +26,34 @@ Produces in `build/`:
 
 ## TDX measurements
 
-Generate expected measurement values (RTMRs, MRTD) for the built UKI so a verifier can attest that a running node booted from exactly this image:
+Predict the registers a node booted from the built UKI will attest, so a verifier can check that a running node booted from exactly this image:
 
 ```sh
-make measure       # Azure TDX measurements -> build/measurements.azure-tdx.json
-make measure-gcp   # GCP TDX measurements   -> build/measurements.gcp-tdx.json
+make measure       # Azure TDX: the vTPM PCRs   -> build/measurements.azure-tdx.json
+make measure-gcp   # GCP TDX: RTMR1 and RTMR2   -> build/measurements.gcp-tdx.json
 ```
 
-The two formats differ because Azure and GCP expose TDX quotes through different mechanisms — Azure via `tpm2-tools` + the Microsoft attestation service, GCP via the [`dstack`](https://github.com/Dstack-TEE/dstack) toolchain. The deploy tooling (and the Seismic enclave's attestation path) consume these files to verify that deployed nodes match a known-good image.
+The two hold different registers because the two clouds attest differently. On Azure the guest's identity is in the vTPM's PCRs, which `measured-boot` replays from the UKI. On GCP there is no vTPM: the firmware and systemd-stub extend the UKI, the kernel command line and the initrd into the TDX RTMRs, which [`scripts/predict_gcp_rtmrs.py`](scripts/predict_gcp_rtmrs.py) replays from the build. The deploy tooling (and the Seismic enclave's attestation path) consume these files to verify that deployed nodes match a known-good image.
 
-`make measure` also stamps a `measurement_id` into the file: the versioned artifact filename (`seismic_{VERSION}.vhd`) these PCRs measure — the same name `make push-azure` uploads as the blob. Consumers of the measurements read which image they bind to from the file itself, with no out-of-band identifier to pass around (or get wrong).
+Each file is stamped with a `measurement_id`, the versioned artifact its registers measure: `seismic_{VERSION}.vhd` for Azure and `seismic_{VERSION}.tar.gz` for GCP, the names `make push-azure` and `make push-gcp` upload. Consumers of the measurements read which image they bind to from the file itself, with no out-of-band identifier to pass around (or get wrong).
 
 The files are named for the attestation type whose registers they hold (the admission pipeline keys policy records on `attestation_type`), so an image published for both clouds carries one of each under one release.
 
-What a node's boot measures on Azure, register by register, and the `(pcr4, pcr9, pcr11)` guest identity admission binds, is in [`docs/azure-measurements.md`](docs/azure-measurements.md).
+What a node's boot measures on Azure, register by register, and the `(pcr4, pcr9, pcr11)` guest identity admission binds, is in [`docs/azure-measurements.md`](docs/azure-measurements.md). What a GCP boot extends into RTMR1 and RTMR2, event by event, is at the top of the predictor; admission binds `(rtmr1, rtmr2)`.
 
 ## Published images
 
-Every push to `seismic` publishes the image it builds, in two places that share one name:
+Every push to `seismic` publishes the image it builds, in three places that share one name:
 
-- **The VHD** goes to the `dev` container of the `seismicimages` storage account, as `seismic_{VERSION}.vhd`. That blob URL is the `vhd_blob_url` a deployment boots from; Azure's managed-disk import can only read from blob storage, so the bytes live there.
-- **The measurements, the founding inputs and `image.json`** go to a GitHub prerelease tagged `seismic_{VERSION}`, as `measurements.azure-tdx.json`, the four founding inputs below and the record below them, beside a `SHA256SUMS` over all of them and over the `.efi`, the UKI that is the whole image identity (the VHD only wraps it). The tag is the image basename, which is also the `measurement_id` stamped inside the measurements and the short commit of this repo that built it, so every consumer derives the URL from a name it already has:
+- **The VHD** goes to the `dev` container of the `seismicimages` storage account, as `seismic_{VERSION}.vhd`. That blob URL is the `vhd_blob_url` an Azure deployment boots from; Azure's managed-disk import can only read from blob storage, so the bytes live there.
+- **The tarball** goes to the `seismic-tee-gcp-images` bucket, as `seismic_{VERSION}.tar.gz`, and is registered from there in project `testnet-477314` as the GCE image `seismic-{VERSION}` with `.` as `-`, the `gce_image` a GCE deployment boots from. GCE boots a registered image, not a bucket object, so `make push-gcp` is those two steps.
+- **The measurements, the founding inputs and `image.json`** go to a GitHub prerelease tagged `seismic_{VERSION}`, as `measurements.azure-tdx.json` and `measurements.gcp-tdx.json`, the four founding inputs below and the record below them, beside a `SHA256SUMS` over all of them and over the `.efi`, the UKI that is the whole image identity (the VHD and the tarball only wrap it). The tag is the image basename, which is also the `measurement_id` stamped inside the measurements and the short commit of this repo that built it, so every consumer derives the URL from a name it already has:
 
   ```
   https://github.com/SeismicSystems/seismic-images/releases/download/seismic_{VERSION}/measurements.azure-tdx.json
   ```
 
-  Anything that needs an image's measurements fetches that URL. The build asserts the stamp names the VHD it built, `image.json` takes the image's name from the stamp, and the publish job pushes the VHD to the blob `image.json` names and tags the release with that name, so name, blob and file agree by construction.
+  Anything that needs an image's measurements fetches that URL. The build asserts the stamps name the VHD and the tarball it built, `image.json` takes the image's name from the stamps, and the publish job pushes the VHD and the tarball to where `image.json` names and tags the release with that name, so name, blob, image and files agree by construction.
 
 Every release asset carries a [build provenance attestation](https://docs.github.com/en/actions/security-for-github-actions/using-artifact-attestations/using-artifact-attestations-to-establish-provenance-for-builds): before the release exists, the publish job signs a SLSA provenance statement over each asset's digest with a short-lived Sigstore certificate issued to this workflow on this branch at the building commit, and the signature is logged in Rekor. `SHA256SUMS` cannot catch a swapped asset on its own — whoever can replace an asset can replace the checksum file beside it — while an attestation names the workflow, ref and commit that signed it, so a replacement would have to be built by this workflow from a commit on `seismic`, in the open. Verify any asset against the workflow and the branch, not just the repository, so a file signed by another workflow or from another ref is refused:
 
