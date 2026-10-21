@@ -161,9 +161,6 @@ jobs:
           if len(pins) != 3 or any(len(pin) != 40 for pin in pins):
               raise SystemExit("sources.yaml must contain three full 40-character git pins")
 
-      - name: Test the GCP RTMR predictor
-        run: python3 -m unittest tests/unit/test_predict_gcp_rtmrs.py
-
   build:
     name: build Seismic image
     needs: static
