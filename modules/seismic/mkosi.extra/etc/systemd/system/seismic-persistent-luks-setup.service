@@ -33,6 +33,7 @@ ExecStartPost=+/usr/bin/systemd-tmpfiles --create /etc/seismic/tmpfiles-persiste
 # seismic-summit-persist, seismic-summit), and systemd never re-enqueues them.
 # If that stranding ever happens anyway, `systemctl start seismic-summit.target`
 # pulls the whole chain back up.
+TimeoutStartSec=120
 Restart=on-failure
 RestartSec=5
 
