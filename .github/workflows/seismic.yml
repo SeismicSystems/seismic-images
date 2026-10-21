@@ -9,8 +9,8 @@
 #   the VHD              → the `dev` container of the seismicimages storage
 #                          account, as seismic_<version>.vhd (Azure's disk
 #                          import reads only blob storage)
-#   the tarball          → gs://seismic-tee-gcp-images, as seismic_<version>.tar.gz,
-#                          and registered in project testnet-477314 as the GCE
+#   the tarball          → gs://seismic-images, as seismic_<version>.tar.gz, and
+#                          registered in project seismic-images as the GCE
 #                          image seismic-<version with . as ->
 #   the measurements     → a GitHub prerelease tagged seismic_<version>, as
 #                          measurements.azure-tdx.json, measurements.gcp-tdx.json
@@ -60,11 +60,12 @@
 # provider's full resource name) and GCP_SERVICE_ACCOUNT (its email). No GCP
 # credential is stored either: google-github-actions/auth exchanges the OIDC
 # token through Workload Identity Federation for a token of the service
-# account below, which may write objects in the one bucket and create images
-# in the one project (a custom role: no predefined one stops at create), and
-# trusts the same subject:
+# account below, which may write and read objects in the one bucket and
+# create images in the one project (a custom role: no predefined one stops at
+# create), and trusts the same subject. The project holds nothing else, the
+# twin of the seismic-images resource group:
 #
-#   PROJECT=testnet-477314
+#   PROJECT=seismic-images
 #   NUMBER=$(gcloud projects describe "$PROJECT" --format='value(projectNumber)')
 #   gcloud iam workload-identity-pools create seismic-tee-github --project "$PROJECT" --location global
 #   gcloud iam workload-identity-pools providers create-oidc github --project "$PROJECT" --location global \
@@ -77,10 +78,13 @@
 #   gcloud iam service-accounts add-iam-policy-binding "$SA" --project "$PROJECT" \
 #       --role roles/iam.workloadIdentityUser \
 #       --member "principalSet://iam.googleapis.com/projects/$NUMBER/locations/global/workloadIdentityPools/seismic-tee-github/attribute.repository/SeismicSystems/seismic-images"
-#   gcloud storage buckets add-iam-policy-binding gs://seismic-tee-gcp-images --member "serviceAccount:$SA" --role roles/storage.objectUser
+#   gcloud storage buckets create gs://seismic-images --project "$PROJECT" --location us-central1 --uniform-bucket-level-access --public-access-prevention
+#   gcloud storage buckets add-iam-policy-binding gs://seismic-images --member "serviceAccount:$SA" --role roles/storage.objectCreator
+#   gcloud storage buckets add-iam-policy-binding gs://seismic-images --member "serviceAccount:$SA" --role roles/storage.objectViewer
 #   gcloud iam roles create seismicTeeImagePublisher --project "$PROJECT" --title "Seismic TEE image publisher" \
 #       --permissions compute.images.create,compute.images.get,compute.globalOperations.get
 #   gcloud projects add-iam-policy-binding "$PROJECT" --member "serviceAccount:$SA" --role "projects/$PROJECT/roles/seismicTeeImagePublisher"
+#   gcloud projects add-iam-policy-binding "$PROJECT" --member domain:seismic.systems --role roles/compute.imageUser
 #
 #   GCP_WORKLOAD_IDENTITY_PROVIDER=projects/$NUMBER/locations/global/workloadIdentityPools/seismic-tee-github/providers/github
 #   GCP_SERVICE_ACCOUNT=$SA

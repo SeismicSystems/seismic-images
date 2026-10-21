@@ -97,8 +97,8 @@ AZURE_CONTAINER ?= dev
 AZURE_STORAGE_ACCOUNT_ID ?= /subscriptions/214887ea-51a7-4ca7-9cec-29b3cf3d311c/resourceGroups/seismic-images/providers/Microsoft.Storage/storageAccounts/seismicimages
 # Where the tarball will be, and the project its GCE image is registered in,
 # under the tag with `_` and `.` as `-`, the characters a GCE name refuses.
-GCP_PROJECT ?= testnet-477314
-GCP_BUCKET ?= seismic-tee-gcp-images
+GCP_PROJECT ?= seismic-images
+GCP_BUCKET ?= seismic-images
 COMMIT ?= $(shell git rev-parse HEAD)
 
 # Everything a release carries, from one FILE and INITRD, with one SHA256SUMS

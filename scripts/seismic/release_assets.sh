@@ -20,8 +20,8 @@
 #                             releases (long-term)             (dev)
 #   AZURE_STORAGE_ACCOUNT_ID  the account's ARM ID; required, and must name
 #                             AZURE_STORAGE_ACCOUNT
-#   GCP_BUCKET                bucket the tarball goes to  (seismic-tee-gcp-images)
-#   GCP_PROJECT               project its GCE image is registered in (testnet-477314)
+#   GCP_BUCKET                bucket the tarball goes to  (seismic-images)
+#   GCP_PROJECT               project its GCE image is registered in (seismic-images)
 set -euo pipefail
 
 usage='usage: release_assets.sh <initrd> <efi> <measurements-azure> <measurements-gcp> <commit>'
@@ -32,8 +32,8 @@ gcp_measurements=${4:?$usage}
 commit=${5:?$usage}
 account=${AZURE_STORAGE_ACCOUNT:-seismicimages}
 container=${AZURE_CONTAINER:-dev}
-gcp_bucket=${GCP_BUCKET:-seismic-tee-gcp-images}
-gcp_project=${GCP_PROJECT:-testnet-477314}
+gcp_bucket=${GCP_BUCKET:-seismic-images}
+gcp_project=${GCP_PROJECT:-seismic-images}
 account_id=${AZURE_STORAGE_ACCOUNT_ID:?AZURE_STORAGE_ACCOUNT_ID must name the storage account (the Makefile sets it for seismicimages)}
 # Checked before the slow part, so a typo costs nothing.
 case "$container" in
