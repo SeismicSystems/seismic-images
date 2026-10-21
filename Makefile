@@ -73,9 +73,11 @@ measure-portable-gcp: measure-portable ## Export a portable GCP-only attestation
 	@$(WRAPPER) bash -c 'jq -e "[{attestation_type: \"gcp-tdx\", dcap_image_hashes: .dcap}]" build/portable_measurements.json > build/measurements-gcp.json'
 	echo "GCP attestation policy exported to build/measurements-gcp.json"
 
-measure-gcp: ## Predict RTMR1 and RTMR2 for a GCP TDX boot (no vTPM) of the built EFI file
-	@python3 scripts/predict_gcp_rtmrs.py --efi $(FILE) --out $(MEASUREMENTS_GCP) && \
-	echo "GCP measurements exported to $(MEASUREMENTS_GCP)"
+measure-gcp: ## Export GCP TDX measurements (RTMR1 and RTMR2; no vTPM) for the built EFI file
+	@MEASUREMENT_ID="$$(basename "$$(realpath $(FILE))" .efi).tar.gz"; \
+	$(WRAPPER) bash -c 'set -o pipefail; attest measure gcp "$$1" | jq --arg id "$$2" '\''{attestation_type: "gcp-tdx", measurement_id: $$id, measurements: {rtmr1: {expected: .rtmr1}, rtmr2: {expected: .rtmr2}}}'\'' > "$$3"' \
+		_ "$(FILE)" "$$MEASUREMENT_ID" "$(MEASUREMENTS_GCP)" && \
+	echo "GCP measurements exported to $(MEASUREMENTS_GCP) (measurement_id: $$MEASUREMENT_ID)"
 
 ##@ Seismic
 

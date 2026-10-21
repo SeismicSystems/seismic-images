@@ -33,13 +33,13 @@ make measure       # Azure TDX: the vTPM PCRs   -> build/measurements.azure-tdx.
 make measure-gcp   # GCP TDX: RTMR1 and RTMR2   -> build/measurements.gcp-tdx.json
 ```
 
-The two hold different registers because the two clouds attest differently. On Azure the guest's identity is in the vTPM's PCRs, which `measured-boot` replays from the UKI. On GCP there is no vTPM: the firmware and systemd-stub extend the UKI, the kernel command line and the initrd into the TDX RTMRs, which [`scripts/predict_gcp_rtmrs.py`](scripts/predict_gcp_rtmrs.py) replays from the build. The deploy tooling (and the Seismic enclave's attestation path) consume these files to verify that deployed nodes match a known-good image.
+The two hold different registers because the two clouds attest differently. On Azure the guest's identity is in the vTPM's PCRs, which `measured-boot` replays from the UKI. On GCP there is no vTPM: the firmware and systemd-stub extend the UKI, the kernel command line and the initrd into the TDX RTMRs, which `attest measure gcp` replays from the UKI. The deploy tooling (and the Seismic enclave's attestation path) consume these files to verify that deployed nodes match a known-good image.
 
 Each file is stamped with a `measurement_id`, the versioned artifact its registers measure: `seismic_{VERSION}.vhd` for Azure and `seismic_{VERSION}.tar.gz` for GCP, the names `make push-azure` and `make push-gcp` upload. Consumers of the measurements read which image they bind to from the file itself, with no out-of-band identifier to pass around (or get wrong).
 
 The files are named for the attestation type whose registers they hold (the admission pipeline keys policy records on `attestation_type`), so an image published for both clouds carries one of each under one release.
 
-What a node's boot measures on Azure, register by register, and the `(pcr4, pcr9, pcr11)` guest identity admission binds, is in [`docs/azure-measurements.md`](docs/azure-measurements.md). What a GCP boot extends into RTMR1 and RTMR2, event by event, is at the top of the predictor; admission binds `(rtmr1, rtmr2)`.
+What a node's boot measures on Azure, register by register, and the `(pcr4, pcr9, pcr11)` guest identity admission binds, is in [`docs/azure-measurements.md`](docs/azure-measurements.md). What a GCP boot extends into RTMR1 and RTMR2, event by event, is in [`docs/gcp-rtmr-events.json`](docs/gcp-rtmr-events.json), captured from a live guest; admission binds `(rtmr1, rtmr2)`.
 
 ## Published images
 
