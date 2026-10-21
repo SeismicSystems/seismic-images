@@ -53,11 +53,35 @@
 # nothing else is granted.
 name: Seismic image CI
 
+# Pushes and pull requests that touch only what cannot change the Seismic
+# image skip the workflow. A deny-list rather than a list of the image's
+# inputs, so a path missing here costs a build, never a skipped one: the
+# image is images/seismic.conf, which includes shared/ and modules/seismic/,
+# built with the flake's toolchain. Tooling (the Makefile, scripts/, this
+# workflow) still runs: it shapes the release assets, and only a build tests
+# them.
 on:
   push:
     branches:
       - seismic
+    paths-ignore: &not-the-image
+      - '*.md'
+      - 'docs/**'
+      - 'modules/seismic/readme.md'
+      - 'modules/flashbox/**'
+      - 'modules/l2/**'
+      - 'modules/tdx-dummy/**'
+      - 'modules/verity-root/**'
+      - 'images/flashbox-*.conf'
+      - 'images/l2-*.conf'
+      - 'images/tdx-dummy.conf'
+      - 'tests/**'
+      - 'lima.yaml'
+      - '.github/workflows/build.yaml'
+      - '.github/workflows/flashbox-l1.yaml'
+      - '.github/workflows/_build-and-publish-image.yaml'
   pull_request:
+    paths-ignore: *not-the-image
   workflow_dispatch:
     inputs:
       reprotest:
