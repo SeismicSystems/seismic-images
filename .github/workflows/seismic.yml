@@ -162,12 +162,14 @@ jobs:
           initrd=$(compgen -G 'build/seismic_*.initrd' | head -n1)
           zstd -dc "$initrd" | cpio -it 2>/dev/null > build/seismic-initrd-files.txt
           while read -r expected; do
+            [[ $expected == '#'* ]] && continue
             grep -Fxq "$expected" build/seismic-initrd-files.txt || {
               echo "Missing expected image file: $expected" >&2
               exit 1
             }
           done <<'EOF'
           etc/caddy/Caddyfile
+          etc/systemd/system/seismic-.service.d/10-sandbox-baseline.conf
           etc/systemd/system/seismic-attestation.service
           etc/systemd/system/seismic-caddy.service
           etc/systemd/system/seismic-custodian.service
@@ -178,7 +180,9 @@ jobs:
           etc/systemd/system/seismic-summit.service
           etc/systemd/system/seismic-summit.target
           etc/systemd/system/seismic-tdx-init.service
-          etc/systemd/system/system.slice.d/deny-reth-rpc-port.conf
+          etc/systemd/system/system.slice.d/reserve-listener-ports.conf
+          etc/systemd/system.conf.d/no-core-dumps.conf
+          etc/sysctl.d/10-no-ptrace.conf
           etc/systemd/system/minimal.target.wants/seismic-attestation.service
           etc/systemd/system/minimal.target.wants/seismic-caddy.service
           etc/systemd/system/minimal.target.wants/seismic-custodian.service
@@ -194,6 +198,9 @@ jobs:
           usr/bin/summit
           usr/bin/seismic-summit-persist
           usr/bin/tdx-init
+          # From Debian's cryptsetup-bin: creates /run/cryptsetup, which the LUKS
+          # unit's ReadWritePaths= needs to exist or the unit fails to start.
+          usr/lib/tmpfiles.d/cryptsetup.conf
           EOF
 
       # The measured-boot prediction for this UKI, stamped with the VHD name

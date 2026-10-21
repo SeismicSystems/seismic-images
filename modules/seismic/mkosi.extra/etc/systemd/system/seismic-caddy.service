@@ -24,22 +24,41 @@ ExecStart=/usr/bin/caddy run --config /etc/caddy/Caddyfile --adapter caddyfile
 # persist_config off it writes nothing there.
 Environment=XDG_DATA_HOME=/persistent XDG_CONFIG_HOME=/persistent
 
-# Binding :443 is the one privilege it needs.
-AmbientCapabilities=CAP_NET_BIND_SERVICE
-CapabilityBoundingSet=CAP_NET_BIND_SERVICE
-NoNewPrivileges=yes
-ProtectSystem=strict
-ReadWritePaths=/persistent/caddy
-PrivateTmp=yes
-PrivateDevices=yes
-RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
-
 # Caddy retries a failed issuance or renewal in-process; a restart is for
 # the process itself dying.
 Restart=on-failure
 RestartSec=10
 StandardOutput=journal
 StandardError=journal
+
+####### SANDBOX #######
+# What code running inside Caddy could still reach, on top of the shared
+# baseline in seismic-.service.d/. It faces the internet and holds the node's
+# TLS key, and needs :443, its state and the loopback ports it proxies to.
+
+# Network
+# Its own slice, outside system.slice's port reservation (see system.slice.d/),
+# so it can bind its own port. SocketBindDeny=any keeps it off every other
+# port, the other node services' included.
+Slice=seismic-caddy.slice
+SocketBindAllow=tcp:443
+SocketBindDeny=any
+# IP sockets, beside the baseline's Unix ones.
+RestrictAddressFamilies=AF_INET AF_INET6
+
+# Filesystem
+# Its ACME account, certificate and key.
+ReadWritePaths=/persistent/caddy
+
+# Devices
+# A minimal /dev of pseudo-devices: no TPM, no disks, no /dev/mem.
+PrivateDevices=yes
+
+# Privileges
+# Binding :443 is the one privilege it needs.
+AmbientCapabilities=CAP_NET_BIND_SERVICE
+CapabilityBoundingSet=CAP_NET_BIND_SERVICE
+####### END SANDBOX #######
 
 [Install]
 WantedBy=minimal.target

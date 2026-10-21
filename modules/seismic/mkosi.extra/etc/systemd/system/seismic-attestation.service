@@ -43,5 +43,35 @@ RestartSec=60
 StandardOutput=journal
 StandardError=journal
 
+####### SANDBOX #######
+# What code running inside the attestation service could still reach, on top of
+# the shared baseline in seismic-.service.d/. It holds no key material, writes
+# nothing, and needs the network, the custodian's socket and the TPM.
+
+# Network
+# Its own slice, outside system.slice's port reservation (see system.slice.d/),
+# so it can bind its own ports. Only TCP is denied wholesale: its DNS resolver
+# (hickory, via reqwest) binds a random UDP source port for every query, so UDP
+# stays open except reth's devp2p port.
+Slice=seismic-attestation.slice
+SocketBindAllow=tcp:7878
+SocketBindAllow=tcp:7879
+SocketBindDeny=tcp
+SocketBindDeny=udp:30303
+# IP sockets, beside the baseline's Unix ones.
+RestrictAddressFamilies=AF_INET AF_INET6
+
+# Devices
+# Its only device is the TPM. PrivateDevices= would hide /dev/tpm0, so a
+# closed device policy takes its place.
+DevicePolicy=closed
+DeviceAllow=/dev/tpm0 rw
+DeviceAllow=/dev/tpmrm0 rw
+
+# Privileges
+# No Linux capabilities, ever, even as UID 0.
+CapabilityBoundingSet=
+####### END SANDBOX #######
+
 [Install]
 WantedBy=minimal.target

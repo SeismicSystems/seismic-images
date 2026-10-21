@@ -1,6 +1,7 @@
 #!/bin/bash
 # Provision (first boot) or unlock (subsequent boots) the persistent
-# LUKS disk and mount it at /persistent.
+# LUKS disk. The unit mounts it at /persistent afterwards, outside this
+# script's sandbox.
 #
 # Properties of this script:
 # - Idempotent: inspects on-disk state and does only what's needed.
@@ -52,7 +53,6 @@ trap on_error ERR
 
 MAPPER_NAME="persistent"
 MAPPER_DEVICE="/dev/mapper/${MAPPER_NAME}"
-MOUNT_POINT="/persistent"
 
 # First-boot LUKS-wipe progress file, served by the attestation service's
 # getLuksProvisioningStatus RPC for the operator CLI's progress bar. We only
@@ -73,8 +73,8 @@ KEYFILE="/run/seismic/custodian/luks-keys"
 
 # Detached LUKS header lives here after MAC verification. cryptsetup
 # uses this copy for the actual open, closing TOCTOU between verify
-# and dm-crypt setup.
-HEADER_BACKUP="/run/seismic/luks-header.bin"
+# and dm-crypt setup. The unit's RuntimeDirectory=.
+HEADER_BACKUP="/run/seismic-persistent-luks-setup/luks-header.bin"
 
 # Custom LUKS2 token type that carries our header MAC.
 TOKEN_TYPE="seismic-header-mac"
@@ -198,8 +198,6 @@ discover_disk() {
 wait_for_disk() {
     local device
     while true; do
-        # Re-trigger so /dev/disk/by-* symlinks appear for late-attached disks.
-        udevadm trigger --subsystem-match=block 2>/dev/null || true
         udevadm settle --timeout=30 2>/dev/null || true
         if device=$(discover_disk); then
             printf '%s\n' "$device"
@@ -219,7 +217,7 @@ wait_for_disk() {
 # verify_and_open path and skip this.
 #
 # After this returns, /dev/mapper/persistent is already open (from the
-# luksFormat→open sequence below), so the caller can mount without a
+# luksFormat→open sequence below), so the unit can mount it without a
 # second unlock call.
 provision_luks() {
     local device=$1
@@ -331,16 +329,6 @@ verify_and_open() {
         "$device" "$MAPPER_NAME"
 }
 
-mount_persistent() {
-    if mountpoint -q "$MOUNT_POINT"; then
-        log "$MOUNT_POINT already mounted"
-        return 0
-    fi
-    mkdir -p "$MOUNT_POINT"
-    log "mounting $MAPPER_DEVICE at $MOUNT_POINT"
-    mount "$MAPPER_DEVICE" "$MOUNT_POINT"
-}
-
 main() {
     wait_for_keyfile
 
@@ -364,10 +352,8 @@ main() {
         provision_luks "$device" "$KEYFILE"
     fi
 
-    mount_persistent
-
-    # Provisioning (if it ran) is finished and /persistent is mounted — drop the
-    # progress file so getLuksProvisioningStatus reports idle from here on.
+    # Provisioning (if it ran) is finished — drop the progress file so
+    # getLuksProvisioningStatus reports idle from here on.
     rm -f "$STATUS_FILE" 2>/dev/null || true
 
     # Done with the keyfile — shred so it doesn't linger past use.

@@ -14,5 +14,33 @@ ExecStart=/usr/bin/tdx-init wait-for-config
 Restart=on-failure
 RestartSec=5
 
+####### SANDBOX #######
+# What code running inside tdx-init could still reach, on top of the shared
+# baseline in seismic-.service.d/. It parses the operator's POST, and needs
+# :8080 and the config drop-zone.
+
+# Network
+# Its own slice, outside system.slice's port reservation (see system.slice.d/),
+# so it can bind its own port. SocketBindDeny=any keeps it off every other
+# port, the other node services' included.
+Slice=seismic-tdx-init.slice
+SocketBindAllow=tcp:8080
+SocketBindDeny=any
+# IP sockets, beside the baseline's Unix ones.
+RestrictAddressFamilies=AF_INET AF_INET6
+
+# Filesystem
+# The config drop-zone.
+ReadWritePaths=/run/seismic/conf
+
+# Devices
+# A minimal /dev of pseudo-devices: no TPM, no disks, no /dev/mem.
+PrivateDevices=yes
+
+# Privileges
+# No Linux capabilities, ever, even as UID 0.
+CapabilityBoundingSet=
+####### END SANDBOX #######
+
 [Install]
 WantedBy=minimal.target

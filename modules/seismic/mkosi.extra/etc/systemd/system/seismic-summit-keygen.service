@@ -24,3 +24,25 @@ ExecStartPost=/bin/sh -c '/usr/bin/summit keys show --json --key-store-path /run
 
 StandardOutput=journal
 StandardError=journal
+
+####### SANDBOX #######
+# What code running inside seismic-summit-keygen could still reach, on top of
+# the shared baseline in seismic-.service.d/. It mints summit's consensus keys
+# and only writes files.
+
+# Network
+# Loopback only, so there is nothing to send the keys out on.
+PrivateNetwork=yes
+
+# Filesystem
+# The tmpfs keys and the public-keys file.
+ReadWritePaths=/run/seismic/summit
+
+# Devices
+# A minimal /dev of pseudo-devices: no TPM, no disks, no /dev/mem.
+PrivateDevices=yes
+
+# Privileges
+# No Linux capabilities, ever, even as UID 0.
+CapabilityBoundingSet=
+####### END SANDBOX #######
