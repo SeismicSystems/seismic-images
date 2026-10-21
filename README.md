@@ -46,7 +46,7 @@ What a node's boot measures on Azure, register by register, and the `(pcr4, pcr9
 Every push to `seismic` publishes the image it builds, in three places that share one name:
 
 - **The VHD** goes to the `dev` container of the `seismicimages` storage account, as `seismic_{VERSION}.vhd`. That blob URL is the `vhd_blob_url` an Azure deployment boots from; Azure's managed-disk import can only read from blob storage, so the bytes live there.
-- **The tarball** goes to the `seismic-tee-gcp-images` bucket, as `seismic_{VERSION}.tar.gz`, and is registered from there in project `testnet-477314` as the GCE image `seismic-{VERSION}` with `.` as `-`, the `gce_image` a GCE deployment boots from. GCE boots a registered image, not a bucket object, so `make push-gcp` is those two steps.
+- **The tarball** goes to the `seismic-images` bucket, as `seismic_{VERSION}.tar.gz`, and is registered from there in project `seismic-images` as the GCE image `seismic-{VERSION}` with `.` as `-`, the `gce_image` a GCE deployment boots from. GCE boots a registered image, not a bucket object, so `make push-gcp` is those two steps.
 - **The measurements, the founding inputs and `image.json`** go to a GitHub prerelease tagged `seismic_{VERSION}`, as `measurements.azure-tdx.json` and `measurements.gcp-tdx.json`, the four founding inputs below and the record below them, beside a `SHA256SUMS` over all of them and over the `.efi`, the UKI that is the whole image identity (the VHD and the tarball only wrap it). The tag is the image basename, which is also the `measurement_id` stamped inside the measurements and the short commit of this repo that built it, so every consumer derives the URL from a name it already has:
 
   ```
@@ -109,9 +109,9 @@ Where the image's bytes are and what they are, in one machine-readable file, so 
     "gcp-tdx": {
       // The registered image a GCE node boots from: the tag with `_` and `.`
       // as `-`.
-      "gce_image": "projects/testnet-477314/global/images/seismic-2026-09-22-2ee71c",
+      "gce_image": "projects/seismic-images/global/images/seismic-2026-09-22-2ee71c",
       // The .tar.gz it was registered from.
-      "tarball_url": "https://storage.googleapis.com/seismic-tee-gcp-images/seismic_2026-09-22.2ee71c.tar.gz",
+      "tarball_url": "https://storage.googleapis.com/seismic-images/seismic_2026-09-22.2ee71c.tar.gz",
       // Stamped <image>.tar.gz.
       "measurements": "measurements.gcp-tdx.json",
       "efi_sha256": "<sha256 of the .efi>"
