@@ -204,7 +204,7 @@ jobs:
       #
       # `release-assets` is the measurements plus the founding inputs — what
       # it takes to found a network on this image, published with it
-      # (scripts/seismic/founding_inputs.sh owns the how and the why),
+      # (scripts/seismic/release_assets.sh owns the how and the why),
       # including the check that the genesis starter is the parameter set of
       # the summit inside this image, which fails the build rather than the
       # founding. One target, one FILE and INITRD, so the two cannot come

@@ -47,7 +47,7 @@ build: setup ## Build the specified module
 build-dev: setup ## Build module with development tools
 	$(WRAPPER) mkosi --force --image-id $(IMAGE)-dev --profile=devtools --include=images/$(IMAGE).conf
 
-##@ Release assets
+##@ Measure
 
 # One measurements file per attestation type, named for it: the admission
 # pipeline keys a policy record on `attestation_type`, and an image published
@@ -78,12 +78,11 @@ measure-gcp: ## Export GCP TDX measurements for the built EFI file
 	@$(WRAPPER) dstack-mr -uki $(FILE) > $(MEASUREMENTS_GCP)
 	echo "GCP Measurements exported to $(MEASUREMENTS_GCP)"
 
-# The release's founding inputs, from the built image: the seismic-reth and
-# summit binaries out of the initrd, both genesis files, and SHA256SUMS over
-# them, the measurements and the UKI. See the readme's "Founding inputs".
-.PHONY: founding-inputs
-founding-inputs: measure ## Gather the founding inputs into build/ and write SHA256SUMS (uses INITRD, FILE)
-	@$(WRAPPER) scripts/seismic/founding_inputs.sh $(INITRD) $(FILE) $(MEASUREMENTS_AZURE)
+##@ Seismic
+
+# A Seismic image's release, in two steps: `release-assets` makes everything
+# it carries, locally, and `push-azure` uploads the VHD to where its
+# image.json says.
 
 # Where the VHD will be. image.json names its blob before it is pushed, so
 # the container is chosen here, with the build, and `make push-azure` reads
@@ -95,27 +94,19 @@ founding-inputs: measure ## Gather the founding inputs into build/ and write SHA
 AZURE_STORAGE_ACCOUNT ?= seismicimages
 AZURE_CONTAINER ?= dev
 AZURE_STORAGE_ACCOUNT_ID ?= /subscriptions/214887ea-51a7-4ca7-9cec-29b3cf3d311c/resourceGroups/seismic-images/providers/Microsoft.Storage/storageAccounts/seismicimages
-
-# Where the image's bytes are and what they are, for consumers to read
-# rather than reconstruct; see the readme's "image.json". Made from the
-# founding inputs' SHA256SUMS, so it always follows them, and refuses a
-# measurements file and a SHA256SUMS made from different builds. Not through
-# the wrapper: it needs the host's `jq`, nothing from the build environment.
-SUMS ?= build/SHA256SUMS
 COMMIT ?= $(shell git rev-parse HEAD)
-.PHONY: image-json
-image-json: founding-inputs ## Write build/image.json and add it to SHA256SUMS (uses AZURE_STORAGE_ACCOUNT, AZURE_CONTAINER, AZURE_STORAGE_ACCOUNT_ID, COMMIT)
-	@AZURE_STORAGE_ACCOUNT=$(AZURE_STORAGE_ACCOUNT) AZURE_CONTAINER=$(AZURE_CONTAINER) \
-		AZURE_STORAGE_ACCOUNT_ID=$(AZURE_STORAGE_ACCOUNT_ID) \
-		scripts/seismic/image_json.sh $(MEASUREMENTS_AZURE) $(SUMS) $(COMMIT)
 
-# Everything a release carries, from one FILE and INITRD: the measurements,
-# the founding inputs, and image.json, with one SHA256SUMS over them. Local
-# work only: nothing here needs credentials, and nothing is uploaded.
+# Everything a release carries, from one FILE and INITRD, with one SHA256SUMS
+# over it: the measurements (`measure`), then the founding inputs and
+# image.json (scripts/seismic/release_assets.sh; the readme's "Founding
+# inputs" and "image.json"). Local work only: nothing here needs
+# credentials, and nothing is uploaded. The wrapper does not carry the
+# environment into the build VM, so the settings go through `env`.
 .PHONY: release-assets
-release-assets: image-json ## Measure the UKI, gather the founding inputs and write image.json (uses FILE, INITRD, AZURE_CONTAINER)
-
-##@ Publish
+release-assets: measure ## Measure the UKI, gather the founding inputs and write image.json
+	@$(WRAPPER) env AZURE_STORAGE_ACCOUNT=$(AZURE_STORAGE_ACCOUNT) AZURE_CONTAINER=$(AZURE_CONTAINER) \
+		AZURE_STORAGE_ACCOUNT_ID=$(AZURE_STORAGE_ACCOUNT_ID) \
+		scripts/seismic/release_assets.sh $(INITRD) $(FILE) $(MEASUREMENTS_AZURE) $(COMMIT)
 
 # Upload the VHD to the blob build/image.json names, which makes the record
 # true; the one step that needs Azure credentials. The destination is the
@@ -126,7 +117,7 @@ release-assets: image-json ## Measure the UKI, gather the founding inputs and wr
 AZURE_AUTH_MODE ?= login
 IMAGE_JSON ?= build/image.json
 .PHONY: push-azure
-push-azure: ## Upload the VHD to where build/image.json says (uses IMAGE_JSON, AZURE_AUTH_MODE)
+push-azure: ## Upload the VHD to where build/image.json says
 	@AZURE_AUTH_MODE=$(AZURE_AUTH_MODE) scripts/seismic/push_azure.sh $(IMAGE_JSON)
 
 ##@ Utilities
