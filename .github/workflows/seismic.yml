@@ -18,7 +18,8 @@
 #   image.json           → the same release: where the bytes are (the blob
 #                          URL and the storage account's ARM ID) and what
 #                          they are (measurements, UKI hash, source commits),
-#                          per cloud target
+#                          per cloud target. Written by the build, naming
+#                          the blob the publish job then pushes the VHD to
 #   the attestation      → Sigstore build provenance over every release
 #                          asset, binding its bytes to this workflow, the
 #                          `seismic` branch and the commit
@@ -45,15 +46,11 @@
 #   az role assignment create --assignee-object-id "$SP_ID" --assignee-principal-type ServicePrincipal \
 #       --role "Storage Blob Data Contributor" \
 #       --scope "/subscriptions/$SUBSCRIPTION_ID/resourceGroups/seismic-images/providers/Microsoft.Storage/storageAccounts/seismicimages/blobServices/default/containers/dev"
-#   az role assignment create --assignee-object-id "$SP_ID" --assignee-principal-type ServicePrincipal \
-#       --role Reader \
-#       --scope "/subscriptions/$SUBSCRIPTION_ID/resourceGroups/seismic-images/providers/Microsoft.Storage/storageAccounts/seismicimages"
 #
 # `az storage blob … --auth-mode login --account-name …` goes straight to the
 # data plane, so the upload needs no management-plane role on the account.
-# The second grant is for image.json alone: `az storage account show` reads
-# the account's ARM ID from the management plane, and the blob role does not
-# include that read. Reader on the one account is the narrowest form.
+# image.json's storage account ID comes from the Makefile, not from Azure, so
+# nothing else is granted.
 name: Seismic image CI
 
 on:
@@ -211,13 +208,17 @@ jobs:
       # including the check that the genesis starter is the parameter set of
       # the summit inside this image, which fails the build rather than the
       # founding. One target, one FILE and INITRD, so the two cannot come
-      # from different builds.
-      - name: Measure the UKI and gather the founding inputs
+      # from different builds. Last, image.json: it names the `dev` blob the
+      # publish job pushes the VHD to, so the record is part of the build,
+      # needs no credentials, and is checked on every pull request.
+      - name: Measure the UKI, gather the founding inputs and write image.json
         run: |
           touch .bypass-lima
           make release-assets \
             FILE="$(compgen -G 'build/seismic_*.efi')" \
-            INITRD="$(compgen -G 'build/seismic_*.initrd')"
+            INITRD="$(compgen -G 'build/seismic_*.initrd')" \
+            AZURE_CONTAINER=dev \
+            COMMIT="$GITHUB_SHA"
           stamped=$(jq -r .measurement_id build/measurements.azure-tdx.json)
           vhd=$(basename "$(compgen -G 'build/seismic_*.vhd')")
           [ "$stamped" = "$vhd" ] || {
@@ -289,6 +290,7 @@ jobs:
             build/summit
             build/reth-genesis.json
             build/summit-genesis-starter.toml
+            build/image.json
           retention-days: 1
           if-no-files-found: error
 
@@ -308,12 +310,9 @@ jobs:
       contents: write
       id-token: write
       attestations: write
-    env:
-      AZURE_STORAGE_ACCOUNT: seismicimages
-      AZURE_CONTAINER: dev
     steps:
       # For the Makefile: `make push-azure` is the one definition of the
-      # upload and the blob URL, for CI and for a human alike.
+      # upload, for CI and for a human alike.
       - uses: actions/checkout@v6
 
       - name: Download the image
@@ -322,18 +321,12 @@ jobs:
           name: image-seismic
           path: build
 
-      # The image's name is the one the build stamped into the measurements;
-      # the release tag, the blob and the title all derive from it.
+      # The image's name, as the build recorded it in image.json (the stem
+      # of the measurements' measurement_id); the release tag and the title
+      # derive from it, and the blob is the one image.json names.
       - name: Name the image
         id: image
-        run: |
-          stamped=$(jq -r .measurement_id build/measurements.azure-tdx.json)
-          image=${stamped%.vhd}
-          [ -f "build/$image.vhd" ] || {
-            echo "the measurements name $stamped, which is not among the built artifacts" >&2
-            exit 1
-          }
-          echo "image=$image" >> "$GITHUB_OUTPUT"
+        run: echo "image=$(jq -r .image build/image.json)" >> "$GITHUB_OUTPUT"
 
       - uses: azure/login@v3
         with:
@@ -341,22 +334,11 @@ jobs:
           tenant-id: ${{ secrets.AZURE_TENANT_ID }}
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
-      - name: Mirror the VHD to blob storage
-        run: >-
-          make push-azure
-          AZURE_STORAGE_ACCOUNT="$AZURE_STORAGE_ACCOUNT"
-          AZURE_CONTAINER="$AZURE_CONTAINER"
-          VHD="build/${{ steps.image.outputs.image }}.vhd"
-
-      # The machine-readable record of this release: the blob URL just
-      # pushed to and the account's ARM ID (asked of Azure here, where the
-      # job is logged in, rather than written down anywhere), the
-      # measurements asset, the UKI's hash and the source commits. Written
-      # after the push so it describes bytes that exist, and before the
-      # notes, which are rendered from it so the two cannot disagree. The
-      # script owns the shape.
-      - name: Write image.json
-        run: make image-json COMMIT="$GITHUB_SHA"
+      # To the blob the build's image.json names, which makes the record
+      # true; before the release, so no release names a blob that is not
+      # there.
+      - name: Push the VHD to where image.json says
+        run: make push-azure
 
       # Build provenance over every asset the release will carry, signed
       # with a short-lived Sigstore certificate issued to this workflow on
@@ -364,9 +346,8 @@ jobs:
       # cannot catch a swapped asset: whoever can replace an asset can
       # replace SHA256SUMS beside it. The attestation cannot be replaced
       # that way, because the certificate names the workflow that signed
-      # it. After image.json, the last asset written and the one that
-      # completes SHA256SUMS; before the release, so no asset is ever
-      # downloadable unattested. The VHD is not attested: it is not
+      # it. Before the release, so no asset is ever downloadable
+      # unattested. The VHD is not attested: it is not
       # reproducible, and the `.efi` it wraps is covered through
       # SHA256SUMS. Pinned to the
       # commit behind v4.2.2 rather than the tag: this job holds

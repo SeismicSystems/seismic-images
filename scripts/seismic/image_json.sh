@@ -2,6 +2,11 @@
 # Write build/image.json — where an image's bytes are and what they are, in
 # one machine-readable file per release — and cover it in SHA256SUMS.
 #
+# Written with the build, before the VHD is anywhere: the blob URL is where
+# `make push-azure` will put it, which reads the destination from this file.
+# So the record is complete once the build is, needs no Azure credentials,
+# and becomes true when the push succeeds.
+#
 # Every other asset of a release is one artifact; this one is the record
 # tying them together, so a consumer reads the facts instead of spelling
 # them by convention: the blob the VHD sits at and the storage account's ARM
@@ -21,11 +26,12 @@
 #                  written beside it.
 #   commit         the commit of this repository that built the image
 #
-# Environment (the Makefile's push-azure names, same defaults):
-#   AZURE_STORAGE_ACCOUNT     account the VHD was pushed to   (seismicimages)
-#   AZURE_CONTAINER           container within it             (dev)
-#   AZURE_STORAGE_ACCOUNT_ID  the account's ARM ID; asked of `az` when unset,
-#                             which needs an `az login` that can read the account
+# Environment (the Makefile passes its own, with these defaults):
+#   AZURE_STORAGE_ACCOUNT     account the VHD goes to          (seismicimages)
+#   AZURE_CONTAINER           container within it: dev (ephemeral) or
+#                             releases (long-term)             (dev)
+#   AZURE_STORAGE_ACCOUNT_ID  the account's ARM ID; required, and must name
+#                             AZURE_STORAGE_ACCOUNT
 set -euo pipefail
 
 measurements=${1:?usage: image_json.sh <measurements> <SHA256SUMS> <commit>}
@@ -33,6 +39,15 @@ sums=${2:?usage: image_json.sh <measurements> <SHA256SUMS> <commit>}
 commit=${3:?usage: image_json.sh <measurements> <SHA256SUMS> <commit>}
 account=${AZURE_STORAGE_ACCOUNT:-seismicimages}
 container=${AZURE_CONTAINER:-dev}
+account_id=${AZURE_STORAGE_ACCOUNT_ID:?AZURE_STORAGE_ACCOUNT_ID must name the storage account (the Makefile sets it for seismicimages)}
+case "$container" in
+  dev | releases) ;;
+  *) echo "AZURE_CONTAINER=$container must be one of: dev, releases" >&2; exit 1 ;;
+esac
+case "$account_id" in
+  /subscriptions/*/resourceGroups/*/providers/Microsoft.Storage/storageAccounts/"$account") ;;
+  *) echo "AZURE_STORAGE_ACCOUNT_ID is not the ARM ID of storage account $account: $account_id" >&2; exit 1 ;;
+esac
 # Resolved before the cd below, so the arguments are read from where the
 # caller spelled them.
 measurements=$(realpath "$measurements")
@@ -72,17 +87,7 @@ pin() {
   printf '%s' "$ref"
 }
 
-account_id=${AZURE_STORAGE_ACCOUNT_ID:-}
-if [ -z "$account_id" ]; then
-  echo "asking az for the ARM ID of storage account $account" >&2
-  account_id=$(az storage account show --name "$account" --query id -o tsv)
-fi
-case "$account_id" in
-  /subscriptions/*/resourceGroups/*/providers/Microsoft.Storage/storageAccounts/*) ;;
-  *) echo "not a storage account ARM ID: $account_id" >&2; exit 1 ;;
-esac
-
-# The blob URL as `make push-azure` prints it.
+# Where `make push-azure` will put the VHD: it uploads to this URL.
 vhd_blob_url="https://$account.blob.core.windows.net/$container/$image.vhd"
 
 jq -n \
