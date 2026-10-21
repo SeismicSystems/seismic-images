@@ -90,18 +90,11 @@ jobs:
 
       - name: Check shell sources
         run: |
-          bash -n \
-            modules/seismic/mkosi.build \
-            modules/seismic/mkosi.postinst \
-            modules/seismic/mkosi.extra/usr/bin/seismic-persistent-luks-setup \
-            scripts/seismic/founding_inputs.sh \
-            scripts/seismic/image_json.sh
           shellcheck -x \
             modules/seismic/mkosi.build \
             modules/seismic/mkosi.postinst \
             modules/seismic/mkosi.extra/usr/bin/seismic-persistent-luks-setup \
-            scripts/seismic/founding_inputs.sh \
-            scripts/seismic/image_json.sh
+            scripts/seismic/*.sh
 
       - name: Check source pins
         shell: python3 {0}
