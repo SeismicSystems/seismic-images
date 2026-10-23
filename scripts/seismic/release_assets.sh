@@ -7,10 +7,12 @@
 # `sha256sum -c --ignore-missing SHA256SUMS`. Local work only: nothing here
 # needs credentials, and nothing is uploaded.
 #
-# Usage: release_assets.sh <initrd> <efi> <measurements> <commit>
-#        (`make release-assets`: its INITRD, FILE, MEASUREMENTS_AZURE, COMMIT)
-#   measurements   the stamped measurements.azure-tdx.json (`make measure`)
-#   commit         the commit of this repository that built the image
+# Usage: release_assets.sh <initrd> <efi> <measurements-azure> <measurements-gcp> <commit>
+#        (`make release-assets`: its INITRD, FILE, MEASUREMENTS_AZURE,
+#        MEASUREMENTS_GCP, COMMIT)
+#   measurements-azure   the stamped measurements.azure-tdx.json (`make measure`)
+#   measurements-gcp     the stamped measurements.gcp-tdx.json (`make measure-gcp`)
+#   commit               the commit of this repository that built the image
 #
 # Environment (the Makefile passes its own, with these defaults):
 #   AZURE_STORAGE_ACCOUNT     account the VHD goes to          (seismicimages)
@@ -18,15 +20,20 @@
 #                             releases (long-term)             (dev)
 #   AZURE_STORAGE_ACCOUNT_ID  the account's ARM ID; required, and must name
 #                             AZURE_STORAGE_ACCOUNT
+#   GCP_BUCKET                bucket the tarball goes to  (seismic-images)
+#   GCP_PROJECT               project its GCE image is registered in (seismic-images)
 set -euo pipefail
 
-usage='usage: release_assets.sh <initrd> <efi> <measurements> <commit>'
+usage='usage: release_assets.sh <initrd> <efi> <measurements-azure> <measurements-gcp> <commit>'
 initrd=${1:?$usage}
 efi=${2:?$usage}
 measurements=${3:?$usage}
-commit=${4:?$usage}
+gcp_measurements=${4:?$usage}
+commit=${5:?$usage}
 account=${AZURE_STORAGE_ACCOUNT:-seismicimages}
 container=${AZURE_CONTAINER:-dev}
+gcp_bucket=${GCP_BUCKET:-seismic-images}
+gcp_project=${GCP_PROJECT:-seismic-images}
 account_id=${AZURE_STORAGE_ACCOUNT_ID:?AZURE_STORAGE_ACCOUNT_ID must name the storage account (the Makefile sets it for seismicimages)}
 # Checked before the slow part, so a typo costs nothing.
 case "$container" in
@@ -43,6 +50,7 @@ esac
 initrd=$(realpath "$initrd")
 efi=$(realpath "$efi")
 measurements=$(realpath "$measurements")
+gcp_measurements=$(realpath "$gcp_measurements")
 cd "$(dirname "${BASH_SOURCE[0]}")/../.."
 sources=modules/seismic/sources.yaml
 starter=summit-genesis-starter.toml
@@ -54,15 +62,20 @@ pin() {
   printf '%s' "$ref"
 }
 
-# The image's name is the UKI's stem, and the VHD's. The measurements are
-# made against one UKI by a target of their own, and only their stamp ties
-# them to this one: hashing an earlier build's file into this SHA256SUMS
-# would certify PCRs no node in this image reports.
+# The image's name is the UKI's stem, and the VHD's and the tarball's. The
+# measurements are made against one UKI by targets of their own, and only
+# their stamps tie them to this one: hashing an earlier build's file into
+# this SHA256SUMS would certify registers no node in this image reports.
 uki=$(basename "$efi")
 image=${uki%.efi}
 stamped=$(jq -r '.measurement_id // empty' "$measurements")
 [ "$stamped" = "$image.vhd" ] || {
   echo "$measurements measures ${stamped:-no named image}, not $image.vhd — it is another build's" >&2
+  exit 1
+}
+stamped=$(jq -r '.measurement_id // empty' "$gcp_measurements")
+[ "$stamped" = "$image.tar.gz" ] || {
+  echo "$gcp_measurements measures ${stamped:-no named image}, not $image.tar.gz — it is another build's" >&2
   exit 1
 }
 
@@ -142,16 +155,16 @@ fi
 # file, so a consumer reads the facts instead of spelling them by
 # convention: the blob the VHD goes to and the storage account's ARM ID
 # (Azure's managed-disk import refuses a blob from another subscription or
-# resource group without the ID, and the URL cannot yield it), the
+# resource group without the ID, and the URL cannot yield it), the bucket
+# object the tarball goes to and the GCE image registered from it, the
 # measurements asset for each cloud target, the UKI's sha256 (the one
-# reproducible artifact; the VHD wrapping is not), and the commits the image
-# was built from. Shaped per cloud target from the start, so a GCP image
-# adds an entry rather than a schema.
+# reproducible artifact; neither wrapping is), and the commits the image was
+# built from. One entry per cloud target, keyed by attestation type.
 #
-# Written before the VHD is anywhere: the blob URL is where `make
-# push-azure` will put it, reading the destination from this file. So the
-# record is complete once the build is, and becomes true when the push
-# succeeds.
+# Written before the bytes are anywhere: the blob URL and the GCE image are
+# where `make push-azure` and `make push-gcp` will put them, reading the
+# destinations from this file. So the record is complete once the build is,
+# and becomes true when the pushes succeed.
 jq -n \
   --arg image "$image" \
   --arg commit "$commit" \
@@ -162,6 +175,9 @@ jq -n \
   --arg vhd_blob_url "https://$account.blob.core.windows.net/$container/$image.vhd" \
   --arg storage_account_id "$account_id" \
   --arg measurements "$(basename "$measurements")" \
+  --arg gce_image "projects/$gcp_project/global/images/$(printf '%s' "$image" | tr '_.' '--')" \
+  --arg tarball_url "https://storage.googleapis.com/$gcp_bucket/$image.tar.gz" \
+  --arg gcp_measurements "$(basename "$gcp_measurements")" \
   --arg efi_sha256 "$(sha256sum "$efi" | cut -d' ' -f1)" \
   '{
     image: $image,
@@ -173,6 +189,12 @@ jq -n \
         storage_account_id: $storage_account_id,
         measurements: $measurements,
         efi_sha256: $efi_sha256
+      },
+      "gcp-tdx": {
+        gce_image: $gce_image,
+        tarball_url: $tarball_url,
+        measurements: $gcp_measurements,
+        efi_sha256: $efi_sha256
       }
     }
   }' > build/image.json
@@ -180,15 +202,16 @@ jq -n \
 ####### SHA256SUMS #######
 
 # One SHA256SUMS over everything the release carries: the UKI — the whole
-# image identity, since the VHD only wraps it on a FAT partition, and that
-# wrapping is not reproducible, so its hash would be a record no rebuilder
-# could confirm — the founding inputs above, the measurements, which are
+# image identity, since the VHD and the tarball only wrap it on a FAT
+# partition, and that wrapping is not reproducible, so their hashes would be
+# records no rebuilder could confirm — the founding inputs above, the
+# measurements, which are
 # the admission policy a founder scaffolds into a network and so the last
 # asset that should arrive unchecked, and image.json. Bare filenames, so
 # `sha256sum -c SHA256SUMS` works from wherever the files were downloaded
 # to, and `--ignore-missing` checks whichever subset was taken.
 (cd build && sha256sum \
   "$uki" seismic-reth summit reth-genesis.json summit-genesis-starter.toml \
-  "$(basename "$measurements")" image.json) \
+  "$(basename "$measurements")" "$(basename "$gcp_measurements")" image.json) \
   > build/SHA256SUMS
 cat build/image.json build/SHA256SUMS

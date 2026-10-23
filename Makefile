@@ -52,8 +52,7 @@ build-dev: setup ## Build module with development tools
 # One measurements file per attestation type, named for it: the admission
 # pipeline keys a policy record on `attestation_type`, and an image published
 # for more than one cloud carries one file per type under one release, so
-# the name says which registers are inside before anyone opens it. The GCP
-# type string is provisional until its admission schema exists.
+# the name says which registers are inside before anyone opens it.
 MEASUREMENTS_AZURE := build/measurements.azure-tdx.json
 MEASUREMENTS_GCP := build/measurements.gcp-tdx.json
 
@@ -74,15 +73,17 @@ measure-portable-gcp: measure-portable ## Export a portable GCP-only attestation
 	@$(WRAPPER) bash -c 'jq -e "[{attestation_type: \"gcp-tdx\", dcap_image_hashes: .dcap}]" build/portable_measurements.json > build/measurements-gcp.json'
 	echo "GCP attestation policy exported to build/measurements-gcp.json"
 
-measure-gcp: ## Export GCP TDX measurements for the built EFI file
-	@$(WRAPPER) dstack-mr -uki $(FILE) > $(MEASUREMENTS_GCP)
-	echo "GCP Measurements exported to $(MEASUREMENTS_GCP)"
+measure-gcp: ## Export GCP TDX measurements (RTMR1 and RTMR2; no vTPM) for the built EFI file
+	@MEASUREMENT_ID="$$(basename "$$(realpath $(FILE))" .efi).tar.gz"; \
+	$(WRAPPER) bash -c 'set -o pipefail; attest measure gcp "$$1" | jq --arg id "$$2" '\''{attestation_type: "gcp-tdx", measurement_id: $$id, measurements: {rtmr1: {expected: .rtmr1}, rtmr2: {expected: .rtmr2}}}'\'' > "$$3"' \
+		_ "$(FILE)" "$$MEASUREMENT_ID" "$(MEASUREMENTS_GCP)" && \
+	echo "GCP measurements exported to $(MEASUREMENTS_GCP) (measurement_id: $$MEASUREMENT_ID)"
 
 ##@ Seismic
 
 # A Seismic image's release, in two steps: `release-assets` makes everything
-# it carries, locally, and `push-azure` uploads the VHD to where its
-# image.json says.
+# it carries, locally, and `push-azure` and `push-gcp` upload the VHD and the
+# tarball to where its image.json says.
 
 # Where the VHD will be. image.json names its blob before it is pushed, so
 # the container is chosen here, with the build, and `make push-azure` reads
@@ -94,19 +95,24 @@ measure-gcp: ## Export GCP TDX measurements for the built EFI file
 AZURE_STORAGE_ACCOUNT ?= seismicimages
 AZURE_CONTAINER ?= dev
 AZURE_STORAGE_ACCOUNT_ID ?= /subscriptions/214887ea-51a7-4ca7-9cec-29b3cf3d311c/resourceGroups/seismic-images/providers/Microsoft.Storage/storageAccounts/seismicimages
+# Where the tarball will be, and the project its GCE image is registered in,
+# under the tag with `_` and `.` as `-`, the characters a GCE name refuses.
+GCP_PROJECT ?= seismic-images
+GCP_BUCKET ?= seismic-images
 COMMIT ?= $(shell git rev-parse HEAD)
 
 # Everything a release carries, from one FILE and INITRD, with one SHA256SUMS
-# over it: the measurements (`measure`), then the founding inputs and
+# over it: the measurements (`measure`, `measure-gcp`), then the founding inputs and
 # image.json (scripts/seismic/release_assets.sh; the readme's "Founding
 # inputs" and "image.json"). Local work only: nothing here needs
 # credentials, and nothing is uploaded. The wrapper does not carry the
 # environment into the build VM, so the settings go through `env`.
 .PHONY: release-assets
-release-assets: measure ## Measure the UKI, gather the founding inputs and write image.json
+release-assets: measure measure-gcp ## Measure the UKI, gather the founding inputs and write image.json
 	@$(WRAPPER) env AZURE_STORAGE_ACCOUNT=$(AZURE_STORAGE_ACCOUNT) AZURE_CONTAINER=$(AZURE_CONTAINER) \
 		AZURE_STORAGE_ACCOUNT_ID=$(AZURE_STORAGE_ACCOUNT_ID) \
-		scripts/seismic/release_assets.sh $(INITRD) $(FILE) $(MEASUREMENTS_AZURE) $(COMMIT)
+		GCP_PROJECT=$(GCP_PROJECT) GCP_BUCKET=$(GCP_BUCKET) \
+		scripts/seismic/release_assets.sh $(INITRD) $(FILE) $(MEASUREMENTS_AZURE) $(MEASUREMENTS_GCP) $(COMMIT)
 
 # Upload the VHD to the blob build/image.json names, which makes the record
 # true; the one step that needs Azure credentials. The destination is the
@@ -119,6 +125,16 @@ IMAGE_JSON ?= build/image.json
 .PHONY: push-azure
 push-azure: ## Upload the VHD to where build/image.json says
 	@AZURE_AUTH_MODE=$(AZURE_AUTH_MODE) scripts/seismic/push_azure.sh $(IMAGE_JSON)
+
+# Upload the tarball to the bucket build/image.json names and register the
+# GCE image it names from it; the one step that needs GCP credentials. GCE
+# boots a registered image, not a bucket object, so the push is two steps.
+# See scripts/seismic/push_gcp.sh.
+#   make push-gcp                         # after make release-assets
+GCP_LOCATION ?= us-central1
+.PHONY: push-gcp
+push-gcp: ## Upload the tarball and register the GCE image where build/image.json says
+	@GCP_LOCATION=$(GCP_LOCATION) scripts/seismic/push_gcp.sh $(IMAGE_JSON)
 
 ##@ Utilities
 

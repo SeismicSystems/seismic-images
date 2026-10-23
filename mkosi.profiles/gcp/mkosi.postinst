@@ -4,3 +4,5 @@ set -euxo pipefail
 
 # Remove automatically generated nvme data
 rm -rf "$BUILDROOT/etc/nvme/hostid" "$BUILDROOT/etc/nvme/hostnqn"
+
+chmod 0755 "$BUILDROOT/usr/bin/setup-gcp-quote-access"
