@@ -35,14 +35,22 @@ EnvironmentFile=/run/seismic/conf/reth-p2p.env
 #   seismic-persistent-luks-setup finishing implies it exists.
 # --datadir /persistent/reth: created by tmpfiles-persistent.conf via
 #   seismic-persistent-luks-setup's ExecStartPost.
-# --http.api/--ws.api eth,net,web3 (not `all`): Caddy proxies /rpc+/ws wholesale,
-#   so this allowlist is what keeps admin/debug/txpool off the public surface. The
+# --http.addr/--ws.addr/--metrics 0.0.0.0: public, for the network's front
+#   outside the node to reach; no proxy in the image terminates TLS. Every
+#   address rather than the NIC's, so the attestation service's admission check
+#   still reaches RPC on 127.0.0.1:8545; system.slice.d/ keeps any other process
+#   off the port. Which sources reach each port is the cloud firewall's to decide;
+# --authrpc.addr 127.0.0.1: unused, since summit drives reth over the IPC
+#   socket, but reth has no flag to turn the HTTP Engine API off. Pinned to
+#   loopback, reth's default, so an upstream default change can't expose it;
+# --http.api/--ws.api eth,net,web3 (not `all`): RPC and WS are public, so this
+#   allowlist is what keeps admin/debug/txpool off the public surface. The
 #   seismic namespace and eth_ overrides register regardless;
 # --ipcdisable: reth's general IPC-RPC server is on by default at /tmp/reth.ipc
 #   and exposes ALL namespaces (admin/debug/txpool); disable it so the allowlist
 #   above can't be bypassed over that local socket. --auth-ipc is a separate
 #   server (engine API) and stays enabled for summit;
-# --http.corsdomain/--ws.origins "*": deliberate — /rpc+/ws are browser-facing;
+# --http.corsdomain/--ws.origins "*": deliberate — RPC and WS are browser-facing;
 #   the boundary is the namespace allowlist, not CORS.
 # devp2p: discv5-only (discv4+DNS off) on 30303, the only port the NSG opens.
 #   --discovery.v5.port 30303 is load-bearing (reth defaults discv5 to 9200). No
@@ -73,14 +81,15 @@ ExecStart=/usr/bin/seismic-reth node \
     --chain /run/seismic/conf/reth-genesis.json \
     --datadir /persistent/reth \
     --http \
-    --http.addr 127.0.0.1 \
+    --http.addr 0.0.0.0 \
     --http.port 8545 \
     --http.api eth,net,web3 \
     --ws \
-    --ws.addr 127.0.0.1 \
+    --ws.addr 0.0.0.0 \
     --ws.port 8546 \
     --ws.api eth,net,web3 \
     --ipcdisable \
+    --authrpc.addr 127.0.0.1 \
     --auth-ipc \
     --auth-ipc.path /run/reth-engine/api.ipc \
     --port 30303 \
@@ -91,7 +100,7 @@ ExecStart=/usr/bin/seismic-reth node \
     --tx-propagation-mode all \
     --log.stdout.format json \
     --log.file.max-files 0 \
-    --metrics 127.0.0.1:9001 \
+    --metrics 0.0.0.0:9001 \
     $RETH_BOOTNODES_FLAG $RETH_TRUSTED_PEERS_FLAG $RETH_NAT_FLAG
 
 Restart=on-failure

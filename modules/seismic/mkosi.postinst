@@ -26,7 +26,6 @@ mkosi-chroot useradd -r -s /bin/false -G conf,custodian-ipc,tpm attestation
 # grants reth:tx-io,rng).
 mkosi-chroot useradd -r -s /bin/false -G conf,engine-api,custodian-ipc reth
 mkosi-chroot useradd -r -s /bin/false -G conf,engine-api summit
-mkosi-chroot useradd -r -s /bin/false caddy
 
 # Make scripts executable
 chmod +x "$BUILDROOT/usr/bin/seismic-persistent-luks-setup"
@@ -39,7 +38,6 @@ chmod +x "$BUILDROOT/usr/bin/seismic-summit-persist"
 mkosi-chroot systemctl enable \
     seismic-persistent-luks-setup.service \
     seismic-tdx-init.service \
-    seismic-caddy.service \
     seismic-reth.service \
     seismic-custodian.service \
     seismic-attestation.service \

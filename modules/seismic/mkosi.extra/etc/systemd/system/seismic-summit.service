@@ -31,10 +31,10 @@ InaccessiblePaths=/run/seismic/summit/keys
 # not something to tolerate.
 EnvironmentFile=/run/seismic/conf/summit.env
 
-# --rpc-ip 127.0.0.1: Caddy fronts the public RPC at /summit
-# (reverse_proxy 127.0.0.1:3030), so the listener itself never needs to be
-# reachable off-box. Binding loopback makes that structural instead of resting
-# on the NSG leaving :3030 closed.
+# --rpc-ip/--prom-ip 0.0.0.0: public, for the network's front outside the node
+# to reach; no proxy in the image terminates TLS. Which sources reach each port
+# is the cloud firewall's to decide. The admin RPC on :3031, which signs with
+# the validator key, has no address flag: summit binds it on loopback only.
 # --genesis-path: written verbatim by tdx-init on every boot from the
 # operator POST's summit_genesis_base64 (readable via summit's `conf`
 # supplementary group). The network manifest pins its config_digest, so a
@@ -57,9 +57,9 @@ ExecStart=/usr/bin/summit run \
     --key-store-path /persistent/summit/keys \
     --ip ${SUMMIT_ADVERTISED_ADDR} \
     --port 18551 \
-    --rpc-ip 127.0.0.1 \
+    --rpc-ip 0.0.0.0 \
     --rpc-port 3030 \
-    --prom-ip 127.0.0.1 \
+    --prom-ip 0.0.0.0 \
     --prom-port 9002 \
     --db-prefix quarts \
     --log-level info
