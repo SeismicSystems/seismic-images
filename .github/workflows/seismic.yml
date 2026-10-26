@@ -125,8 +125,8 @@ jobs:
 
           source = pathlib.Path("modules/seismic/sources.yaml").read_text()
           pins = re.findall(r"^\s+git_reference:\s*([0-9a-f]+)\s*$", source, re.MULTILINE)
-          if len(pins) != 4 or any(len(pin) != 40 for pin in pins):
-              raise SystemExit("sources.yaml must contain four full 40-character git pins")
+          if len(pins) != 3 or any(len(pin) != 40 for pin in pins):
+              raise SystemExit("sources.yaml must contain three full 40-character git pins")
 
   build:
     name: build Seismic image
@@ -377,7 +377,7 @@ jobs:
 
       # The release notes: the same facts as image.json, for a human reading
       # the release — the blob URL and the measurements URL together, what
-      # each founding input is, and the four source commits (this
+      # each founding input is, and the three source commits (this
       # repository's own commit is the tag; the pins live in sources.yaml at
       # that commit, so no asset repeats them beyond image.json).
       - name: Write the release notes
