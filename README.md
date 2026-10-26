@@ -75,7 +75,7 @@ A network founded on an image has genesis artifacts that only that image's own c
 
 Both genesis files are inputs to a founding, never a founded network: every value in the starter, and the chain id and allocations in `reth-genesis.json`, is a per-network choice, made before anything is derived from them.
 
-`make release-assets` (the measurements, the founding inputs, then `image.json`) gathers the same files from a local build into `build/`, with the same `SHA256SUMS`, so a rebuild is compared to a release with `sha256sum -c --ignore-missing SHA256SUMS`. The release notes name the four source commits the image was built from; the commit of this repository is the tag itself, and [`sources.yaml`](modules/seismic/sources.yaml) at that commit is the record a rebuild starts from.
+`make release-assets` (the measurements, the founding inputs, then `image.json`) gathers the same files from a local build into `build/`, with the same `SHA256SUMS`, so a rebuild is compared to a release with `sha256sum -c --ignore-missing SHA256SUMS`. The release notes name the three source commits the image was built from; the commit of this repository is the tag itself, and [`sources.yaml`](modules/seismic/sources.yaml) at that commit is the record a rebuild starts from.
 
 ### `image.json`
 
@@ -85,7 +85,7 @@ Where the image's bytes are and what they are, in one machine-readable file, so 
 {
   "image": "seismic_2026-09-22.2ee71c",
   "commit": "<the commit of this repository that built it>",
-  "sources": {"seismic_reth": "<sha>", "summit": "<sha>", "enclave": "<sha>", "caddy": "<sha>"},
+  "sources": {"seismic_reth": "<sha>", "summit": "<sha>", "enclave": "<sha>"},
   "targets": {
     "azure-tdx": {
       "vhd_blob_url": "https://seismicimages.blob.core.windows.net/dev/seismic_2026-09-22.2ee71c.vhd",
@@ -97,37 +97,48 @@ Where the image's bytes are and what they are, in one machine-readable file, so 
 }
 ```
 
-`targets` is keyed by attestation type, one entry per cloud the image is published for — Azure only today; a GCP image adds an entry, not a schema. Per target: the artifact the nodes boot from, the storage account's ARM ID (Azure's managed-disk import refuses to read a blob from another subscription or resource group without it, and the URL names the account but neither of those; a SAS URL would avoid the requirement but expires, so it has no place in a release), the measurements asset for that target, and the sha256 of the artifact where it is reproducible — the `.efi`, since the VHD's wrapping is not. Once per file: the image name (the tag, and the stem of `measurement_id`), this repository's commit, and the four source pins from `sources.yaml`. The build writes it, in `make release-assets` ([`scripts/seismic/release_assets.sh`](scripts/seismic/release_assets.sh)), before the VHD is anywhere: the blob URL is where the VHD will go, in the container `AZURE_CONTAINER` picks, and the account's ARM ID comes from the Makefile — not a secret, since every `image.json` carries it. The publish job then makes the record true: `make push-azure` ([`scripts/seismic/push_azure.sh`](scripts/seismic/push_azure.sh)) uploads the VHD to the blob `image.json` names, reading the destination from the record rather than from settings of its own, and the release notes are rendered from it. It refuses measurements stamped for any other UKI, so the two halves of a release cannot come from different builds.
+`targets` is keyed by attestation type, one entry per cloud the image is published for — Azure only today; a GCP image adds an entry, not a schema. Per target: the artifact the nodes boot from, the storage account's ARM ID (Azure's managed-disk import refuses to read a blob from another subscription or resource group without it, and the URL names the account but neither of those; a SAS URL would avoid the requirement but expires, so it has no place in a release), the measurements asset for that target, and the sha256 of the artifact where it is reproducible — the `.efi`, since the VHD's wrapping is not. Once per file: the image name (the tag, and the stem of `measurement_id`), this repository's commit, and the three source pins from `sources.yaml`. The build writes it, in `make release-assets` ([`scripts/seismic/release_assets.sh`](scripts/seismic/release_assets.sh)), before the VHD is anywhere: the blob URL is where the VHD will go, in the container `AZURE_CONTAINER` picks, and the account's ARM ID comes from the Makefile — not a secret, since every `image.json` carries it. The publish job then makes the record true: `make push-azure` ([`scripts/seismic/push_azure.sh`](scripts/seismic/push_azure.sh)) uploads the VHD to the blob `image.json` names, reading the destination from the record rather than from settings of its own, and the release notes are rendered from it. It refuses measurements stamped for any other UKI, so the two halves of a release cannot come from different builds.
 
 ## What's in the image
 
 The Seismic node stack: [`seismic-reth`](https://github.com/SeismicSystems/seismic-reth),
 [`summit`](https://github.com/SeismicSystems/summit), and from
 [`enclave`](https://github.com/SeismicSystems/enclave) `tdx-init`, the custodian and the
-attestation service, and [Caddy](https://github.com/caddyserver/caddy) as the public HTTPS
-proxy, all built from the commits pinned in [`sources.yaml`](modules/seismic/sources.yaml).
+attestation service, all built from the commits pinned in [`sources.yaml`](modules/seismic/sources.yaml).
 [`modules/seismic/readme.md`](modules/seismic/readme.md) covers how they are assembled:
 units, users and groups, directories.
 
-## Exposed HTTPS endpoints
+## Exposed endpoints
 
-Caddy terminates TLS on `:443` with a certificate it takes and renews itself (Let's Encrypt, or ZeroSSL when that fails), and reverse-proxies the following paths to in-TEE services. Each backend serves one endpoint whatever the request path, so a route matches its path exactly, with or without a trailing slash, and forwards to `/`; anything else (`/rpc/foo`, `/rpcfoo`) is a 404. Only `/ws` accepts WebSocket upgrades. See [`modules/seismic/mkosi.extra/etc/caddy/Caddyfile`](modules/seismic/mkosi.extra/etc/caddy/Caddyfile).
+The image terminates no TLS: services listen in plain HTTP, and public HTTPS ends at a front outside the node ([why](https://github.com/SeismicSystems/seismic/blob/main/docs/tee/decisions/2026-10-public-rpc-trust.md)). The image decides what binds where; the cloud firewall decides who reaches it.
 
-| Route             | Backend                          | Purpose                                                                                               | Public?                                |
-| ----------------- | -------------------------------- | ----------------------------------------------------------------------------------------------------- | -------------------------------------- |
-| `/rpc`            | `reth` `:8545`                   | Ethereum JSON-RPC (shielded tx support via TxSeismic)                                                 | ✅ intended public                      |
-| `/ws`             | `reth` `:8546`                   | Ethereum WebSocket RPC                                                                                | ✅ intended public                      |
-| `/summit`         | `summit` `:3030`                 | Consensus JSON-RPC: read-only queries (health, checkpoints, headers, validator balances, deposits, state proofs) | ⚠️ no rate limiting — see below         |
-| `/attestation`    | `attestation-service` `:7878` | Attestation API (tx-io attestation evidence, health/LUKS status, admission-chain status, peer root-key bootstrap) | ✅ same surface as `:7878`, which is open to anyone |
-| `/metrics/reth`   | `reth` `:9001`                   | Prometheus metrics                                                                                    | ⚠️ unauthenticated                      |
-| `/metrics/summit` | `summit` `:9002`                 | Prometheus metrics                                                                                    | ⚠️ unauthenticated                      |
+| Firewall admits | Port             | Service             | Purpose                                     |
+| --------------- | ---------------- | ------------------- | ------------------------------------------- |
+| Anyone          | `:30303` TCP+UDP | `reth`              | devp2p (discv5 only)                        |
+|                 | `:18551`         | `summit`            | consensus P2P                               |
+|                 | `:7878`          | attestation service | attestation API, root-key bootstrap; browsers via the front |
+| The front       | `:8545`          | `reth`              | JSON-RPC; also the operator's CLI           |
+|                 | `:8546`          | `reth`              | WebSocket RPC                               |
+|                 | `:3030`          | `summit`            | read-only consensus RPC                     |
+| The operator    | `:8080`          | `tdx-init`          | config POST                                 |
+|                 | `:7879`          | attestation service | founding harvest                            |
+| Monitoring      | `:9001`          | `reth`              | metrics, unauthenticated                    |
+|                 | `:9002`          | `summit`            | metrics, unauthenticated                    |
+| Loopback only   | `:8551`          | `reth`              | Engine API over HTTP, unused                |
+|                 | `:3031`          | `summit`            | admin RPC, signs with the validator key     |
 
-### ⚠️ Known sharp edges
+The peer ports need no allowlist: peers authenticate at the application layer.
 
-Everything above listens on the single public `:443`. The intended long-term fix is to split the proxy into two tiers — a public site with only the endpoints that should reach the open internet (`/rpc`, `/ws`, `/attestation`, and whatever of `/summit` the staking UI needs), and an internal site on a separate port with the rest (`/metrics/*`, the rest of `/summit`). The deploy tooling would then configure cloud firewall rules (Azure NSG / GCP firewall) to allow the public port from `0.0.0.0/0` and restrict the internal port to the VPC CIDR. Until that split lands, the concrete issues are:
+### The front
 
-- **`/summit` is a blanket proxy with no rate limiting.** Summit's public listener serves only read-only queries (`health`, `getCheckpoint`, `getValidatorBalance`, `getDeposit`, `getStateProof`, … — analogous to `eth_*` reads). Its signing method, `getDepositSignature`, is on a localhost-only admin listener, and `sendGenesis` on a separate genesis-setup server; the proxy reaches neither. Narrowing `/summit` further needs JSON-RPC-method-level filtering, since every call is `POST /`.
-- **`/metrics/*` is unauthenticated.** Operationally safe on a locked-down network (the cloud firewall rule above is the right fix), but anyone who can reach the port can scrape sync status, peer info, and resource usage. Do *not* expose the internal port to the open internet without adding basic auth or an IP allowlist on top.
+| Path           | Port    |
+| -------------- | ------- |
+| `/rpc`         | `:8545` |
+| `/ws`          | `:8546` |
+| `/summit`      | `:3030` |
+| `/attestation` | `:7878` |
+
+Match each path exactly, forward to `/`, and 404 the rest. Allow WebSocket upgrades on `/ws` only. Rate-limit here: neither reth nor summit does.
 
 ## Our diff vs upstream
 

@@ -158,7 +158,6 @@ jq -n \
   --arg seismic_reth "$reth" \
   --arg summit "$(pin summit)" \
   --arg enclave "$(pin enclave)" \
-  --arg caddy "$(pin caddy)" \
   --arg vhd_blob_url "https://$account.blob.core.windows.net/$container/$image.vhd" \
   --arg storage_account_id "$account_id" \
   --arg measurements "$(basename "$measurements")" \
@@ -166,7 +165,7 @@ jq -n \
   '{
     image: $image,
     commit: $commit,
-    sources: {seismic_reth: $seismic_reth, summit: $summit, enclave: $enclave, caddy: $caddy},
+    sources: {seismic_reth: $seismic_reth, summit: $summit, enclave: $enclave},
     targets: {
       "azure-tdx": {
         vhd_blob_url: $vhd_blob_url,

@@ -29,8 +29,8 @@ ExecStartPost=+/usr/bin/systemd-tmpfiles --create /etc/seismic/tmpfiles-persiste
 
 # Backstop for unforeseen failures only.
 # A failure here — even one a restart later recovers — cancels the queued start
-# jobs of every Requires= dependent (seismic-caddy, seismic-reth,
-# seismic-summit-persist, seismic-summit), and systemd never re-enqueues them.
+# jobs of every Requires= dependent (seismic-reth, seismic-summit-persist,
+# seismic-summit), and systemd never re-enqueues them.
 # If that stranding ever happens anyway, `systemctl start seismic-summit.target`
 # pulls the whole chain back up.
 Restart=on-failure
