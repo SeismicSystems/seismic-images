@@ -83,8 +83,7 @@ TOKEN_TYPE="seismic-header-mac"
 # by convention (set in deploy/.../azure/api.py::attach_data_disk).
 # Override via /etc/seismic-images/persistent-disk-glob (one glob per
 # line) for other clouds — GCP uses /dev/disk/by-id/google-<diskname>,
-# no LUN concept. TODO: ship the override from the per-cloud mkosi
-# profile, e.g. mkosi.profiles/gcp/mkosi.extra/etc/seismic-images/...
+# no LUN concept; the gcp profile ships one.
 DEFAULT_DISK_GLOB="/dev/disk/by-path/*10"
 DISK_GLOB_OVERRIDE_FILE="/etc/seismic-images/persistent-disk-glob"
 

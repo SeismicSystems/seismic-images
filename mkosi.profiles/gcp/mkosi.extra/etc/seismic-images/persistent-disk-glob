@@ -1,2 +1,2 @@
-/dev/disk/by-path/*10
 /dev/disk/by-id/google-persistent
+/dev/disk/by-path/*10
