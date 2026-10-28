@@ -1,8 +1,9 @@
 #!/bin/bash
 # Hand the TDX quote interfaces to the tpm group, the way the udev rule hands
 # /dev/tpm0 to it on Azure: configfs-tsm creates report attributes root:root
-# 0600, and the ACPI CCEL table and SMBIOS entries the platform metadata reads
-# are root 0400, while the attestation service quotes as its own user.
+# 0600, and the ACPI CCEL table and the SMBIOS memory devices (type 17) the
+# platform metadata reads are root 0400, while the attestation service quotes
+# as its own user.
 set -euo pipefail
 
 ccel=/sys/firmware/acpi/tables/data/CCEL
@@ -11,7 +12,7 @@ if [ -e "$ccel" ]; then
     chmod 0440 "$ccel"
 fi
 
-for raw in /sys/firmware/dmi/entries/*/raw; do
+for raw in /sys/firmware/dmi/entries/17-*/raw; do
     [ -e "$raw" ] || continue
     chgrp tpm "$raw"
     chmod 0440 "$raw"
