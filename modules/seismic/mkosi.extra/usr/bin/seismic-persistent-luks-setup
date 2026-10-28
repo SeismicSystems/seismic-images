@@ -83,8 +83,7 @@ TOKEN_TYPE="seismic-header-mac"
 # by convention (set in deploy/.../azure/api.py::attach_data_disk).
 # Override via /etc/seismic-images/persistent-disk-glob (one glob per
 # line) for other clouds — GCP uses /dev/disk/by-id/google-<diskname>,
-# no LUN concept. TODO: ship the override from the per-cloud mkosi
-# profile, e.g. mkosi.profiles/gcp/mkosi.extra/etc/seismic-images/...
+# no LUN concept; the gcp profile ships one.
 DEFAULT_DISK_GLOB="/dev/disk/by-path/*10"
 DISK_GLOB_OVERRIDE_FILE="/etc/seismic-images/persistent-disk-glob"
 
@@ -165,9 +164,9 @@ wait_for_keyfile() {
 
 # Locate the persistent data disk's block-device path. Walks the globs
 # from $DISK_GLOB_OVERRIDE_FILE (one per line) if present, else just
-# $DEFAULT_DISK_GLOB; takes the first pattern with a match, resolves
-# symlinks, prints the absolute device path on stdout. Non-zero exit
-# if nothing matched — caller must check.
+# $DEFAULT_DISK_GLOB; takes the first pattern that matches a block device,
+# resolves symlinks, prints the absolute device path on stdout. Non-zero
+# exit if nothing matched — caller must check.
 discover_disk() {
     local patterns=()
     if [[ -r "$DISK_GLOB_OVERRIDE_FILE" ]]; then
@@ -180,11 +179,16 @@ discover_disk() {
     for pattern in "${patterns[@]}"; do
         # shellcheck disable=SC2206  # intentional unquoted glob expansion
         local matches=( $pattern )
-        if (( ${#matches[@]} > 0 )); then
-            if (( ${#matches[@]} > 1 )); then
-                log "WARNING: pattern '$pattern' matched multiple devices: ${matches[*]}; using first"
+        # A literal entry survives nullglob whether or not it exists yet.
+        local candidate matches_present=()
+        for candidate in "${matches[@]}"; do
+            [[ -b "$candidate" ]] && matches_present+=("$candidate")
+        done
+        if (( ${#matches_present[@]} > 0 )); then
+            if (( ${#matches_present[@]} > 1 )); then
+                log "WARNING: pattern '$pattern' matched multiple devices: ${matches_present[*]}; using first"
             fi
-            realpath "${matches[0]}"
+            realpath "${matches_present[0]}"
             return 0
         fi
     done
