@@ -6,6 +6,9 @@
 # as its own user.
 set -euo pipefail
 
+# One image boots both clouds; only GCE has these interfaces to hand over.
+[ "$(cat /sys/class/dmi/id/sys_vendor 2>/dev/null)" = Google ] || exit 0
+
 ccel=/sys/firmware/acpi/tables/data/CCEL
 if [ -e "$ccel" ]; then
     chgrp tpm "$ccel"
