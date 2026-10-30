@@ -16,7 +16,7 @@ enclave:
   # and tdx-init. We could consider using separate pins for each, but this is
   # simpler for now, plus they will likely need to be updated together in most
   # cases since they share libraries.
-  git_reference: e87485e4dd5d0c1a0846c8612ad089a613d1441a
+  git_reference: 5b88c167201d8ec3dfa41e2936c4e0daf495b22c
 seismic_reth:
   git_reference: a79dd29c4308ba92184748aae97a40c0e8dea264
 summit:
