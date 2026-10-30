@@ -20,6 +20,211 @@ image booted as a single root-key genesis node. Devtools adds
 from a production image: the structural conclusions carry over between
 profiles, the numbers do not.
 
+## Three groups of measurements
+
+An Azure TDX quote carries three groups of measurements, each covering a
+different layer and controlled by a different party. Only the last is
+Seismic's:
+
+```mermaid
+flowchart TB
+    INTEL["Intel TDX module + quoting enclave"]
+    PV["Microsoft paravisor (HCL / OpenHCL)<br/>the L1 TD, implements the vTPM"]
+    FW["Hyper-V UEFI firmware and platform inputs"]
+    UKI["Seismic UKI: kernel, cmdline, initrd = rootfs"]
+
+    INTEL -->|"group 1: MRTD, RTMR0–3<br/>in the Intel-signed TDX quote"| PV
+    PV -->|"group 2: pcr0, 2, 5, 7<br/>in the AK-signed vTPM quote"| FW
+    FW -->|"group 3: pcr4, 9, 11<br/>in the AK-signed vTPM quote"| UKI
+
+    classDef pinned stroke-width:3px
+    class UKI pinned
+```
+
+| Group | Registers         | Measures                                         | Controlled by | Pinned |
+| ----- | ----------------- | ------------------------------------------------ | ------------- | ------ |
+| 1     | MRTD, RTMR0–3     | The paravisor                                    | Microsoft     | no     |
+| 2     | pcr0, 2, 5, 7     | The guest's UEFI firmware and its inputs         | Microsoft     | no     |
+| 3     | pcr4, 9, 11       | The Seismic image                                | Seismic       | yes    |
+
+The chain that ties them together is checked by the
+[`attest` Azure verifier](https://github.com/Easy-TEE/attest/blob/main/crates/verify/src/azure/mod.rs):
+
+1. The TDX quote is genuine and at an acceptable TCB (Intel's PCS
+   collateral).
+2. Its `report_data` binds the HCL report, whose `var_data` carries the
+   vTPM attestation key (AK).
+3. The AK certificate chains to Microsoft's roots.
+4. The vTPM quote is signed by that AK, and its PCRs are compared against
+   the policy.
+
+Groups 1 and 2 are left unpinned because Microsoft publishes nothing a
+verifier could check them against, not because of a choice made here.
+Google does publish such data for the equivalent GCP layer. The sections
+below give the evidence, as of 2026-10-30.
+
+### Group 1: MRTD and RTMR0–3 measure the paravisor
+
+On Azure TDX the guest is not the TD. The TD Intel quotes is Microsoft's
+paravisor, which runs the guest above it and implements its vTPM. MRTD is
+the paravisor's initial image, and RTMR0–3 are whatever the paravisor
+extends. The guest's own boot goes to vTPM PCRs instead (groups 2 and 3).
+
+These can't be pinned:
+
+- **No published reference values.** Microsoft publishes no MRTD for any
+  paravisor build. Microsoft Azure Attestation (MAA) returns `tdx_mrtd` and
+  `x-ms-compliance-status: azure-compliant-cvm`
+  ([token examples](https://learn.microsoft.com/en-us/azure/attestation/attestation-token-examples)),
+  but doesn't document which MRTDs it accepts. The
+  [guest attestation FAQ](https://github.com/Azure/confidential-computing-cvm-guest-attestation/blob/main/cvm-guest-attestation.md)
+  defines "compliant" only for SEV-SNP, as a platform version "Microsoft
+  deems healthy".
+- **Not reproducible.** OpenHCL is open source
+  ([microsoft/openvmm](https://github.com/microsoft/openvmm)), but
+  reproducible builds are unsupported
+  ([openvmm#181](https://github.com/microsoft/openvmm/issues/181), still
+  open), and an attempt to reproduce Azure's MRTD from source failed
+  ([openvmm#2247](https://github.com/microsoft/openvmm/issues/2247)). Nothing
+  says which build Azure is running.
+- **No signer identity in the quote.** MRCONFIGID, MROWNER and
+  MROWNERCONFIG are zero. Azure SEV-SNP has `idkeydigest`, the hash of the
+  key that signs the paravisor image, which Microsoft recommends pinning
+  instead of the launch measurement and describes as stable for a year. TDX
+  has no equivalent field.
+- **An observed-value allowlist would break admissions.** Microsoft updates
+  the paravisor on its own schedule. Each rollout would make every node
+  unadmittable until the list caught up.
+
+Trust in the paravisor therefore rests on Microsoft's AK certificate chain
+(step 3 above), not on a measurement.
+
+What a Seismic node's TD report actually holds, captured 2026-10-30 from a
+devtools devnet node:
+
+| Field                              | Value                                    |
+| ---------------------------------- | ---------------------------------------- |
+| MRTD                               | `efef2faf…cde55e4c`                      |
+| RTMR0–3                            | all zero                                 |
+| MRCONFIGID, MROWNER, MROWNERCONFIG | all zero                                 |
+| ATTRIBUTES                         | `0x10000000`: SEPT_VE_DISABLE, not DEBUG |
+
+The all-zero RTMRs match MAA's sample token and third-party reports: the
+paravisor measures into the vTPM, not the RTMRs. The all-zero owner fields
+confirm the quote carries no signer identity.
+
+dcap-qvl's default verifier, which the `attest` Azure path uses, already
+rejects a DEBUG TD and requires SEPT_VE_DISABLE, so those attributes are
+enforced today.
+
+The report was read from the vTPM's HCL report (NV index `0x01400001`),
+which embeds the TD report the quote is built from. In that blob, TDINFO
+starts at byte 544 (MRTD at 560, RTMR0 at 752), following `az-cvm-vtpm`'s
+`AttestationReport` and `TdReport` layouts.
+
+### Group 2: pcr0, 2, 5, 7 measure the guest's firmware and its inputs
+
+This is the Azure counterpart of GCP's MRTD and RTMR0: the firmware the
+guest boots and the platform inputs it measures. Per the
+[TCG PC Client Platform Firmware Profile](https://trustedcomputinggroup.org/resource/pc-client-specific-platform-firmware-profile-specification/):
+
+| Reg  | Covers                                                    |
+| ---- | --------------------------------------------------------- |
+| pcr0 | Firmware code: Hyper-V UEFI and embedded option ROMs      |
+| pcr2 | UEFI driver and application code                          |
+| pcr5 | Boot manager configuration and data, including the GPT    |
+| pcr7 | SecureBoot state and the db/dbx/KEK/PK it booted under    |
+
+On GCP the same layer can be checked:
+
+- Google publishes signed endorsements of its TD firmware, keyed by MRTD
+  and chaining to `GCE-cc-tcb-root`.
+- RTMR0 is reconstructed from the firmware plus the attester's platform
+  metadata (RAM size, ACPI table hashes, disk count).
+
+On Azure neither exists:
+
+- **No published values or endorsements.** Microsoft's
+  [guest attestation design](https://learn.microsoft.com/en-us/azure/confidential-computing/guest-attestation-confidential-virtual-machines-design)
+  says the firmware is covered by the hardware report, and gives no expected
+  PCR values. Third-party verifiers, for example
+  [Intel Trust Authority](https://docs.trustauthority.intel.com/main/articles/concept-td-integrity.html),
+  have users supply values captured from known-good VMs.
+- **No reconstruction.** Hyper-V UEFI is not public, so nothing like the
+  GCP RTMR0 reconstruction can be built for it.
+- **MAA gives verdicts, not values.** MAA's `azurevm` claims include
+  `secureboot` and `x-ms-azurevm-dbvalidated` / `dbxvalidated`, which it
+  derives from the event log
+  ([guest attestation](https://learn.microsoft.com/en-us/azure/confidential-computing/guest-attestation-confidential-vms)).
+  Using them means trusting an MAA-signed JWT and adding an online
+  dependency on Microsoft. The documented example is SEV-SNP, and issuance
+  for TDX is unconfirmed.
+- **Pinning observed values imports platform drift,** the same objection as
+  for group 1. See [pcr7 is Azure-controlled](#pcr7-is-azure-controlled)
+  for what leaving pcr7 out costs.
+
+Values on the 2026-10-30 devnet node, kept as a baseline to spot platform
+drift in later captures:
+
+| Reg  | Value               |
+| ---- | ------------------- |
+| pcr0 | `9b93bb10…cfc808e5` |
+| pcr2 | `e374878c…75f698b5` |
+| pcr5 | `96f6f8ca…f2a49b59` |
+| pcr7 | `00596cc1…b515d73e` |
+
+The same reasoning is why the attester's platform metadata (`ram_bytes`,
+`num_disks`) is not used on Azure: those values exist to reconstruct RTMR0
+on GCP and self-hosted TDX, and Azure has no reconstruction for them to
+feed.
+
+#### What the attester can read on Azure
+
+Even unused, `ram_bytes` has to come from somewhere. On GCP it is the
+SMBIOS total. On Azure that source is often unreadable.
+
+Hyper-V does provide type-17 (memory device) entries. On a stock
+`6.8.0-1068-azure-fde` playground VM, `dmidecode -t 17` shows three:
+
+| Locator | Size      |
+| ------- | --------- |
+| M0001   | 128 MiB   |
+| M0002   | 2880 MiB  |
+| M0003   | 13228 MiB |
+
+That totals 16236 MiB, with `MemTotal` at 14869 MiB, 1367 MiB (8.4%)
+lower. The gap fits a confidential-VM swiotlb (about 6% of RAM) plus the
+`struct page` array (about 1.6%).
+
+Reading them per entry needs `dmi-sysfs`:
+
+- The stock kernel builds it as a module (`CONFIG_DMI_SYSFS=m`) but ships
+  it in `linux-modules-extra-<release>`, which the image doesn't install.
+  So `/sys/firmware/dmi/entries` is absent, and only the root-only
+  `tables/DMI` blob exists.
+- With that package installed and the module loaded,
+  `entries/17-{0,1,2}/raw` appear as root `0400`, and reading them as a
+  non-root user fails with EACCES.
+
+A Seismic node is in the second case, since its kernel builds the module
+in (`CONFIG_DMI_SYSFS=y`), and the attestation service runs as
+`User=attestation`. On the 2026-10-30 devnet node:
+
+- `entries/17-{0,1,2}/raw` are root `0400`.
+- `runuser -u attestation` gets EACCES.
+- The sizes match the playground, and `MemTotal` is 14863 MiB, 1373 MiB
+  (8.5%) below SMBIOS.
+
+GCP grants the `tpm` group read access to these entries in
+`setup-gcp-quote-access`; nothing does on Azure. So the attester falls back
+to `MemTotal` there, which is harmless since nothing verifies the value.
+
+### Group 3: pcr4, 9, 11 measure the Seismic image
+
+These are the registers that move when Seismic ships a new image, and the
+only ones that can be predicted from the image alone. They form the v1
+tuple, described next.
+
 ## The three registers
 
 | Reg   | Covers                                                             | Event log                                                                                                                                                                              |
@@ -125,7 +330,7 @@ The full 24-register inventory, and the reason each group is excluded:
 
 | Registers                | State                             | Why not in the tuple                                  |
 | ------------------------ | --------------------------------- | ----------------------------------------------------- |
-| 0, 2, 5, 7               | content-bearing                   | Azure platform layer — changes without a Seismic release |
+| 0, 2, 5, 7               | content-bearing                   | Azure platform layer — changes without a Seismic release, no published values ([group 2](#group-2-pcr0-2-5-7-measure-the-guests-firmware-and-its-inputs)) |
 | 6                        | content-bearing                   | per-VM instance — see below                           |
 | 10                       | content-bearing                   | derived from pcr0–9, per-VM instance — see below      |
 | 1, 3                     | `EV_SEPARATOR` only               | informationally empty                                 |
@@ -196,10 +401,14 @@ platform. It is out of v1 because Azure controls it: binding it would import
 platform drift into the tuple, the same objection that excludes pcr10, minus
 the redundancy.
 
-The cost is real, and worth stating plainly. v1 says nothing about whether
-SecureBoot was enforcing, or which db/dbx the platform booted under, and
-pcr4/pcr9/pcr11 do not compensate — they identify the image, not the policy
-that allowed it to load.
+SecureBoot is not enforcing on Seismic nodes, by design. The deploy
+program turns it off in the VM's UEFI settings because the UKI isn't signed
+by a CA Azure trusts
+([`seismic_node/azure.py`](https://github.com/SeismicSystems/deploy/blob/main/tee/pulumi/seismic_node/azure.py)),
+and the HCL report's runtime claims confirm `"secure-boot": false`. So pcr7
+records SecureBoot as disabled, and there is no load policy for v1 to
+attest. Integrity comes from measured boot instead: pcr4/pcr9/pcr11
+identify exactly what booted, whatever was allowed to load.
 
 ## Not yet established
 
@@ -246,3 +455,19 @@ that allowed it to load.
    sequencing against the machine-wide TPM serialization gate, and it only
    pays off once post-boot quotes are recorded somewhere a later reader can
    find them; harvest quotes predate the config POST and would carry zero.
+7. **Cheap paravisor-side checks.**
+   [Group 1](#group-1-mrtd-and-rtmr03-measure-the-paravisor) can be narrowed
+   without pinning anything by requiring RTMR0–3 to be all-zero, as captured
+   on a Seismic node. It is still observed behaviour, not documented by
+   Microsoft, and the `attest` verifier does not check it.
+
+   The HCL report's `vm-configuration` flags turned out not to help. They
+   describe the VM's Azure settings, which the deploy program chooses for
+   every node, not the image profile:
+   - `secure-boot: false` and `console-enabled: true` on every node, because
+     `seismic_node/azure.py` disables SecureBoot and enables boot
+     diagnostics.
+   - `tpm-persisted: false` (the non-persisted vTPM disk type).
+
+   Pinning them would pin deploy choices, and they are claims made by the
+   paravisor itself.
