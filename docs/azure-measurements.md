@@ -208,16 +208,17 @@ Reading them per entry needs `dmi-sysfs`:
 
 A Seismic node is in the second case, since its kernel builds the module
 in (`CONFIG_DMI_SYSFS=y`), and the attestation service runs as
-`User=attestation`. On the 2026-10-30 devnet node:
+`User=attestation`. On the 2026-10-30 devnet node, before the rule below:
 
 - `entries/17-{0,1,2}/raw` are root `0400`.
 - `runuser -u attestation` gets EACCES.
 - The sizes match the playground, and `MemTotal` is 14863 MiB, 1373 MiB
   (8.5%) below SMBIOS.
 
-GCP grants the `tpm` group read access to these entries in
-`setup-gcp-quote-access`; nothing does on Azure. So the attester falls back
-to `MemTotal` there, which is harmless since nothing verifies the value.
+`/etc/tmpfiles.d/seismic-smbios.conf` hands the type-17 entries to the
+`tpm` group at boot on both clouds, so the attester reads the exact SMBIOS
+total on Azure as it does on GCP. Nothing verifies the value on Azure
+either way.
 
 ### Group 3: pcr4, 9, 11 measure the Seismic image
 
