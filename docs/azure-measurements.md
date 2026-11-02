@@ -178,47 +178,32 @@ The same reasoning is why the attester's platform metadata (`ram_bytes`,
 on GCP and self-hosted TDX, and Azure has no reconstruction for them to
 feed.
 
-#### What the attester can read on Azure
+#### `ram_bytes` on Azure
 
-Even unused, `ram_bytes` has to come from somewhere. On GCP it is the
-SMBIOS total. On Azure that source is often unreadable.
+The attester reports `ram_bytes` as 0 on Azure and never reads SMBIOS
+([SeismicSystems/attest@6d40d05](https://github.com/SeismicSystems/attest/commit/6d40d05ad33cc4ce85e43052e17c738f80d6c102),
+upstream as [Easy-TEE/attest#29](https://github.com/Easy-TEE/attest/pull/29)).
+Nothing verifies the value there, and reading it would need `dmi-sysfs`:
 
-Hyper-V does provide type-17 (memory device) entries. On a stock
-`6.8.0-1068-azure-fde` playground VM, `dmidecode -t 17` shows three:
-
-| Locator | Size      |
-| ------- | --------- |
-| M0001   | 128 MiB   |
-| M0002   | 2880 MiB  |
-| M0003   | 13228 MiB |
-
-That totals 16236 MiB, with `MemTotal` at 14869 MiB, 1367 MiB (8.4%)
-lower. The gap fits a confidential-VM swiotlb (about 6% of RAM) plus the
-`struct page` array (about 1.6%).
-
-Reading them per entry needs `dmi-sysfs`:
-
-- The stock kernel builds it as a module (`CONFIG_DMI_SYSFS=m`) but ships
-  it in `linux-modules-extra-<release>`, which the image doesn't install.
-  So `/sys/firmware/dmi/entries` is absent, and only the root-only
+- Stock amd64 Azure kernels don't build it: the `linux-azure`
+  annotations set `CONFIG_DMI_SYSFS` to `n` on amd64 for noble, questing
+  and resolute
+  ([LP#2172766](https://bugs.launchpad.net/ubuntu/+source/linux-azure/+bug/2172766)).
+  On `6.17.0-1017-azure-fde`, the enclave CI runner's kernel,
+  `/sys/firmware/dmi/entries` is absent and only the root-only
   `tables/DMI` blob exists.
-- With that package installed and the module loaded,
-  `entries/17-{0,1,2}/raw` appear as root `0400`, and reading them as a
-  non-root user fails with EACCES.
+- A Seismic node builds it in (`CONFIG_DMI_SYSFS=y`), and Hyper-V does
+  provide type-17 (memory device) entries. On the 2026-10-30 devnet node:
 
-A Seismic node is in the second case, since its kernel builds the module
-in (`CONFIG_DMI_SYSFS=y`), and the attestation service runs as
-`User=attestation`. On the 2026-10-30 devnet node, before the rule below:
+  | Locator | Size      |
+  | ------- | --------- |
+  | M0001   | 128 MiB   |
+  | M0002   | 2880 MiB  |
+  | M0003   | 13228 MiB |
 
-- `entries/17-{0,1,2}/raw` are root `0400`.
-- `runuser -u attestation` gets EACCES.
-- The sizes match the playground, and `MemTotal` is 14863 MiB, 1373 MiB
-  (8.5%) below SMBIOS.
-
-`/etc/tmpfiles.d/seismic-smbios.conf` hands the type-17 entries to the
-`tpm` group at boot on both clouds, so the attester reads the exact SMBIOS
-total on Azure as it does on GCP. Nothing verifies the value on Azure
-either way.
+  They stay root `0400` here: only GCP's attester reads them, where
+  `ram_bytes` feeds the predicted RTMR0, and `setup-gcp-quote-access`
+  hands them to the `tpm` group on GCE alone.
 
 ### Group 3: pcr4, 9, 11 measure the Seismic image
 

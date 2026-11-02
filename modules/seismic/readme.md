@@ -42,7 +42,6 @@ mkosi.extra/
 │   ├── security/limits.d/nofile.conf       → /etc/security/limits.d/nofile.conf
 │   ├── seismic/tmpfiles-persistent.conf    → /etc/seismic/tmpfiles-persistent.conf
 │   ├── tmpfiles.d/seismic-runtime.conf     → /etc/tmpfiles.d/seismic-runtime.conf
-│   ├── tmpfiles.d/seismic-smbios.conf      → /etc/tmpfiles.d/seismic-smbios.conf
 │   ├── systemd/system/*.{service,target}   → /etc/systemd/system/...
 │   └── udev/rules.d/60-tpm-permissions.rules → /etc/udev/rules.d/...
 └── usr/
