@@ -6,7 +6,8 @@
 # as its own user.
 set -euo pipefail
 
-# One image boots both clouds; only GCE has these interfaces to hand over.
+# One image boots both clouds; only GCE's attester reads these (on Azure it
+# quotes through the vTPM and reports 0 RAM without reading SMBIOS).
 [ "$(cat /sys/class/dmi/id/sys_vendor 2>/dev/null)" = Google ] || exit 0
 
 ccel=/sys/firmware/acpi/tables/data/CCEL
