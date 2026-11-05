@@ -23,7 +23,7 @@ Environment=RUST_LOG=info
 # loud startup failure into a launch-check mismatch. The public-keys file the
 # attestation service serves is read-only here for the same reason. The
 # sandbox baseline's ProtectSystem=strict leaves both read-only, and
-# ReadWritePaths= opens only the database.
+# ReadWritePaths= opens only the database and the withdrawal address dir.
 InaccessiblePaths=/run/seismic/summit/keys
 
 # Required (no `-`): seismic-persistent-luks-setup finishing implies tdx-init
@@ -50,11 +50,21 @@ EnvironmentFile=/run/seismic/conf/summit.env
 # because it is always populated there is no empty-var case to drop. Its port
 # must stay equal to --port below: the address is what peers dial, --port is what
 # the node listens on.
+# --withdrawal-address-path: summit signs deposits for one withdrawal address
+# only, and writes it to this file once: a founder's from its genesis entry at
+# startup, any other node's from its first getDepositSignature request. The
+# operator asks for deposit data from outside the guest, through the
+# attestation service's :7879, so anyone else who can reach the node can ask
+# too. Without the binding, they could get deposit data for their own address
+# and deposit before the operator does. To change the address, reset the node.
+# tmpfiles-persistent.conf creates the directory, and summit won't start
+# without it.
 ExecStart=/usr/bin/summit run \
     --engine-ipc-path /run/reth-engine/api.ipc \
     --genesis-path /run/seismic/conf/summit-genesis.toml \
     --store-path /persistent/summit/db \
     --key-store-path /persistent/summit/keys \
+    --withdrawal-address-path /persistent/summit/withdrawal/address \
     --ip ${SUMMIT_ADVERTISED_ADDR} \
     --port 18551 \
     --rpc-ip 0.0.0.0 \
@@ -90,8 +100,8 @@ SocketBindDeny=any
 RestrictAddressFamilies=AF_INET AF_INET6
 
 # Filesystem
-# Its database.
-ReadWritePaths=/persistent/summit/db
+# Its database, and the dir of its write-once withdrawal address file.
+ReadWritePaths=/persistent/summit/db /persistent/summit/withdrawal
 
 # Devices
 # A minimal /dev of pseudo-devices: no TPM, no disks, no /dev/mem.

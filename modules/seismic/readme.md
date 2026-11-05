@@ -117,6 +117,7 @@ on the LUKS volume, from
 | `/persistent/reth` | `reth:reth 0700` | reth | reth |
 | `/persistent/summit/db` | `summit:summit 0700` | summit | summit |
 | `/persistent/summit/keys` | `summit:summit 0700` | `seismic-summit-persist` | summit, read-only |
+| `/persistent/summit/withdrawal` | `summit:summit 0700` | summit, once: the bound withdrawal address | summit |
 
 Setgid on the two `2750` dirs gives every file created in them the
 dir's group, so the writer needs no membership of its own.
@@ -150,7 +151,7 @@ every unit:
 | `seismic-persistent-luks-setup` | Unix sockets only | `/run/seismic/status`, `/run/seismic/custodian`, `/run/cryptsetup` | the data disk, device-mapper | none |
 | `seismic-summit-keygen` | none | `/run/seismic/summit` | none | none |
 | `seismic-summit-persist` | none | `/persistent/summit/keys`, `/run/seismic/summit` | none | none |
-| `seismic-summit` | IP | `/persistent/summit/db` | none | tcp `3030`, `3031`, `9002`, `18551` |
+| `seismic-summit` | IP | `/persistent/summit/db`, `/persistent/summit/withdrawal` | none | tcp `3030`, `3031`, `9002`, `18551` |
 | `seismic-reth` | IP | `/persistent/reth`, `/run/reth-engine` | none | tcp `8545`, `8546`, `8551`, `9001`; tcp+udp `30303` |
 
 "None" for network means a private network namespace: the Unix sockets
